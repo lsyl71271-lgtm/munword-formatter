@@ -20,8 +20,22 @@ def package(output: Path, desktop: bool = False) -> dict:
     result = audit.audit(ROOT, False)
     if result["findings"]:
         raise ValueError("Source audit failed; inspect scripts/audit-source.py output before packaging")
-    names = subprocess.check_output(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=ROOT).decode().split("\0")
-    names = sorted(set(names) - {""})
+    # Only files Git tracks are source.  An untracked file that is not ignored
+    # (a private DOCX or the handbook PDF dropped into the folder) would
+    # otherwise ship in the package; it is refused by name instead of being
+    # skipped silently, because it may also be a new source file not yet added.
+    untracked = [name for name in subprocess.check_output(["git", "ls-files", "-z", "--others", "--exclude-standard"], cwd=ROOT).decode().split("\0") if name]
+    if untracked:
+        raise ValueError("Untracked files are neither source nor ignored; add or remove them before packaging: " + ", ".join(sorted(untracked)[:20]))
+    entries = subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=ROOT).decode().split("\0")
+    modes = {}
+    for entry in filter(None, entries):
+        metadata, _, name = entry.partition("\t")
+        mode, _, stage = metadata.split()
+        if stage != "0" or mode not in ("100644", "100755"):
+            raise ValueError(f"Unresolved or unsupported Git entry: {name}")
+        modes[name] = 0o755 if mode == "100755" else 0o644
+    names = sorted(modes)
     if desktop:
         # These exact generated assets are required for offline local tools.
         names += ["public/studio-tools.js", "public/licenses/docx-preview.txt", "public/licenses/docxtemplater.txt", "public/licenses/pizzip.txt", "public/licenses/jszip.txt", "public/licenses/@xmldom-xmldom.txt", "public/licenses/fflate.txt"]
@@ -42,7 +56,10 @@ def package(output: Path, desktop: bool = False) -> dict:
             for name, data in sorted(files.items()):
                 entry = zipfile.ZipInfo("Munword/" + name, date_time=(2026, 1, 1, 0, 0, 0))
                 entry.compress_type = zipfile.ZIP_DEFLATED
-                entry.external_attr = (0o755 if name.endswith((".sh", ".command")) or name.endswith("/MacOS/launcher") else 0o644) << 16
+                # Git modes are portable even when packaging on Windows.
+                # Filename guesses lost executable bits on the macOS app entry.
+                entry.create_system = 3
+                entry.external_attr = modes.get(name, 0o644) << 16
                 archive.writestr(entry, data)
         with zipfile.ZipFile(temporary) as archive:
             if archive.testzip() is not None:

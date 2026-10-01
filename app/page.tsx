@@ -160,10 +160,16 @@ export default function Home() {
     }
   }
 
-  function updateModel<K extends keyof Model>(key: K, value: Model[K]) {
-    setStage("review");
+  /** A result built from values the user has since changed is never delivered. */
+  function discardPending() {
+    if (busy) { operationRef.current += 1; setBusy(false); }
     setFormatted(null);
     setValidations([]);
+    if (model) setStage("review");
+  }
+
+  function updateModel<K extends keyof Model>(key: K, value: Model[K]) {
+    discardPending();
     setModel((current) => current ? { ...current, [key]: value } : current);
   }
 
@@ -331,11 +337,11 @@ export default function Home() {
 
             <div className="generationPanel">
               <div className="options">
-                <label>提交会期<input placeholder="例如：第三会期 / S3" value={sessionLabel} onChange={(e) => setSessionLabel(e.target.value)} /></label>
-                <label>提交国家<input placeholder="用于文件名" value={submittingCountry} onChange={(e) => setSubmittingCountry(e.target.value)} /></label>
-                <label>版本号<input value={version} onChange={(e) => setVersion(e.target.value)} /></label>
-                <label className="check"><input type="checkbox" checked={normalizePunctuation} onChange={(e) => setNormalizePunctuation(e.target.checked)} /><span>按规则规范条款末尾标点</span></label>
-                <label className="check"><input type="checkbox" checked={preserveOrder} onChange={(e) => setPreserveOrder(e.target.checked)} /><span>高级：保持国家原顺序</span></label>
+                <label>提交会期<input placeholder="例如：第三会期 / S3" value={sessionLabel} onChange={(e) => { discardPending(); setSessionLabel(e.target.value); }} /></label>
+                <label>提交国家<input placeholder="用于文件名" value={submittingCountry} onChange={(e) => { discardPending(); setSubmittingCountry(e.target.value); }} /></label>
+                <label>版本号<input value={version} onChange={(e) => { discardPending(); setVersion(e.target.value); }} /></label>
+                <label className="check"><input type="checkbox" checked={normalizePunctuation} onChange={(e) => { discardPending(); setNormalizePunctuation(e.target.checked); }} /><span>按规则规范条款末尾标点</span></label>
+                <label className="check"><input type="checkbox" checked={preserveOrder} onChange={(e) => { discardPending(); setPreserveOrder(e.target.checked); }} /><span>高级：保持国家原顺序</span></label>
               </div>
               <button className="primaryButton generate" type="button" disabled={busy} onClick={formatAndDownload}>{busy ? "正在生成…" : "生成并下载 DOCX"}<span>↓</span></button>
             </div>
@@ -350,7 +356,7 @@ export default function Home() {
         )}
       </section>
 
-      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v1.7.0</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
+      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v1.7.1</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
     </main>
   );
 }

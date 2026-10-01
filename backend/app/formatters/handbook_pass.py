@@ -21,12 +21,20 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 
 from ..docx_view import active_num_id, carries_hidden_structure, invalidate as invalidate_paragraph_cache
-from ..docx_view import holds_inline_object, visible_runs, visible_text
+from ..docx_view import flow_paragraph_elements, holds_inline_object, visible_runs, visible_text
 from ..errors import ProtectedContentError
 from ..fonts import rpr_child
 from ..models import IntermediateDocument
 from ..ooxml_edit import has_complex_content, style_text_range
-from ..parser import MANUAL_NUMBER_RE, DocxParser, infer_level
+from ..parser import (
+    MANUAL_NUMBER_RE,
+    PAREN_DIGIT_RE,
+    DocxParser,
+    handbook_list_indents,
+    infer_level,
+    opens_or_continues_list,
+    paren_token,
+)
 from ..semantic_policy import OPERATIVE_EN, OPERATIVE_ZH, PREAMBLE_EN, PREAMBLE_ZH, label_value, title_parts
 from . import handbook
 from .handbook import HandbookSpec, spec_for
@@ -36,7 +44,7 @@ BODY_ROLES = ("preamble", "item", "prose", "reference")
 _LABEL_RE = re.compile(r"^(\s*[^:：]{1,20}[:：])")
 # Position-paper proposals: "1、" / "1." at level 0, "a)" at level 1, "i)" at level 2.
 _PP_LEVEL_RES = (
-    re.compile(r"^\s*\d+\s*[.、)]"),
+    re.compile(r"^\s*\d+\s*[.、．)]"),
     re.compile(r"^\s*(?:[a-h]|[j-u]|[w-z])\s*[.)]", re.I),
     re.compile(r"^\s*[ivx]+\s*[.)]", re.I),
 )
@@ -46,7 +54,8 @@ _OPERATIVE_TYPES = ("draft-directive", "draft-resolution")
 _PARAGRAPH_CLEAN_TAGS = ("pStyle", "bidi", "textDirection", "shd", "pBdr", "framePr", "contextualSpacing", "snapToGrid", "tabs", "outlineLvl", "textAlignment")
 _KEEP_WITH_NEXT_ROLES = ("title", "committee", "topic", "country", "delegate", "sponsors", "signatories", "header", "subject", "part")
 # Copy-paste damage a list marker must not keep.
-_MARKER_NOISE_TAGS = ("vanish", "webHidden", "strike", "dstrike", "shd", "highlight", "position", "spacing", "w", "caps", "smallCaps", "color")
+# A hidden list number stays hidden (Word hides heading numbers this way).
+_MARKER_NOISE_TAGS = ("strike", "dstrike", "shd", "highlight", "position", "spacing", "w", "caps", "smallCaps", "color")
 
 _CN_DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 
@@ -73,7 +82,8 @@ _SEQUENCES = (
     ("zodiac", re.compile(r"^\s*[（(]([子丑寅卯辰巳午未申酉戌亥])[）)]"), _series("子丑寅卯辰巳午未申酉戌亥")),
     ("stem", re.compile(r"^\s*[（(]([甲乙丙丁戊己庚辛壬癸])[）)]"), _series("甲乙丙丁戊己庚辛壬癸")),
     ("paren-chinese", re.compile(r"^\s*[（(]([一二三四五六七八九十]+)[）)]"), _chinese_number),
-    ("decimal", re.compile(r"^\s*(\d{1,3})[.、)）]"), int),
+    ("paren-decimal", re.compile(r"^\s*[（(](\d{1,2})[）)]"), int),
+    ("decimal", re.compile(r"^\s*(\d{1,3})[.、．)）]"), int),
     ("paren-letter", re.compile(r"^\s*[（(]([a-hj-uw-z])[）)]"), _series("abcdefghjklmnopqrstuwxyz")),
     ("letter", re.compile(r"^\s*([a-hj-uw-z])[.)）]"), _series("abcdefghjklmnopqrstuwxyz")),
 )
@@ -251,18 +261,34 @@ class HandbookPassMixin:
                     assign(index, "prose", level=clause.level, operative=operative_types and clause.kind == "operative")
 
         previous_level = 0
+        indents = handbook_list_indents(self.document_type, model.language)
+        in_list = False
+        previous_token = None
+        previous_paren_digit = False
         for index, text in enumerate(texts):
             if not text and index not in roles and carries_hidden_structure(paragraphs[index]):
                 # A picture, formula, page break or bookmark on its own line is
                 # kept: handbook geometry, and a minimum pitch around objects.
                 roles[index] = Block(paragraphs[index], "object")
                 continue
-            if not text or index in roles:
+            if not text:
+                continue
+            if index in roles:
+                block = roles[index]
+                in_list = block.role == "item" or text.endswith(("：", ":"))
+                previous_token = paren_token(text) or previous_token
+                previous_paren_digit = bool(PAREN_DIGIT_RE.match(text))
                 continue
             if index < header_end:
                 assign(index, "header")
                 continue
-            previous_level = infer_level(text, paragraphs[index], previous_level)
+            previous_level = infer_level(
+                text, paragraphs[index], previous_level, in_list=in_list, indents=indents,
+                previous_token=previous_token, previous_paren_digit=previous_paren_digit,
+            )
+            in_list = opens_or_continues_list(text, paragraphs[index], previous_level)
+            previous_token = paren_token(text) or previous_token
+            previous_paren_digit = bool(PAREN_DIGIT_RE.match(text))
             level = self._list_level(paragraphs[index], text, previous_level)
             if level is None:
                 assign(index, "prose", level=previous_level)
@@ -609,14 +635,18 @@ class HandbookPassMixin:
 
         body = document.element.body
         parent = document._body
-        for element in list(body.iterchildren(qn("w:p"))):
+        for element in flow_paragraph_elements(body):
             paragraph = Paragraph(element, parent)
+            container = element.getparent()
+            # A content control keeps at least one paragraph.
+            if container is not body and len(container) == 1:
+                continue
             if not visible_text(paragraph).strip() and not carries_hidden_structure(paragraph):
                 # Logged so the content check can confirm it held only
                 # whitespace, tabs or line breaks.
                 if element not in self._edit_log:
                     self._log_edit_element(element, "empty-line")
-                body.remove(element)
+                container.remove(element)
         live = [block for block in blocks if block.attached and visible_text(block.paragraph).strip()]
         after: list = []
 
@@ -672,7 +702,7 @@ class HandbookPassMixin:
         ppr.append(spacing)
         rpr = OxmlElement("w:rPr")
         fonts = OxmlElement("w:rFonts")
-        self._house_fonts(fonts, language)
+        self._house_fonts(fonts, language, complex_script=True)
         rpr.append(fonts)
         half_points = str(int(round(handbook.BODY_SIZE_PT * 2)))
         for tag in ("w:sz", "w:szCs"):

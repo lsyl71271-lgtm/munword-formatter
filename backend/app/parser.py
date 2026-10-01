@@ -10,19 +10,31 @@ from docx.oxml.ns import qn
 
 from .docx_view import active_num_id, body_paragraphs, visible_text
 from .models import Clause, DocumentType, IntermediateDocument
-from .semantic_policy import DOCUMENT_PROFILES, clause_prefixes, label_value, looks_like_title
+from .semantic_policy import (
+    DOCUMENT_PROFILES,
+    ENGLISH_REGIONS,
+    HANDBOOK,
+    OPERATIVE_EN,
+    OPERATIVE_ZH,
+    PREAMBLE_EN,
+    PREAMBLE_ZH,
+    SUBJECT_LINE_PATTERNS,
+    clause_prefixes,
+    header_end,
+    label_value,
+    looks_like_title,
+)
 
 
 ZH_RE = re.compile(r"[\u3400-\u9fff]")
 MANUAL_NUMBER_RE = re.compile(
-    r"^\s*(?:第[一二三四五六七八九十百]+条|[0-9]+[.、)]|[0-9]+(?=\s{2,})|[a-z][.)）](?=\s|[^\x00-\x7f])|[（(][a-zivx]+[）)]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)])\s*",
+    r"^\s*(?:第[一二三四五六七八九十百]+条|[0-9]+[.、．)]|[0-9]+(?=\s{2,})|[a-z][.)）](?=\s|[^\x00-\x7f])|[（(][a-zivx]+[）)]|[（(][0-9]{1,2}[）)]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)])\s*",
     re.I,
 )
-TOP_LEVEL_NUMBER_RE = re.compile(r"^\s*(?:第[一二三四五六七八九十百]+条|[0-9]+[.、)])", re.I)
+TOP_LEVEL_NUMBER_RE = re.compile(r"^\s*(?:第[一二三四五六七八九十百]+条|[0-9]+[.、．)])", re.I)
 PART_RE = re.compile(r"^PART\s+[IVXLC]+\b", re.I)
 SCALAR_FIELDS = ("committee", "topic", "country", "delegate")
 COUNTRY_FIELDS = ("sponsors", "signatories")
-MAX_NESTING_INDENT_PT = 96
 
 
 def detect_language(text: str) -> str:
@@ -37,27 +49,131 @@ def split_countries(value: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
+# Deeper than this, an indent is copy-paste damage rather than nesting.
+MAX_NESTING_INDENT_PT = 96
+
+
+def _organ_name(value: str) -> str:
+    """"The Security Council," and "Security Council" name the same organ."""
+
+    value = value.strip().rstrip("，,").strip()
+    return re.sub(r"^(?:the\s+|联合国)", "", value, flags=re.I).casefold()
+
+
+_SUBJECT_PATTERNS = [re.compile(pattern) for pattern in SUBJECT_LINE_PATTERNS]
+_CLAUSE_WORDS = tuple(word.casefold() for word in (*PREAMBLE_ZH, *OPERATIVE_ZH, *PREAMBLE_EN, *OPERATIVE_EN))
+
+
+def is_subject_line(text: str) -> bool:
+    """A body named before the clauses ("The Security Council," / "安全理事会，").
+
+    The committee field often differs from the subject line ("Security
+    Council" against "The Security Council,"), which left the line without
+    its handbook emphasis and gave it a clause ending.  Shared policy
+    ``subjectLine``; a line starting with a clause verb is never a subject.
+    """
+
+    if text.casefold().startswith(_CLAUSE_WORDS):
+        return False
+    return any(pattern.fullmatch(text) for pattern in _SUBJECT_PATTERNS)
+
+
 def strip_manual_number(text: str) -> str:
     return MANUAL_NUMBER_RE.sub("", text, count=1)
 
 
-def infer_level(text: str, paragraph, previous_level: int = 0) -> int:
+_LEVEL_MARKERS = [
+    (re.compile(r"^\s*(?:第[一二三四五六七八九十百]+条|\d+[.、．])"), 0),
+    (re.compile(r"^\s*[（(](?:[a-z]|[一二三四五六七八九十]+)[）)]", re.I), 1),
+    # "a)" / "b." items under a numbered clause (页18, 页37).
+    (re.compile(r"^\s*[a-hj-uw-z][.)）]", re.I), 1),
+    # "（子子）" nests under "（子）".
+    (re.compile(r"^\s*[（(][子丑寅卯辰巳午未申酉戌亥]{2,3}[）)]"), 3),
+    (re.compile(r"^\s*[（(][子丑寅卯辰巳午未申酉戌亥][）)]"), 2),
+    (re.compile(r"^\s*(?:[ivxlcdm]+\.|[（(][甲乙丙丁戊己庚辛壬癸]+[）)])", re.I), 3),
+]
+_PAREN_TOKEN = re.compile(r"^\s*[（(]([a-z]{1,4})[）)]", re.I)
+# "（1）" items: one level under the item that introduces them, then siblings.
+PAREN_DIGIT_RE = re.compile(r"^\s*[（(][0-9]{1,2}[）)]")
+_ROMAN_VALUES = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
+
+
+def paren_token(text: str) -> str | None:
+    """The letters of a parenthesized marker ("（c）" → "c"), or ``None``."""
+
+    match = _PAREN_TOKEN.match(text)
+    return match.group(1).lower() if match else None
+
+
+def _roman_value(token: str) -> int | None:
+    if not token or any(ch not in _ROMAN_VALUES for ch in token):
+        return None
+    total = 0
+    for position, ch in enumerate(token):
+        value = _ROMAN_VALUES[ch]
+        following = _ROMAN_VALUES[token[position + 1]] if position + 1 < len(token) else 0
+        total += -value if value < following else value
+    return total
+
+
+def is_roman_item(text: str, previous_token: str | None) -> bool:
+    """"(c)" after "(b)" is a letter, "(v)" after "(iv)" a numeral.
+
+    A single letter that is also a numeral (i, v, x, l, c, d, m) follows its
+    sequence: "(i)" is a numeral unless it follows "(h)"; the others only
+    when they follow the preceding numeral.  Reading every "(c)" and "(d)"
+    as a numeral put the third and fourth items of an "(a) (b)" list one
+    level deeper than the first two.
+    """
+
+    token = paren_token(text)
+    if token is None or _roman_value(token) is None:
+        return False
+    if len(token) > 1:
+        return True
+    if token == "i":
+        return previous_token != "h"
+    previous = _roman_value(previous_token or "")
+    return previous is not None and previous + 1 == _roman_value(token)
+
+
+def handbook_list_indents(document_type: str, language: str) -> list[tuple[int, int]]:
+    """(left, hanging) in twips of each handbook list level for this document."""
+
+    key = "amendment" if "amendment" in document_type else document_type
+    return [(round(left * 20), round(hanging * 20)) for left, hanging in HANDBOOK["types"][key][language]["listIndentsPt"]]
+
+
+def opens_or_continues_list(text: str, paragraph, level: int) -> bool:
+    """A list context for the next paragraph: an item, or a clause that introduces items."""
+
+    return (
+        level > 0
+        or active_num_id(paragraph) is not None
+        or paren_token(text) is not None
+        or bool(PAREN_DIGIT_RE.match(text))
+        or any(pattern.match(text) for pattern, _ in _LEVEL_MARKERS)
+        or text.endswith(("：", ":"))
+    )
+
+
+def infer_level(
+    text: str, paragraph, previous_level: int = 0, *, in_list: bool = True, indents=(),
+    previous_token: str | None = None, previous_paren_digit: bool = False,
+) -> int:
     # Visible markers are authoritative.  Committee files often carry stale
     # list metadata after authors manually typed a different marker.
-    if re.match(r"^\s*[（(][ivxlcdm]+[）)]", text, re.I):
+    if is_roman_item(text, previous_token):
         return 2 if previous_level >= 1 else 1
-    matchers = [
-        (r"^\s*(?:第[一二三四五六七八九十百]+条|\d+[.、])", 0),
-        (r"^\s*[（(](?:[a-z]|[一二三四五六七八九十]+)[）)]", 1),
-        # "a)" / "b." items under a numbered clause (页18, 页37).
-        (r"^\s*[a-hj-uw-z][.)）]", 1),
-        # "（子子）" nests under "（子）".
-        (r"^\s*[（(][子丑寅卯辰巳午未申酉戌亥]{2,3}[）)]", 3),
-        (r"^\s*[（(][子丑寅卯辰巳午未申酉戌亥][）)]", 2),
-        (r"^\s*(?:[ivxlcdm]+\.|[（(][甲乙丙丁戊己庚辛壬癸]+[）)])", 3),
-    ]
-    for pattern, level in matchers:
-        if re.match(pattern, text, re.I):
+    if PAREN_DIGIT_RE.match(text):
+        # "（1）" has no fixed rank: it nests under the item that introduces it
+        # ("1.…：" or "（一）…："), and its siblings stay at that level.  It was
+        # not a marker at all, so such items sat flush with their parent.
+        if previous_paren_digit:
+            return previous_level
+        return min(3, previous_level + 1) if in_list else 0
+    for pattern, level in _LEVEL_MARKERS:
+        if pattern.match(text):
             return level
     ppr = paragraph._p.pPr
     if active_num_id(paragraph) is not None:
@@ -67,11 +183,23 @@ def infer_level(text: str, paragraph, previous_level: int = 0) -> int:
         ilvl = ppr.numPr.ilvl
         if ilvl is not None and ilvl.val is not None:
             return int(ilvl.val)
-    left = paragraph.paragraph_format.left_indent
+    ind = ppr.find(qn("w:ind")) if ppr is not None else None
+    left = int(ind.get(qn("w:left")) or ind.get(qn("w:start")) or 0) if ind is not None else 0
+    hanging = int(ind.get(qn("w:hanging")) or 0) if ind is not None else 0
+    # Indentation nests only inside a list: under an item or a clause ending
+    # in a colon (a damaged item that lost its marker).  A header line or a
+    # prose paragraph with a stray indent is not nested.
+    if not in_list:
+        return 0
+    # The handbook's own list indent for a level reads back as that level, so
+    # a second pass changes nothing (the inches rule read 42 pt as level 2).
+    for level, (list_left, list_hanging) in enumerate(indents):
+        if level and left == list_left and hanging == list_hanging:
+            return level
     # An indent beyond the damage threshold (96 pt) is copy-paste noise, not
     # nesting: it would push a top-level clause to the deepest level.
-    if left and 0 < left.pt <= MAX_NESTING_INDENT_PT:
-        return min(3, max(0, round(left.inches / 0.3)))
+    if 0 < left <= MAX_NESTING_INDENT_PT * 20:
+        return min(3, max(0, round(left / 1440 / 0.3)))
     return 0
 
 
@@ -141,7 +269,10 @@ class DocxParser:
         previous_level = 0
         nonempty_indices = [index for index, text in enumerate(texts) if text]
         title_index = next((index for index in nonempty_indices if looks_like_title(texts[index].lower(), document_type)), None)
-        first_labeled_metadata = next((index for index in nonempty_indices if label_value(texts[index])[0]), len(texts))
+        source = body_paragraphs(document)
+        # Labels after the first body paragraph are the author's text.
+        limit = header_end(texts, title_index, lambda index: active_num_id(source[index]) is not None)
+        first_labeled_metadata = next((index for index in nonempty_indices if index < limit and label_value(texts[index])[0]), len(texts))
         if title_index is not None:
             fields = DOCUMENT_PROFILES[document_type].get("unlabeledHeaderFields", [])
             preamble_words = clause_prefixes(language)[0]
@@ -177,7 +308,7 @@ class DocxParser:
         for index, text in enumerate(texts):
             if not text:
                 continue
-            label, value = label_value(text)
+            label, value = label_value(text) if index < limit else ("", "")
             if label in SCALAR_FIELDS:
                 setattr(model, label, value)
                 model.header_paragraph_indices[label] = index
@@ -209,19 +340,31 @@ class DocxParser:
                 if inferred is not None:
                     first_top_level = inferred
 
+        indents = handbook_list_indents(document_type, language)
+        in_list = False
+        previous_token = None
+        previous_paren_digit = False
         for index, paragraph in enumerate(body_paragraphs(document)):
             text = texts[index]
             if not text or index < body_start or index in metadata_indices:
                 continue
             if PART_RE.match(text):
+                in_list = False
                 model.body_clauses.append(Clause(text=text, kind="heading", paragraph_index=index))
                 continue
             if self._is_committee_subject(text, model.committee, language):
                 committee_subject_seen = True
+                in_list = False
                 model.body_clauses.append(Clause(text=text, kind="heading", paragraph_index=index))
                 continue
             clean = strip_manual_number(text)
-            level = infer_level(text, paragraph, previous_level)
+            level = infer_level(
+                text, paragraph, previous_level, in_list=in_list, indents=indents,
+                previous_token=previous_token, previous_paren_digit=previous_paren_digit,
+            )
+            in_list = opens_or_continues_list(text, paragraph, level)
+            previous_token = paren_token(text) or previous_token
+            previous_paren_digit = bool(PAREN_DIGIT_RE.match(text))
             previous_level = level
             model.max_numbering_level = max(model.max_numbering_level, level + 1)
             if document_type == "draft-resolution" and committee_subject_seen and first_top_level is not None:
@@ -292,7 +435,7 @@ class DocxParser:
             low = text.lower().lstrip()
             if any(low.startswith(item.lower()) for item in clause_words):
                 break
-            if language == "zh" and not self._looks_like_country_continuation(text):
+            if not self._looks_like_country_continuation(text):
                 break
             values.extend(split_countries(text))
             indices.append(index)
@@ -308,23 +451,37 @@ class DocxParser:
         do not contain clause punctuation, digits or colons.
         """
 
-        if re.search(r"[：:。！？!?；;\d]", text):
+        if re.search(r"[：:。！？!?；;\d]", text) or text.rstrip().endswith("."):
             return False
-        values = split_countries(text.rstrip("、，, "))
+        values = split_countries(re.sub(r"[、，,\s]+$", "", text))
         if not values:
             return False
         endings = ("国", "联邦", "联盟", "教廷")
-        return all(len(value) <= 24 and value.endswith(endings) for value in values)
+
+        def country(value: str) -> bool:
+            # The same test as the browser engine's looksLikeCountryContinuation:
+            # an English line must be a known region or a formal state name, so
+            # a subject line ("The Executive Council,") ends the list.
+            if re.search(r"[\u3400-\u9fff]", value):
+                return len(value) <= 24 and value.endswith(endings)
+            return len(value) <= 80 and (
+                re.sub(r"^The\s+", "", value, flags=re.I).strip().casefold() in ENGLISH_REGIONS
+                or re.fullmatch(r"(?:The\s+)?.*?\b(?:Republic|Kingdom|Federation|States?|Emirates)\b.*", value, re.I) is not None
+            )
+
+        return all(country(value) for value in values)
 
     @staticmethod
     def _is_committee_subject(text: str, committee: str, language: str) -> bool:
         clean = text.rstrip("，,").strip().lower()
-        if committee and clean == committee.rstrip("，,").strip().lower():
+        if committee and _organ_name(clean) == _organ_name(committee):
             return True
         if clean in ("联合国大会", "the committee", "the general assembly"):
             return True
         # "The OPCW," — an English body addressed by its abbreviation (页37).
-        return bool(re.fullmatch(r"The [A-Z][A-Z\s]*,", text.strip()))
+        if re.fullmatch(r"The [A-Z][A-Z\s]*,", text.strip()):
+            return True
+        return is_subject_line(text.strip())
 
     @staticmethod
     def _classify_clause(text: str, document_type: DocumentType, language: str, subject_seen: bool) -> tuple[str, float]:

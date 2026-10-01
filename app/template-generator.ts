@@ -30,9 +30,18 @@ export function generateFromTemplate(type: BrowserDocumentType, input: TemplateI
   }
   const header = paragraph("{title}") + keys.filter(key => input[key].trim()).map(key => paragraph(`${labels[key]}${input.language === "zh" ? "：" : ": "}{${key}}`)).join("");
   const encoder = new TextEncoder();
+  // A styles part, so both engines (and Word) start from the house fonts rather
+  // than their own different built-in defaults: without one, Python added
+  // python-docx's default styles and the browser none, and they rendered apart.
+  const eastAsia = input.language === "zh" ? policy.handbook.fonts.zh : policy.handbook.fonts.en;
+  const styles = `<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="${eastAsia}"/>`
+    + `<w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`
+    + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
   const bytes = zipSync({
-    "[Content_Types].xml": encoder.encode('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'),
+    "[Content_Types].xml": encoder.encode('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>'),
     "_rels/.rels": encoder.encode('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'),
+    "word/_rels/document.xml.rels": encoder.encode('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
+    "word/styles.xml": encoder.encode(styles),
     "word/document.xml": encoder.encode(`<w:document xmlns:w="${W}"><w:body>${header}${paragraph("{@bodyXml}")}<w:sectPr/></w:body></w:document>`),
   });
   const template = new Docxtemplater(new PizZip(bytes), { paragraphLoop: true, linebreaks: true });

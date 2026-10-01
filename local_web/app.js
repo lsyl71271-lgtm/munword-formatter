@@ -50,8 +50,20 @@ function setBusy(busy, label) {
   state.busy = busy;
   byId("parseButton").disabled = busy || !state.file;
   byId("generateButton").disabled = busy || !state.model;
-  if (label === "parse") byId("parseButton").innerHTML = busy ? "正在识别…" : "识别文件结构 <span>→</span>";
-  if (label === "generate") byId("generateButton").innerHTML = busy ? "正在生成…" : "生成并下载 DOCX <span>↓</span>";
+  // Idle restores both labels: a file chosen mid-generation left "正在生成…".
+  if (label === "parse" || !busy) byId("parseButton").innerHTML = busy ? "正在识别…" : "识别文件结构 <span>→</span>";
+  if (label === "generate" || !busy) byId("generateButton").innerHTML = busy ? "正在生成…" : "生成并下载 DOCX <span>↓</span>";
+}
+
+/** A result built from values the user has since changed is never delivered. */
+function discardPending() {
+  if (state.busy) { state.operation += 1; setBusy(false); }
+  byId("validationSection").classList.add("hidden");
+  setSuccess("");
+  if (state.model) {
+    updateSteps("review");
+    window.dispatchEvent(new CustomEvent("munword:model", { detail: { model: state.model, file: state.file } }));
+  }
 }
 
 function updateSteps(stage) {
@@ -166,7 +178,7 @@ function renderReview() {
   };
   Object.entries(bindings).forEach(([id, [key, transform]]) => {
     const element = byId(id);
-    if (element) element.addEventListener("input", () => { state.model[key] = transform(element.value); renderPreviews(); });
+    if (element) element.addEventListener("input", () => { discardPending(); state.model[key] = transform(element.value); renderPreviews(); });
   });
 
   const warnings = model.warnings || [];
@@ -272,6 +284,10 @@ document.addEventListener("DOMContentLoaded", () => {
   ["dragenter", "dragover"].forEach((name) => dropzone.addEventListener(name, (event) => { event.preventDefault(); dropzone.classList.add("dragging"); }));
   ["dragleave", "drop"].forEach((name) => dropzone.addEventListener(name, (event) => { event.preventDefault(); dropzone.classList.remove("dragging"); }));
   dropzone.addEventListener("drop", (event) => acceptFile(event.dataTransfer.files?.[0]));
+  for (const id of ["sessionLabel", "submittingCountry", "version", "normalizePunctuation", "preserveOrder"]) {
+    byId(id).addEventListener("input", discardPending);
+    byId(id).addEventListener("change", discardPending);
+  }
   byId("parseButton").addEventListener("click", parseDocument);
   byId("generateButton").addEventListener("click", formatAndDownload);
 });

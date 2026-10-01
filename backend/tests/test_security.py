@@ -28,11 +28,11 @@ class SecurityTests(unittest.TestCase):
                 self.pipeline.run(self.source, overrides=override)
 
     def test_api_rejects_invalid_type_without_masking_404(self):
-        response = TestClient(app).post("/api/parse/unknown", files={"file": ("test.docx", self.source)})
+        response = TestClient(app, base_url="http://127.0.0.1:8000").post("/api/parse/unknown", files={"file": ("test.docx", self.source)})
         self.assertEqual(response.status_code, 404)
 
     def test_api_rejects_non_object_override(self):
-        response = TestClient(app).post("/api/format/working-paper", files={"file": ("test.docx", self.source)}, data={"overrides_json": "[]"})
+        response = TestClient(app, base_url="http://127.0.0.1:8000").post("/api/format/working-paper", files={"file": ("test.docx", self.source)}, data={"overrides_json": "[]"})
         self.assertEqual(response.status_code, 422)
         self.assertIn("JSON 对象", response.json()["detail"])
 
@@ -47,7 +47,7 @@ class SecurityTests(unittest.TestCase):
                 validate_docx_package(stream.getvalue())
 
     def test_public_origin_is_recognized_and_filename_has_no_control_chars(self):
-        response = TestClient(app).options("/api/parse/working-paper", headers={"Origin": "https://munword.lsyl71271.chatgpt.site", "Access-Control-Request-Method": "POST"})
+        response = TestClient(app, base_url="http://127.0.0.1:8000").options("/api/parse/working-paper", headers={"Origin": "https://munword.lsyl71271.chatgpt.site", "Access-Control-Request-Method": "POST"})
         self.assertEqual(response.status_code, 200)
         model = self.pipeline.parse(self.source)
         name = self.pipeline.filename(model, "S1\n", "甲\r国", "v1")

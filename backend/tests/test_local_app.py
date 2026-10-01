@@ -19,7 +19,7 @@ class LocalAppTests(unittest.TestCase):
         )
 
     def test_local_html_app_is_served_from_same_origin(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://127.0.0.1:8000")
         page = client.get("/")
         script = client.get("/app.js")
         styles = client.get("/styles.css")

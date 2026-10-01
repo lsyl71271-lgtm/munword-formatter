@@ -35,6 +35,19 @@ function entryChecksums(data: Uint8Array): number[] {
   return checksums;
 }
 
+/** A DTD or entity declaration in either encoding OPC allows (docx_package.declares_dtd).
+ * Decoding UTF-16 as UTF-8 hid "<\0!\0D\0..." from the search. */
+export function declaresDtd(bytes: Uint8Array): boolean {
+  const [a, b, c, d] = bytes;
+  if ((a === 0 && b === 0 && c === 0xfe && d === 0xff) || (a === 0xff && b === 0xfe && c === 0 && d === 0)) throw new Error("XML 部件使用了不支持的编码");
+  const big = (a === 0xfe && b === 0xff) || (a === 0 && b === 0x3c);
+  const little = (a === 0xff && b === 0xfe) || (a === 0x3c && b === 0);
+  const text = new TextDecoder(big ? "utf-16be" : little ? "utf-16le" : "utf-8").decode(bytes);
+  // Leading whitespace may hide BOM-less UTF-16 from the encoding sniff.
+  // Declaration syntax is ASCII; removing NUL separators covers both orders.
+  return /<!\s*(?:DOCTYPE|ENTITY)/i.test(text.replace(/\0/g, ""));
+}
+
 /** Inspect every entry before allowing fflate to allocate any expanded buffers. */
 export function readPackage(content: ArrayBuffer): Record<string, Uint8Array> {
   const data = new Uint8Array(content);
@@ -66,8 +79,7 @@ export function readPackage(content: ArrayBuffer): Record<string, Uint8Array> {
       if (name.endsWith(".xml") || name.endsWith(".rels")) {
         // DOCX parts do not need DTDs. Disallow entity declarations in both engines.
         if (bytes.length > 16 * 1024 * 1024) throw new Error("XML 部件过大，请拆分文档");
-        const xml = new TextDecoder().decode(bytes);
-        if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("不支持 XML 实体或 DTD");
+        if (declaresDtd(bytes)) throw new Error("不支持 XML 实体或 DTD");
       }
     }
     return parts;

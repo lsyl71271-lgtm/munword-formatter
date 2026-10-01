@@ -50,7 +50,7 @@ export type BrowserValidation = {
 const WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const ZH_MARKER = /^[\s\u00a0]*(?:第[一二三四五六七八九十百千]+条|[一二三四五六七八九十]+[、.]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)]|\d+[.、)]|[甲乙丙丁戊己庚辛壬癸][、.]|[（(][a-zivx]+[）)]|[a-z][.)）](?=\s|[^\x00-\x7f]))\s*/i;
+const ZH_MARKER = /^[\s\u00a0]*(?:第[一二三四五六七八九十百千]+条|[一二三四五六七八九十]+[、.]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)]|\d+[.、．)]|[甲乙丙丁戊己庚辛壬癸][、.]|[（(][a-zivx]+[）)]|[（(]\d{1,2}[）)]|[a-z][.)）](?=\s|[^\x00-\x7f]))\s*/i;
 const SUB_MARKER = /^[\s\u00a0]*(?:[（(][一二三四五六七八九十a-zivx]+[）)]|[甲乙丙丁戊己庚辛壬癸][、.])/i;
 type MetadataKey = "committee" | "topic" | "delegate" | "country" | "sponsors" | "signatories";
 type DocumentPolicy = {
@@ -102,10 +102,13 @@ function parsePackage(content: ArrayBuffer) {
       if (num) props.appendChild(document.importNode(num,true));
       for (const run of elements(p,"r")) {
         const rPr = ensureChild(run,"rPr",true), character = wordAttribute(directChild(rPr,"rStyle"),"val");
-        for (const name of ["b","i","u","vertAlign"]) {
+        for (const name of ["b","i","u","vertAlign","vanish","webHidden","specVanish","strike","dstrike"]) {
           if (directChild(rPr,name)) continue;
-          const inherited = inherit(character,"rPr",name) || (name !== "vertAlign" && !defaults.has(id) && inherit(id,"rPr",name));
-          if (inherited) rPr.appendChild(document.importNode(inherited,true));
+          // Visibility/deletion marks are semantic, including inherited defaults.
+          const semantic = ["vanish","webHidden","specVanish","strike","dstrike"].includes(name);
+          const inherited = inherit(character,"rPr",name) || (name !== "vertAlign" && (semantic || !defaults.has(id)) && inherit(id,"rPr",name))
+            || (semantic && elements(styles,"docDefaults").flatMap(node => elements(node,name))[0]);
+          if (inherited) { const target = rChild(rPr,name); for (const attr of Array.from(inherited.attributes)) target.setAttributeNS(attr.namespaceURI,attr.name,attr.value); }
         }
       }
     }
@@ -153,7 +156,7 @@ function wordAttribute(node: Element | null | undefined, name: string) {
 
 /** Write both the Latin and complex-script size (w:sz / w:szCs) in half-points. */
 function setSize(properties: Element, sizePt: number) {
-  for (const name of ["sz", "szCs"]) setWordAttribute(ensureChild(properties, name), "val", String(Math.round(sizePt * 2)));
+  for (const name of ["sz", "szCs"]) setWordAttribute(rChild(properties, name), "val", String(Math.round(sizePt * 2)));
 }
 
 function hasAutomaticNumber(paragraph: Element) {
@@ -165,9 +168,21 @@ function paragraphText(paragraph: Element): string {
   return visibleText(paragraph);
 }
 
+/** Every paragraph, table cells and text boxes included (fonts, sizes, styles). */
 function paragraphElements(document: Document): Element[] {
   const body = elements(document, "body")[0];
   return body ? elements(body, "p") : [];
+}
+
+const FLOW_CONTAINERS = new Set(["sdt", "sdtContent", "customXml"]);
+/** The running text in reading order: body paragraphs and those inside
+ * body-level content controls (docx_view.flow_paragraph_elements).  Table
+ * cells and text boxes are not clauses or header lines. */
+function flowParagraphs(document: Document): Element[] {
+  const walk = (container: Element): Element[] => Array.from(container.children).flatMap(child =>
+    child.namespaceURI !== WORD_NS ? [] : child.localName === "p" ? [child] : FLOW_CONTAINERS.has(child.localName) ? walk(child) : []);
+  const body = elements(document, "body")[0];
+  return body ? walk(body) : [];
 }
 
 function splitCountries(value: string) {
@@ -204,8 +219,39 @@ function endsCountryList(text: string) {
   return Boolean(labeledField(text)) || ZH_MARKER.test(text) || SUB_MARKER.test(text) || !looksLikeCountryContinuation(text);
 }
 
-function collectListField(paragraphs: string[], key: "sponsors" | "signatories") {
-  for (let index = 0; index < paragraphs.length; index += 1) {
+const BOUNDARY = POLICY.headerBoundary;
+const BODY_MARKER = new RegExp(BOUNDARY.bodyMarker, "i"), SENTENCE_END = new RegExp(BOUNDARY.sentenceEnd);
+const numberedParagraph = (p: Element) => {
+  const pPr = directChild(p, "pPr"), numPr = pPr && directChild(pPr, "numPr");
+  const numId = numPr && wordAttribute(directChild(numPr, "numId"), "val");
+  return Boolean(numId) && numId !== "0";
+};
+
+/** The first paragraph of the body (shared policy headerBoundary; semantic_policy.starts_body). */
+function startsBody(text: string, numbered = false): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || labeledField(trimmed)) return false;
+  if ((numbered && BOUNDARY.nativeNumbering) || BODY_MARKER.test(trimmed) || SENTENCE_END.test(trimmed)) return true;
+  return trimmed.endsWith(".") && trimmed.split(/\s+/).length >= BOUNDARY.englishSentenceWords;
+}
+
+/** Index of the first body paragraph after the title: header fields lie before it.
+ * A body paragraph that starts like "议题：" is the author's text; reading it as
+ * metadata replaced the real topic and the label drop deleted its words. */
+function headerEnd(texts: string[], titleIndex: number, numbered: (index: number) => boolean = () => false): number {
+  for (let index = Math.max(titleIndex, -1) + 1; index < texts.length; index++) if (startsBody(texts[index], numbered(index))) return index;
+  return texts.length;
+}
+
+/** headerEnd for a document's running text, with the title found as the parser finds it. */
+function headerLimit(paragraphs: Element[], type: BrowserDocumentType, language: "zh" | "en"): number {
+  const texts = paragraphs.map(p => paragraphText(p).trim());
+  const title = texts.map((text, index) => ({ text, index })).filter(item => item.text).slice(0, 8).find(item => matchesTypeTitle(item.text, type, language));
+  return headerEnd(texts, title?.index ?? -1, index => numberedParagraph(paragraphs[index]));
+}
+
+function collectListField(paragraphs: string[], key: "sponsors" | "signatories", limit = paragraphs.length) {
+  for (let index = 0; index < limit; index += 1) {
     const labeled = labeledField(paragraphs[index]);
     if (labeled?.key !== key) continue;
     const values = [labeled.value];
@@ -222,12 +268,12 @@ function collectListField(paragraphs: string[], key: "sponsors" | "signatories")
 
 function markerLevel(text: string): number {
   const value = text.trim();
-  if (/^(?:第[一二三四五六七八九十百]+条|[一二三四五六七八九十]+[、.]|\d+[.、)])/.test(value)) return 0;
+  if (/^(?:第[一二三四五六七八九十百]+条|[一二三四五六七八九十]+[、.]|\d+[.、．)])/.test(value)) return 0;
   if (/^[（(][子丑寅卯辰巳午未申酉戌亥]{2,3}[）)]/.test(value)) return 3;
   if (/^[（(][子丑寅卯辰巳午未申酉戌亥][）)]/.test(value)) return 2;
   if (/^[（(][甲乙丙丁戊己庚辛壬癸]+[）)]/.test(value)) return 3;
-  if (/^[（(][ivx]+[）)]/i.test(value)) return 2;
-  if (/^[（(][一二三四五六七八九十a-z]+[）)]/i.test(value)) return 1;
+  if (isRomanItem(value, null)) return 2;
+  if (/^[（(](?:[一二三四五六七八九十a-z]+|\d{1,2})[）)]/i.test(value)) return 1;
   if (/^[ivx]{2,}[.)]/i.test(value)) return 3;
   if (/^[a-z][.)]/i.test(value)) return 1;
   if (/^[甲乙丙丁戊己庚辛壬癸][、.]/.test(value)) return 2;
@@ -248,25 +294,28 @@ function matchesTypeTitle(text: string, type: BrowserDocumentType, language: "zh
 
 export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDocumentType): BrowserModel {
   const { document } = parsePackage(content);
-  const sourceParagraphs = paragraphElements(document);
+  const sourceParagraphs = flowParagraphs(document);
   const paragraphs = sourceParagraphs.map(paragraphText);
   const nonEmpty = paragraphs.map((text, index) => ({ text: text.trim(), index })).filter((item) => item.text);
   const joined = nonEmpty.map((item) => item.text).join("\n");
   const language: "zh" | "en" = /[\u3400-\u9fff]/.test(joined) ? "zh" : "en";
-  const values = { committee: "", topic: "", delegate: "", country: "", sponsors: collectListField(paragraphs, "sponsors"), signatories: collectListField(paragraphs, "signatories") };
-  for (const item of nonEmpty) {
+  const expectedTitle = typeTitle(documentType, language);
+  const titleItem = nonEmpty.slice(0, 8).find((item) => matchesTypeTitle(item.text, documentType, language));
+  // Labels after the first body paragraph are the author's text.
+  const limit = headerLimit(sourceParagraphs, documentType, language);
+  const isHeaderMetadata = (item: { text: string; index: number }) => item.index < limit && isMetadata(item.text);
+  const values = { committee: "", topic: "", delegate: "", country: "", sponsors: collectListField(paragraphs, "sponsors", limit), signatories: collectListField(paragraphs, "signatories", limit) };
+  for (const item of nonEmpty.filter(entry => entry.index < limit)) {
     values.committee ||= field(item.text, "committee");
     values.topic ||= field(item.text, "topic");
     values.delegate ||= field(item.text, "delegate");
     values.country ||= field(item.text, "country");
   }
-  const expectedTitle = typeTitle(documentType, language);
-  const titleItem = nonEmpty.slice(0, 8).find((item) => matchesTypeTitle(item.text, documentType, language));
   const title = titleItem?.text || expectedTitle;
   const profile = POLICY.documents[documentType];
   const inferredHeaderIndices = new Set<number>();
   if (titleItem && profile.unlabeledHeaderFields?.length) {
-    const firstLabeled = nonEmpty.find((item) => item.index > (titleItem?.index ?? -1) && isMetadata(item.text));
+    const firstLabeled = nonEmpty.find((item) => item.index > (titleItem?.index ?? -1) && isHeaderMetadata(item));
     // Read one contiguous header block. Never skip a name that resembles a
     // marker and take a later body heading as the missing metadata value.
     const header = nonEmpty.filter(item => item.index > (titleItem?.index ?? -1)
@@ -287,7 +336,7 @@ export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDo
     });
   }
   const clauses: BrowserClause[] = nonEmpty
-    .filter((item) => !isMetadata(item.text) && item.text !== title && !inferredHeaderIndices.has(item.index))
+    .filter((item) => !isHeaderMetadata(item) && item.text !== title && !inferredHeaderIndices.has(item.index))
     .map((item) => ({ text: item.text, level: hasAutomaticNumber(sourceParagraphs[item.index]) ? Number(wordAttribute(directChild(directChild(sourceParagraphs[item.index], "pPr")!, "numPr")?.getElementsByTagNameNS(WORD_NS, "ilvl")[0], "val") || 0) : markerLevel(item.text), kind: "body", paragraph_index: item.index, confidence: ZH_MARKER.test(item.text) ? 0.99 : 0.88 }));
   let preambulatory: BrowserClause[] = [];
   let operative: BrowserClause[] = [];
@@ -332,7 +381,7 @@ function normalizeEmbeddedSubclauses(document: Document, documentType: BrowserDo
   if (!["working-paper", "draft-directive", "draft-resolution"].includes(documentType)) return false;
   const marker = /([：:])\s*([（(][子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]{1,3}[）)])/;
   let changed = false;
-  for (const original of [...paragraphElements(document)]) {
+  for (const original of [...flowParagraphs(document)]) {
     const initial = paragraphText(original);
     const firstSub = /[：:][ \u00a0]*[（(]一[）)]/.exec(initial);
     if (firstSub && /^\s*第[一二三四五六七八九十百]+条/.test(initial)) {
@@ -347,7 +396,7 @@ function normalizeEmbeddedSubclauses(document: Document, documentType: BrowserDo
       const splitAt = match.index + match[1].length;
       const remainder = value.slice(splitAt).trimStart();
       if (!remainder) break;
-      if (!splitParagraphAt(paragraph, splitAt)) { unsplit.push(paragraphElements(document).indexOf(paragraph) + 1); break; }
+      if (!splitParagraphAt(paragraph, splitAt)) { unsplit.push(flowParagraphs(document).indexOf(paragraph) + 1); break; }
       paragraph = paragraph.nextElementSibling!;
       changed = true;
     }
@@ -357,7 +406,7 @@ function normalizeEmbeddedSubclauses(document: Document, documentType: BrowserDo
 
 function setRunFormat(run: Element, eastAsia: string, latin: string, sizePt: number) {
   const rPr = ensureChild(run, "rPr", true);
-  const fonts = ensureChild(rPr, "rFonts");
+  const fonts = rChild(rPr, "rFonts"); // schema order (CT_RPr)
   for (const key of ["asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme", "csTheme"]) removeWordAttribute(fonts, key);
   setWordAttribute(fonts, "ascii", latin);
   setWordAttribute(fonts, "hAnsi", latin);
@@ -368,9 +417,10 @@ function setRunFormat(run: Element, eastAsia: string, latin: string, sizePt: num
 
 function setEmphasis(run: Element, kind: "bold" | "italic" | "underline", enabled = true) {
   const names = { bold: "b", italic: "i", underline: "u" } as const;
-  const node = ensureChild(ensureChild(run, "rPr", true), names[kind]);
-  setWordAttribute(node, "val", kind === "underline" ? (enabled ? "single" : "none") : (enabled ? "1" : "0"));
-  if (kind !== "underline") setWordAttribute(ensureChild(ensureChild(run, "rPr", true), kind === "bold" ? "bCs" : "iCs"), "val", enabled ? "1" : "0");
+  // Schema order (CT_RPr): appending put u after lang, which strict readers reject.
+  const rPr = ensureChild(run, "rPr", true);
+  setWordAttribute(rChild(rPr, names[kind]), "val", kind === "underline" ? (enabled ? "single" : "none") : (enabled ? "1" : "0"));
+  if (kind !== "underline") setWordAttribute(rChild(rPr, kind === "bold" ? "bCs" : "iCs"), "val", enabled ? "1" : "0");
 }
 
 function setRunText(run: Element, text: string) {
@@ -444,6 +494,38 @@ function handbookNotes(parts: Record<string, Uint8Array>, eastAsia: string) {
   }
 }
 
+/** Office theme defaults out of the font table and theme; the Song face declared
+ * with its macOS name (fonts.normalize_font_parts).  The math font is kept:
+ * Times New Roman has no math table. */
+const FORBIDDEN_FONTS = ["Aptos Display", "Calibri Light", "Calibri", "Cambria", "Aptos"];
+function normalizeFontParts(parts: Record<string, Uint8Array>, language: "zh" | "en") {
+  if (parts["word/fontTable.xml"]) {
+    const table = new DOMParser().parseFromString(decoder.decode(parts["word/fontTable.xml"]), "application/xml");
+    if (!table.getElementsByTagName("parsererror").length) {
+      const root = table.documentElement;
+      for (const font of elements(table, "font")) if (FORBIDDEN_FONTS.includes(wordAttribute(font, "name") || "")) font.remove();
+      if (language === "zh") {
+        let font = elements(table, "font").find(node => wordAttribute(node, "name") === "SimSun");
+        if (!font) { font = table.createElementNS(WORD_NS, "w:font"); setWordAttribute(font, "name", "SimSun"); root.insertBefore(font, root.firstChild); }
+        setWordAttribute(ensureChild(font, "altName", true), "val", "Songti SC");
+      }
+      parts["word/fontTable.xml"] = encoder.encode(new XMLSerializer().serializeToString(table));
+    }
+  }
+  if (parts["word/theme/theme1.xml"]) {
+    const theme = new DOMParser().parseFromString(decoder.decode(parts["word/theme/theme1.xml"]), "application/xml");
+    if (!theme.getElementsByTagName("parsererror").length) {
+      for (const node of Array.from(theme.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/main", "*"))) {
+        if (FORBIDDEN_FONTS.includes(node.getAttribute("typeface") || "")) node.setAttribute("typeface", "Times New Roman");
+      }
+      parts["word/theme/theme1.xml"] = encoder.encode(new XMLSerializer().serializeToString(theme));
+    }
+  }
+  if (language === "zh" && parts["word/settings.xml"]) {
+    parts["word/settings.xml"] = encoder.encode(decoder.decode(parts["word/settings.xml"]).split('w:eastAsia="ja-JP"').join('w:eastAsia="zh-CN"'));
+  }
+}
+
 function applyPageProfile(document: Document) {
   const page = POLICY.handbook.page;
   const sections = elements(document, "sectPr");
@@ -465,7 +547,7 @@ function applyPageProfile(document: Document) {
 
 function repairMissingFirstSection(document: Document, documentType: BrowserDocumentType, original: BrowserModel) {
   if (!POLICY.documents[documentType].repairs?.includes("missing-first-section")) return false;
-  const paragraphs = paragraphElements(document);
+  const paragraphs = flowParagraphs(document);
   const secondIndex = paragraphs.findIndex((p) => /^[\s]*[（(]二[）)]/.test(paragraphText(p)));
   if (secondIndex < 0) return false;
   if (paragraphs.slice(0, secondIndex).some((p) => /^[\s]*[（(]一[）)]/.test(paragraphText(p)))) return false;
@@ -531,8 +613,8 @@ function rolePitch(type: BrowserDocumentType, language: "zh" | "en", role: "body
   return kindOf(type) === "amendment" ? p.amendmentZh : p.zh;
 }
 const TITLE_WORDS = (type: BrowserDocumentType) => [...new Set([...Object.values(POLICY.titles[type]), ...Object.values(HB.outputTitles[type])])];
-const HANDBOOK_MARKER = /^\s*(?:第[一二三四五六七八九十百]+条|[0-9]+[.、)]|[0-9]+(?=\s{2,})|[a-z][.)）](?=\s|[^\x00-\x7f])|[（(][a-zivx]+[）)]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)])\s*/i;
-const PP_LEVELS = [/^\s*\d+\s*[.、)]/, /^\s*(?:[a-h]|[j-u]|[w-z])\s*[.)]/i, /^\s*[ivx]+\s*[.)]/i];
+const HANDBOOK_MARKER = /^\s*(?:第[一二三四五六七八九十百]+条|[0-9]+[.、．)]|[0-9]+(?=\s{2,})|[a-z][.)）](?=\s|[^\x00-\x7f])|[（(][a-zivx]+[）)]|[（(][0-9]{1,2}[）)]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)])\s*/i;
+const PP_LEVELS = [/^\s*\d+\s*[.、．)]/, /^\s*(?:[a-h]|[j-u]|[w-z])\s*[.)]/i, /^\s*[ivx]+\s*[.)]/i];
 const PART = /^(?:PART\s+[IVXLC]+\b|第[一二三四五六七八九十]+部分)/i;
 const BARE_ARTICLE = /^\s*第[一二三四五六七八九十百]+条\s*$/;
 const ENDING_STRIP = /[，,；;。.:：、 \t]+$/;
@@ -542,8 +624,10 @@ const HEADER_ROLES = ["title", "committee", "topic", "country", "delegate", "spo
 const BODY_ROLES = ["preamble", "item", "prose", "reference"];
 const KEEP_WITH_NEXT = [...HEADER_ROLES, "subject", "part"];
 const PARAGRAPH_CLEAN = ["pStyle", "bidi", "textDirection", "shd", "pBdr", "framePr", "contextualSpacing", "snapToGrid", "tabs", "outlineLvl", "textAlignment"];
-const RUN_NOISE = ["vanish", "webHidden", "specVanish", "strike", "dstrike", "outline", "shadow", "emboss", "imprint", "highlight", "shd", "bdr", "effect", "glow", "reflection", "spacing", "kern", "color", "rStyle", "caps", "smallCaps", "em", "fitText", "eastAsianLayout", "w", "position"];
-const MARKER_NOISE = ["vanish", "webHidden", "strike", "dstrike", "shd", "highlight", "position", "spacing", "w", "caps", "smallCaps", "color"];
+// Never what a reader sees or what it means: hidden text stays hidden and
+// strikethrough stays struck (base.RUN_NOISE_TAGS).
+const RUN_NOISE = ["outline", "shadow", "emboss", "imprint", "highlight", "shd", "bdr", "effect", "glow", "reflection", "spacing", "kern", "color", "rStyle", "caps", "smallCaps", "em", "fitText", "eastAsianLayout", "w", "position"];
+const MARKER_NOISE = ["strike", "dstrike", "shd", "highlight", "position", "spacing", "w", "caps", "smallCaps", "color"];
 const RPR_ORDER = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline", "shadow", "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"];
 const PPR_ORDER = ["pStyle", "keepNext", "keepLines", "pageBreakBefore", "framePr", "widowControl", "numPr", "suppressLineNumbers", "pBdr", "shd", "tabs", "suppressAutoHyphens", "kinsoku", "wordWrap", "overflowPunct", "topLinePunct", "autoSpaceDE", "autoSpaceDN", "bidi", "adjustRightInd", "snapToGrid", "spacing", "ind", "contextualSpacing", "mirrorIndents", "suppressOverlap", "jc", "textDirection", "textAlignment", "textboxTightWrap", "outlineLvl", "divId", "cnfStyle", "rPr", "sectPr", "pPrChange"];
 const SEQUENCES: [RegExp, (value: string) => number | null][] = [
@@ -551,7 +635,8 @@ const SEQUENCES: [RegExp, (value: string) => number | null][] = [
   [/^\s*[（(]([子丑寅卯辰巳午未申酉戌亥])[）)]/, v => "子丑寅卯辰巳午未申酉戌亥".indexOf(v) + 1 || null],
   [/^\s*[（(]([甲乙丙丁戊己庚辛壬癸])[）)]/, v => "甲乙丙丁戊己庚辛壬癸".indexOf(v) + 1 || null],
   [/^\s*[（(]([一二三四五六七八九十]+)[）)]/, chineseNumber],
-  [/^\s*(\d{1,3})[.、)）]/, v => Number(v)],
+  [/^\s*[（(](\d{1,2})[）)]/, v => Number(v)],
+  [/^\s*(\d{1,3})[.、．)）]/, v => Number(v)],
   [/^\s*[（(]([a-hj-uw-z])[）)]/, v => "abcdefghjklmnopqrstuwxyz".indexOf(v.toLowerCase()) + 1 || null],
   [/^\s*([a-hj-uw-z])[.)）]/, v => "abcdefghjklmnopqrstuwxyz".indexOf(v.toLowerCase()) + 1 || null],
 ];
@@ -610,6 +695,35 @@ function formatRun(run: Element, ctx: Ctx, emphasis: { bold?: boolean; italic?: 
   if (emphasis.bold !== undefined) for (const tag of ["b", "bCs"]) setWordAttribute(rChild(rPr, tag), "val", emphasis.bold ? "1" : "0");
   if (emphasis.italic !== undefined) for (const tag of ["i", "iCs"]) setWordAttribute(rChild(rPr, tag), "val", emphasis.italic ? "1" : "0");
   if (emphasis.underline !== undefined) setWordAttribute(rChild(rPr, "u"), "val", emphasis.underline ? "single" : "none");
+}
+
+/** Hiding or striking every character is damage; hiding or striking some is
+ * the author's (a private note, an amendment's deletion) (base._strip_uniform_damage). */
+const UNIFORM_DAMAGE = ["vanish", "webHidden", "specVanish", "strike", "dstrike"];
+function stripUniformDamage(document: Document, parts: Record<string, Uint8Array>): string[] {
+  const on = (run: Element, tag: string) => {
+    const node = directChild(rPrOf(run), tag);
+    return Boolean(node) && !["0", "false", "off"].includes(wordAttribute(node, "val") || "");
+  };
+  const every = elements(document, "p").flatMap(p => visibleRuns(p)), runs = every.filter(run => paragraphText(run).trim());
+  if (!runs.length) return [];
+  const cleared = UNIFORM_DAMAGE.filter(tag => runs.every(run => on(run, tag)));
+  for (const tag of cleared) for (const run of every) removeChildren(rPrOf(run), [tag]);
+  // Removing direct properties alone lets a damaged Normal/docDefault style
+  // immediately hide/strike the text again when Word opens the output.
+  if (cleared.length && parts["word/styles.xml"]) {
+    const styles = new DOMParser().parseFromString(decoder.decode(parts["word/styles.xml"]), "application/xml");
+    for (const tag of cleared) for (const node of elements(styles, tag)) node.remove();
+    parts["word/styles.xml"] = encoder.encode(new XMLSerializer().serializeToString(styles));
+  }
+  // Told, not shown or kept silently.
+  return paragraphElements(document).flatMap((p, index) => {
+    const kept = visibleRuns(p).filter(run => paragraphText(run).trim());
+    const hidden = kept.some(run => ["vanish", "webHidden", "specVanish"].some(tag => on(run, tag))), struck = kept.some(run => on(run, "strike") || on(run, "dstrike"));
+    if (!hidden && !struck) return [];
+    const what = hidden && !struck ? "隐藏文字" : struck && !hidden ? "删除线文字" : "隐藏文字和删除线文字";
+    return [`第 ${index + 1} 段含${what}，已保留原稿的显示、打印或删除标记，请确认是否需要。`];
+  });
 }
 
 /** Runs whose text the reader sees (not deleted revisions or text boxes). */
@@ -715,6 +829,8 @@ type Ctx = {
   type: BrowserDocumentType; language: "zh" | "en"; spec: Spec; eastAsia: string;
   normalizePunctuation: boolean; preserveCountryOrder: boolean; changed: Set<string>;
   editLog: Map<Element, Edit>; source: Element[]; warnings: string[]; protectedNotes: string[];
+  /** Flow-paragraph index of the first body paragraph (see headerEnd). */
+  headerEnd: number;
 };
 
 const attached = (b: Block) => Boolean(b.p.parentNode);
@@ -850,7 +966,8 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
     if (setText(ctx, paragraphs[index], ctx.model[key])) logEdit(ctx, paragraphs[index], "field", key, ctx.model[key]);
   }
   restoreMissingLabels(ctx, paragraphs, texts);
-  for (let index = 0; index < paragraphs.length; index++) {
+  // Only the header: a body paragraph that starts like "议题：" is the author's text.
+  for (let index = 0; index < Math.min(paragraphs.length, ctx.headerEnd); index++) {
     const labeled = labeledField(texts[index]);
     if (!labeled) continue;
     const p = paragraphs[index];
@@ -877,7 +994,7 @@ function restoreMissingLabels(ctx: Ctx, paragraphs: Element[], texts: string[]) 
   if (!profile.restoreMissingHeaderLabels) return;
   const titleIndex = texts.findIndex(text => TITLE_WORDS(ctx.type).some(word => isTitle(text, word)));
   if (titleIndex < 0) return;
-  const candidates = texts.map((text, index) => ({ text, index })).filter(item => item.index > titleIndex && item.text && !labeledField(item.text));
+  const candidates = texts.map((text, index) => ({ text, index })).filter(item => item.index > titleIndex && item.index < ctx.headerEnd && item.text && !labeledField(item.text));
   ((profile.unlabeledHeaderFields || []) as MetadataKey[]).forEach((key, position) => {
     const item = candidates[position];
     if (!item || key === "sponsors" || key === "signatories") return;
@@ -934,7 +1051,7 @@ const LIST_ITEM_END = /[；;。.]$/;
 /** Layout cannot prove a missing number. Adding membership shifts existing references. */
 function suspectedMissingListItems(document: Document, type: BrowserDocumentType): number[] {
   if (!["draft-resolution", "working-paper"].includes(type)) return [];
-  const paragraphs = paragraphElements(document);
+  const paragraphs = flowParagraphs(document);
   const nonempty = paragraphs.map((p, index) => ({ p, index })).filter(item => paragraphText(item.p).trim()).map(item => item.index);
   const suspects: number[] = [];
   for (let position = 1; position < nonempty.length - 1; position++) {
@@ -992,14 +1109,44 @@ function activeNumbering(p: Element): { numId: string; ilvl: string } | null {
 }
 
 /** Handbook level of a paragraph (mirrors parser.infer_level). */
-function inferLevel(text: string, p: Element, previous: number, numbering: Map<string, { fmt: string; text: string }>): number {
-  if (/^\s*[（(][ivxlcdm]+[）)]/i.test(text)) return previous >= 1 ? 2 : 1;
-  const matchers: [RegExp, number][] = [
-    [/^\s*(?:第[一二三四五六七八九十百]+条|\d+[.、])/, 0], [/^\s*[（(](?:[a-z]|[一二三四五六七八九十]+)[）)]/i, 1],
-    [/^\s*[a-hj-uw-z][.)）]/i, 1], [/^\s*[（(][子丑寅卯辰巳午未申酉戌亥]{2,3}[）)]/, 3], [/^\s*[（(][子丑寅卯辰巳午未申酉戌亥][）)]/, 2],
-    [/^\s*(?:[ivxlcdm]+\.|[（(][甲乙丙丁戊己庚辛壬癸]+[）)])/i, 3],
-  ];
-  for (const [pattern, level] of matchers) if (pattern.test(text)) return level;
+/** (left, hanging) in twips of each handbook list level (parser.handbook_list_indents). */
+const listIndentsOf = (spec: Spec) => spec.listIndentsPt.map(([left, hanging]) => [Math.round(left * 20), Math.round(hanging * 20)]);
+
+/** The letters of a parenthesized marker ("（c）" → "c"), or null (parser.paren_token). */
+const parenToken = (text: string) => /^\s*[（(]([a-z]{1,4})[）)]/i.exec(text)?.[1].toLowerCase() ?? null;
+const ROMAN: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+function romanValue(token: string): number | null {
+  if (!token || [...token].some(ch => !(ch in ROMAN))) return null;
+  return [...token].reduce((total, ch, index) => total + (ROMAN[ch] < (ROMAN[token[index + 1]] ?? 0) ? -ROMAN[ch] : ROMAN[ch]), 0);
+}
+/** "(c)" after "(b)" is a letter, "(v)" after "(iv)" a numeral (parser.is_roman_item). */
+function isRomanItem(text: string, previousToken: string | null) {
+  const token = parenToken(text);
+  if (token === null || romanValue(token) === null) return false;
+  if (token.length > 1) return true;
+  if (token === "i") return previousToken !== "h";
+  const previous = romanValue(previousToken ?? "");
+  return previous !== null && previous + 1 === romanValue(token);
+}
+
+/** "（1）" items: one level under the item that introduces them (parser.PAREN_DIGIT_RE). */
+const PAREN_DIGIT = /^\s*[（(]\d{1,2}[）)]/;
+
+/** A list context for the next paragraph: an item, or a clause that introduces items. */
+function opensOrContinuesList(text: string, p: Element, level: number) {
+  return level > 0 || activeNumbering(p) !== null || parenToken(text) !== null || PAREN_DIGIT.test(text) || LEVEL_MARKERS.some(([pattern]) => pattern.test(text)) || /[：:]$/.test(text);
+}
+
+const LEVEL_MARKERS: [RegExp, number][] = [
+  [/^\s*(?:第[一二三四五六七八九十百]+条|\d+[.、．])/, 0], [/^\s*[（(](?:[a-z]|[一二三四五六七八九十]+)[）)]/i, 1],
+  [/^\s*[a-hj-uw-z][.)）]/i, 1], [/^\s*[（(][子丑寅卯辰巳午未申酉戌亥]{2,3}[）)]/, 3], [/^\s*[（(][子丑寅卯辰巳午未申酉戌亥][）)]/, 2],
+  [/^\s*(?:[ivxlcdm]+\.|[（(][甲乙丙丁戊己庚辛壬癸]+[）)])/i, 3],
+];
+
+function inferLevel(text: string, p: Element, previous: number, numbering: Map<string, { fmt: string; text: string }>, inList = true, indents: number[][] = [], previousToken: string | null = null, previousParenDigit = false): number {
+  if (isRomanItem(text, previousToken)) return previous >= 1 ? 2 : 1;
+  if (PAREN_DIGIT.test(text)) return previousParenDigit ? previous : inList ? Math.min(3, previous + 1) : 0;
+  for (const [pattern, level] of LEVEL_MARKERS) if (pattern.test(text)) return level;
   const active = activeNumbering(p);
   if (active) {
     const level = numbering.get(`${active.numId}:${active.ilvl}`);
@@ -1012,16 +1159,35 @@ function inferLevel(text: string, p: Element, previous: number, numbering: Map<s
     }
     return Number(active.ilvl) || 0;
   }
+  const ind = directChild(pPrOf(p), "ind");
+  const left = Number(wordAttribute(ind, "left") || wordAttribute(ind, "start") || 0), hanging = Number(wordAttribute(ind, "hanging") || 0);
+  // Indentation nests only inside a list (parser.infer_level).
+  if (!inList) return 0;
+  // The handbook's own list indent for a level reads back as that level, so a
+  // second pass changes nothing (the inches rule read 42 pt as level 2).
+  const own = indents.findIndex(([listLeft, listHanging], level) => level > 0 && left === listLeft && hanging === listHanging);
+  if (own > 0) return own;
   // An indent beyond the damage threshold (96 pt) is noise, not nesting.
-  const left = Number(wordAttribute(directChild(pPrOf(p), "ind"), "left") || 0);
   return left > 0 && left <= 96 * 20 ? Math.min(3, Math.max(0, Math.round(left / 1440 / 0.3))) : 0;
+}
+
+/** "The Security Council," and "Security Council" name the same organ (parser._organ_name). */
+const organName = (value: string) => value.trim().replace(/[，,]+$/, "").trim().replace(/^(?:the\s+|联合国)/i, "").toLowerCase();
+const SUBJECT_LINES = POLICY.subjectLine.patterns.map(pattern => new RegExp(`^(?:${pattern})$`));
+const CLAUSE_WORDS = (["zh", "en"] as const).flatMap(language => [...POLICY.prefixes[language].preambulatory, ...POLICY.prefixes[language].operative]).map(word => word.toLowerCase());
+
+/** A body named before the clauses even when the committee field is written
+ * differently (shared policy subjectLine; parser.is_subject_line). */
+function isSubjectLine(text: string) {
+  const lower = text.toLowerCase();
+  return !CLAUSE_WORDS.some(word => lower.startsWith(word)) && SUBJECT_LINES.some(pattern => pattern.test(text));
 }
 
 function isCommitteeSubject(text: string, committee: string) {
   const clean = text.replace(/[，,]+$/, "").trim().toLowerCase();
-  if (committee && clean === committee.replace(/[，,]+$/, "").trim().toLowerCase()) return true;
+  if (committee && organName(clean) === organName(committee)) return true;
   if (["联合国大会", "the committee", "the general assembly"].includes(clean)) return true;
-  return /^The [A-Z][A-Z\s]*,$/.test(text.trim());
+  return /^The [A-Z][A-Z\s]*,$/.test(text.trim()) || isSubjectLine(text.trim());
 }
 
 function handbookBlocks(ctx: Ctx, paragraphs: Element[], numbering: Map<string, { fmt: string; text: string }>): Block[] {
@@ -1034,7 +1200,7 @@ function handbookBlocks(ctx: Ctx, paragraphs: Element[], numbering: Map<string, 
   const titleWords = TITLE_WORDS(ctx.type);
   const title = texts.slice(0, 40).findIndex(text => text && (text === ctx.model.title || titleWords.some(word => isTitle(text, word))));
   if (title >= 0) assign(title, "title");
-  for (let index = 0; index < texts.length; index++) {
+  for (let index = 0; index < Math.min(texts.length, ctx.headerEnd); index++) {
     const labeled = labeledField(texts[index]);
     if (!labeled) continue;
     if (labeled.key === "sponsors" || labeled.key === "signatories") {
@@ -1066,21 +1232,27 @@ function handbookBlocks(ctx: Ctx, paragraphs: Element[], numbering: Map<string, 
     if (start >= 0) for (let index = start; index < texts.length; index++) assign(index, "reference");
   }
   const preambleIndices = new Set(ctx.recognized.preambulatory_clauses.map(c => c.paragraph_index));
-  let previous = 0;
+  let previous = 0, inList = false, previousToken: string | null = null, previousParenDigit = false;
+  const indents = listIndentsOf(ctx.spec);
   for (let index = 0; index < texts.length; index++) {
     const p = paragraphs[index], text = texts[index];
-    if (roles.has(index)) continue;
-    if (!text) { if (carriesHiddenStructure(p)) roles.set(index, { p, role: "object", level: 0, group: "", operative: false }); continue; }
+    if (!text && !roles.has(index)) { if (carriesHiddenStructure(p)) roles.set(index, { p, role: "object", level: 0, group: "", operative: false }); continue; }
+    if (!text) continue;
+    if (roles.has(index)) { inList = roles.get(index)!.role === "item" || /[：:]$/.test(text); previousToken = parenToken(text) ?? previousToken; previousParenDigit = PAREN_DIGIT.test(text); continue; }
     if (index < headerEnd) { assign(index, "header"); continue; }
-    if (PART.test(text)) { assign(index, "part"); continue; }
-    if (ctx.spec.subject && isCommitteeSubject(text, ctx.model.committee)) { assign(index, "subject"); continue; }
-    if (ctx.type === "draft-resolution" && preambleIndices.has(index)) { assign(index, "preamble"); continue; }
+    const placed = PART.test(text) ? "part" : ctx.spec.subject && isCommitteeSubject(text, ctx.model.committee) ? "subject"
+      : ctx.type === "draft-resolution" && preambleIndices.has(index) ? "preamble" : "";
+    if (placed) { assign(index, placed); inList = /[：:]$/.test(text); continue; }
     if (ctx.type === "position-paper") {
       const level = PP_LEVELS.findIndex(pattern => pattern.test(text));
       assign(index, level < 0 ? "prose" : "item", { level: Math.max(level, 0) });
+      inList = level >= 0 || /[：:]$/.test(text);
       continue;
     }
-    previous = inferLevel(text, p, previous, numbering);
+    previous = inferLevel(text, p, previous, numbering, inList, indents, previousToken, previousParenDigit);
+    inList = opensOrContinuesList(text, p, previous);
+    previousToken = parenToken(text) ?? previousToken;
+    previousParenDigit = PAREN_DIGIT.test(text);
     const isItem = previous > 0 || activeNumbering(p) !== null || HANDBOOK_MARKER.test(text);
     assign(index, isItem ? "item" : "prose", { level: previous, operative: operativeType && (isItem || ctx.type !== "working-paper") });
   }
@@ -1367,7 +1539,9 @@ function blankParagraph(ctx: Ctx, pitch: number) {
 
 function blankLines(ctx: Ctx, blocks: Block[]) {
   const body = elements(ctx.document, "body")[0];
-  for (const p of Array.from(body.children).filter(c => c.namespaceURI === WORD_NS && c.localName === "p")) {
+  for (const p of flowParagraphs(ctx.document)) {
+    // A content control keeps at least one paragraph.
+    if (p.parentElement !== body && p.parentElement?.children.length === 1) continue;
     if (paragraphText(p).trim() || carriesHiddenStructure(p)) continue;
     if (!ctx.editLog.has(p)) logEdit(ctx, p, "empty-line");
     p.remove();
@@ -1484,18 +1658,20 @@ function formatInner(
     document, parts, model, recognized, original, type: model.document_type, language: model.language,
     spec: specFor(model.document_type, model.language), eastAsia: eastAsianFont(model.document_type, model.language),
     normalizePunctuation: options.normalizePunctuation ?? true, preserveCountryOrder: options.preserveCountryOrder ?? false,
-    changed, editLog: new Map(), source: paragraphElements(document), warnings: [...recognized.warnings], protectedNotes: [],
+    changed, editLog: new Map(), source: flowParagraphs(document), warnings: [...recognized.warnings], protectedNotes: [],
+    headerEnd: headerLimit(flowParagraphs(document), model.document_type, recognized.language),
   };
   const snapshot = takeSnapshot(document);
+  const keptHidden = stripUniformDamage(document, parts);
 
   configurePage(document);
   configureStyles(parts, ctx);
   for (const p of elements(document, "p")) for (const run of visibleRuns(p)) formatRun(run, ctx);
-  const paragraphs = paragraphElements(document);
+  const paragraphs = flowParagraphs(document);
   formatMetadata(ctx, paragraphs);
   const numbering = numberingIndex(parts);
   if (ctx.type === "position-paper") {
-    const lastLabel = paragraphs.reduce((last, p, index) => labeledField(paragraphText(p).trim()) ? index + 1 : last, 0);
+    const lastLabel = paragraphs.reduce((last, p, index) => index < ctx.headerEnd && labeledField(paragraphText(p).trim()) ? index + 1 : last, 0);
     positionPaperMarkers(ctx, paragraphs, lastLabel);
   }
   let blocks = handbookBlocks(ctx, paragraphs, numbering);
@@ -1507,6 +1683,7 @@ function formatInner(
   continuity(ctx, blocks);
   blankLines(ctx, blocks);
   handbookNotes(parts, ctx.eastAsia);
+  normalizeFontParts(parts, ctx.language);
 
   const problems = verifyFormat(snapshot, document, ctx.editLog, TITLE_WORDS(ctx.type), [...POLICY.metadata.committee.aliases, ...POLICY.metadata.topic.aliases]);
   parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
@@ -1523,6 +1700,7 @@ function formatInner(
   const edits = editSummary(ctx.editLog, repaired, split);
   validations.splice(1, 0, { code: "structural_edits", label: "结构与人工修改记录", status: edits.length ? "warning" : "pass", detail: edits.join("；") || "未改写正文文字。" });
   if (repairProblems.length) validations.push({ code: "repair-content", label: "结构修复严格内容校验", status: "error", detail: repairProblems.slice(0, 6).join("；") });
+  for (const note of keptHidden) validations.push({ code: "hidden-text", label: "隐藏文字与删除线按原稿保留", status: "warning", detail: note });
   for (const number of missingListItems) validations.push({ code: "numbering_review", label: "原编号已保留，疑似缺项需人工确认", status: "warning", detail: `第 ${number} 段可能是引言或缺失编号的首项。已保留原样，不自动加入列表，以免后续条号及交叉引用错位。` });
   for (const number of unsplitParagraphs) validations.push({ code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: `第 ${number} 段含链接或修订痕迹，其中嵌入的子条款未拆分为独立段落，请人工确认。` });
   for (const note of ctx.protectedNotes) validations.push({ code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: note });

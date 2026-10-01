@@ -44,7 +44,7 @@ _TEXT = _W + "t"
 _DELETED_TEXT = _W + "delText"
 _IGNORED_ATTRIBUTES = re.compile(r"(?:}|^)(?:rsid\w*|paraId|textId)$")
 _ENDING_CHARS = frozenset("，,；;。.:：、 \t")
-_LEADING_MARKER_RE = re.compile(r"^(\s*)(\d+)\s*[.、)）]\s*\t?")
+_LEADING_MARKER_RE = re.compile(r"^(\s*)(\d+)\s*[.、．)）]\s*\t?")
 _COUNTRY_SPLIT_RE = re.compile(r"[,，、;；/|\n]+")
 
 
@@ -154,8 +154,40 @@ def _is_plain(sig: tuple) -> bool:
     return all(token[0] == "t" for token in sig)
 
 
+_BLOCKS = (_W + "p", _W + "tbl")
+_WRAPPERS = frozenset(_W + tag for tag in ("sdt", "sdtContent", "customXml"))
+
+
+def _blocks_in(container) -> list:
+    out = []
+    for child in container:
+        if child.tag in _BLOCKS:
+            out.append(child)
+        elif child.tag in _WRAPPERS:
+            out.extend(_blocks_in(child))
+    return out
+
+
 def body_blocks(document) -> list:
-    return [child for child in document.element.body if child.tag in (_W + "p", _W + "tbl")]
+    """Paragraphs and tables of the body, through content controls and custom XML.
+
+    A content control's paragraphs are running text: checking only the body's
+    direct children let any change inside one pass unnoticed.
+    """
+
+    return _blocks_in(document.element.body)
+
+
+def _wrappers(document) -> list:
+    """Each block-level wrapper with its own properties (not its content)."""
+
+    out = []
+    for element in document.element.body.iter(*_WRAPPERS):
+        if element.tag == _W + "sdtContent":
+            continue
+        own = [child for child in element if child.tag not in _WRAPPERS and child.tag not in _BLOCKS]
+        out.append((element.tag, _attributes(element), tuple(signature(child) for child in own)))
+    return out
 
 
 @dataclass
@@ -164,11 +196,15 @@ class Snapshot:
     signatures: dict
     texts: dict
     numbering: dict
+    wrappers: list
 
     @classmethod
     def take(cls, document) -> "Snapshot":
         order = body_blocks(document)
-        return cls(order, {el: signature(el) for el in order}, {el: element_text(el) for el in order}, {el: _list_membership(el) for el in order})
+        return cls(
+            order, {el: signature(el) for el in order}, {el: element_text(el) for el in order},
+            {el: _list_membership(el) for el in order}, _wrappers(document),
+        )
 
 
 def _list_membership(element):
@@ -200,6 +236,8 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
     before_set = set(before.order)
     number = {el: index + 1 for index, el in enumerate(before.order)}
     problems: list = []
+    if _wrappers(document) != before.wrappers:
+        problems.append("内容控件或自定义 XML 容器发生变化")
     country_groups: dict = {}
 
     def group_of(edit):
@@ -318,12 +356,17 @@ def _without_ending(sig: tuple) -> tuple:
     """
 
     tokens = list(sig)
-    index = len(tokens) - 1
-    while index >= 0 and tokens[index][0] != "t":
-        index -= 1
-    while index >= 0 and tokens[index][0] == "t" and tokens[index][1] in _ENDING_CHARS:
-        del tokens[index]
-        index -= 1
+    # Text of a paragraph nested in a text box is not this paragraph's text.
+    depth, own = 0, []
+    for position, token in enumerate(tokens):
+        if token[0] == "s" and token[1] == _W + "p":
+            depth += 1
+        elif token[0] == "e" and token[1] == _W + "p":
+            depth -= 1
+        elif token[0] == "t" and depth == 0:
+            own.append(position)
+    while own and tokens[own[-1]][1] in _ENDING_CHARS:
+        del tokens[own.pop()]
     return tuple(tokens)
 
 

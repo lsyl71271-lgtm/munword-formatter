@@ -17,6 +17,14 @@ HEALTH_URL="$APP_ORIGIN/api/health"
 SERVICE_LABEL="org.pkunmun.formatter.2026.local"
 SERVICE_DOMAIN="gui/$(/usr/bin/id -u)"
 
+# Our engine answers /api/health with its service id; another program that
+# happens to hold port 8000 must not be opened as if it were the formatter.
+engine_ready() {
+  local health
+  health="$(/usr/bin/curl -fsS --max-time 1 "$HEALTH_URL" 2>/dev/null)" || return 1
+  [[ "$health" == *'"service":"pkunmun-2026-formatter"'* && "$health" == *'"version":"'"$APP_VERSION"'"'* ]]
+}
+
 show_error() {
   /usr/bin/osascript -e "display alert \"PKUNMUN 排版系统无法启动\" message \"$1\" as critical buttons {\"好\"} default button \"好\"" >/dev/null 2>&1
 }
@@ -32,7 +40,7 @@ if [[ -x "$STABLE_PYTHON" && -f "$SOURCE_VERSION_FILE" ]] && { [[ ! -f "$INSTALL
   fi
 fi
 
-if /usr/bin/curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+if engine_ready; then
   open_app
   exit 0
 fi
@@ -57,12 +65,12 @@ else
 fi
 
 for _ in {1..60}; do
-  if /usr/bin/curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+  if engine_ready; then
     open_app
     exit 0
   fi
   /bin/sleep 0.15
 done
 
-show_error "本机服务没有在预期时间内启动。诊断日志位于项目的 .local-runtime/backend.log。"
+show_error "本机服务没有在预期时间内启动。诊断日志位于 ~/Library/Application Support/PKUNMUN2026Formatter/backend.log；如端口 8000 被其他程序占用，请先关闭该程序。"
 exit 1

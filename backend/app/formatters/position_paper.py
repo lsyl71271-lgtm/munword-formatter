@@ -28,7 +28,7 @@ class PositionPaperFormatter(BaseFormatter):
     _SECTION_MARKER_RE = re.compile(
         r"^\s*([（(][一二三四五六七八九十百]+[）)])"
     )
-    _VISIBLE_DECIMAL_RE = re.compile(r"^\s*(\d+)[.、)]\s*(?:\t\s*)?(.*)$", re.S)
+    _VISIBLE_DECIMAL_RE = re.compile(r"^\s*(\d+)[.、．)]\s*(?:\t\s*)?(.*)$", re.S)
 
     def _format_document(self, document, model, preserve_country_order, normalize_punctuation):
         self._apply_common_roles(document, model, preserve_country_order)

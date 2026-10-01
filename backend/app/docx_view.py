@@ -23,7 +23,6 @@ import threading
 
 from docx.document import Document as DocumentObject
 from docx.oxml.ns import qn
-from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
@@ -56,14 +55,43 @@ STRUCTURE_TAGS = {
 _INLINE_STRUCTURE = frozenset(qn(tag) for tag in STRUCTURE_TAGS if tag not in ("w:sectPr", "w:tbl"))
 
 
+# Block-level wrappers Word treats as transparent: their paragraphs are part of
+# the running text.  Tables and text boxes are not (shared with the browser
+# engine's ``flowParagraphs``).
+_FLOW_CONTAINERS = frozenset(qn(tag) for tag in ("w:sdt", "w:sdtContent", "w:customXml"))
+
+
+def flow_paragraph_elements(body) -> list:
+    """Paragraphs of the running text in reading order.
+
+    Body paragraphs plus those inside body-level content controls and custom
+    XML wrappers.  ``Document.paragraphs`` skipped a content control, so its
+    clauses were never recognized, formatted or checked.
+    """
+
+    out = []
+    for child in body:
+        if child.tag == qn("w:p"):
+            out.append(child)
+        elif child.tag in _FLOW_CONTAINERS:
+            out.extend(flow_paragraph_elements(child))
+    return out
+
+
+def _flow_size(element) -> tuple:
+    """Cheap change detector: child counts along the wrapper chain only."""
+
+    return (len(element), *(_flow_size(child) for child in element.iterchildren(*_FLOW_CONTAINERS)))
+
+
 def body_paragraphs(document: DocumentObject) -> list[Paragraph]:
-    """``document.paragraphs`` without the O(n) rebuild on every access."""
+    """The running-text paragraphs, cached between edits (see the module docstring)."""
 
     body = document.element.body
-    size = len(body)
+    size = _flow_size(body)
     if getattr(_CACHE, "body", None) is body and _CACHE.size == size:
         return _CACHE.paragraphs
-    paragraphs = document.paragraphs
+    paragraphs = [Paragraph(element, document._body) for element in flow_paragraph_elements(body)]
     _CACHE.body = body
     _CACHE.size = size
     _CACHE.paragraphs = paragraphs
@@ -78,29 +106,30 @@ def invalidate(document: DocumentObject | None = None) -> None:
     _CACHE.paragraphs = []
 
 
-def _table_paragraphs(table: Table) -> list[Paragraph]:
-    paragraphs: list[Paragraph] = []
-    for row in table.rows:
-        for cell in row.cells:
-            paragraphs.extend(cell.paragraphs)
-            for nested in cell.tables:
-                paragraphs.extend(_table_paragraphs(nested))
-    return paragraphs
+def _inside(element, tag: str, stop) -> bool:
+    ancestor = element.getparent()
+    while ancestor is not None and ancestor is not stop:
+        if ancestor.tag == tag:
+            return True
+        ancestor = ancestor.getparent()
+    return False
 
 
 def table_paragraphs(document: DocumentObject) -> list[Paragraph]:
-    """Every paragraph inside a table cell, nested tables included."""
+    """Every paragraph inside a table cell, nested tables and tables in content
+    controls included, each once (``row.cells`` repeated merged cells)."""
 
-    paragraphs: list[Paragraph] = []
-    for table in document.tables:
-        paragraphs.extend(_table_paragraphs(table))
-    return paragraphs
+    body = document.element.body
+    return [Paragraph(p, document._body) for p in body.iter(qn("w:p")) if _inside(p, qn("w:tc"), body)]
 
 
 def all_paragraphs(document: DocumentObject) -> list[Paragraph]:
-    """Body paragraphs plus every paragraph inside a table cell."""
+    """Every paragraph in document order: running text, table cells, text boxes.
 
-    return list(body_paragraphs(document)) + table_paragraphs(document)
+    The same set the browser engine normalizes fonts and style emphasis on.
+    """
+
+    return [Paragraph(p, document._body) for p in document.element.body.iter(qn("w:p"))]
 
 
 _HIDDEN_CONTAINERS = frozenset(qn(tag) for tag in ("w:del", "w:moveFrom", "w:txbxContent"))

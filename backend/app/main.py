@@ -46,7 +46,7 @@ app = FastAPI(
 # loopback Host header makes that attempt fail before it reaches a handler.
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["127.0.0.1", "127.0.0.1:8000", "localhost", "localhost:8000", "[::1]", "[::1]:8000", "testserver"],
+    allowed_hosts=["127.0.0.1", "127.0.0.1:8000", "localhost", "localhost:8000", "[::1]", "[::1]:8000"],
 )
 app.add_middleware(
     CORSMiddleware,

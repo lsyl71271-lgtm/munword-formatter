@@ -8,6 +8,24 @@ from .errors import InvalidDocxError
 
 
 DOCTYPE_RE = re.compile(rb"<!\s*(?:DOCTYPE|ENTITY)", re.I)
+DOCTYPE_TEXT_RE = re.compile(r"<!\s*(?:DOCTYPE|ENTITY)", re.I)
+
+
+def declares_dtd(data: bytes) -> bool:
+    """A DTD or entity declaration in an XML part, in either encoding OPC allows.
+
+    The raw-byte search alone missed a UTF-16 part ("<\x00!\x00D\x00..."),
+    which lxml then parsed.  UTF-32 is not an OPC encoding and is refused.
+    """
+
+    if data[:4] in (b"\x00\x00\xfe\xff", b"\xff\xfe\x00\x00"):
+        raise InvalidDocxError("DOCX 的 XML 部件使用了不支持的编码。")
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff") or data[:2] in (b"<\x00", b"\x00<"):
+        encoding = "utf-16-be" if data[:2] in (b"\xfe\xff", b"\x00<") else "utf-16-le"
+        return bool(DOCTYPE_TEXT_RE.search(data.decode(encoding, errors="replace")))
+    # ASCII markup survives removal of UTF-16 NUL separators even when
+    # leading whitespace prevents the encoding sniff (either byte order).
+    return bool(DOCTYPE_RE.search(data.replace(b"\x00", b"")))
 REQUIRED_PARTS = {"[Content_Types].xml", "word/document.xml"}
 MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 250
@@ -51,7 +69,7 @@ def validate_docx_package(content: bytes) -> None:
                     continue
                 # Scanning the raw bytes avoids the two full-size string copies
                 # that ``.decode().upper()`` needed for a 100 MB part.
-                if DOCTYPE_RE.search(archive.read(info)):
+                if declares_dtd(archive.read(info)):
                     raise InvalidDocxError("不支持 XML 实体或 DTD。")
     except zipfile.BadZipFile as exc:
         raise InvalidDocxError("文件不是有效的 DOCX 压缩包。") from exc

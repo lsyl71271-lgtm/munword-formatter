@@ -17,7 +17,7 @@ export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/mai
 const FORMATTING = new Set(["pPr", "rPr", "tblPr", "trPr", "tcPr", "tblGrid", "sectPr", "tblPrEx"]);
 const IGNORED_ATTRIBUTE = /^(?:rsid\w*|paraId|textId)$/;
 const ENDING_CHARS = new Set([..."，,；;。.:：、 \t"]);
-const LEADING_MARKER = /^(\s*)(\d+)\s*[.、)）]\s*\t?/;
+const LEADING_MARKER = /^(\s*)(\d+)\s*[.、．)）]\s*\t?/;
 const COUNTRY_SPLIT = /[,，、;；/|\n]+/;
 
 export type Token = [string, string] | [string, string, string];
@@ -95,9 +95,25 @@ const isPlain = (sig: Token[]) => sig.every(t => t[0] === "t");
 const WHITESPACE_NODES = new Set(["tab", "br", "cr"].flatMap(tag => [JSON.stringify(["s", `{${W_NS}}${tag}`, "[]"]), JSON.stringify(["e", `{${W_NS}}${tag}`])]));
 const isWhitespace = (sig: Token[]) => sig.every(t => (t[0] === "t" && /\s/.test(t[1])) || WHITESPACE_NODES.has(JSON.stringify(t)));
 
+const WRAPPERS = new Set(["sdt", "sdtContent", "customXml"]);
+const blocksIn = (container: Element): Element[] => Array.from(container.children).flatMap(c =>
+  c.namespaceURI !== W_NS ? [] : c.localName === "p" || c.localName === "tbl" ? [c] : WRAPPERS.has(c.localName) ? blocksIn(c) : []);
+
+/** Paragraphs and tables of the body, through content controls and custom XML
+ * (content_guard.body_blocks): checking only the body's direct children let
+ * any change inside a content control pass unnoticed. */
 export function bodyBlocks(document: Document): Element[] {
   const body = document.getElementsByTagNameNS(W_NS, "body")[0];
-  return body ? Array.from(body.children).filter(c => c.namespaceURI === W_NS && (c.localName === "p" || c.localName === "tbl")) : [];
+  return body ? blocksIn(body) : [];
+}
+
+/** Each block-level wrapper with its own properties (not its content). */
+function wrappers(document: Document): string {
+  const body = document.getElementsByTagNameNS(W_NS, "body")[0];
+  if (!body) return "[]";
+  const found = Array.from(body.getElementsByTagNameNS(W_NS, "*")).filter(el => WRAPPERS.has(el.localName) && el.localName !== "sdtContent");
+  return JSON.stringify(found.map(el => [el.localName, Array.from(el.attributes).map(a => [a.namespaceURI, a.localName, a.value]).sort(),
+    Array.from(el.children).filter(c => !(c.namespaceURI === W_NS && (WRAPPERS.has(c.localName) || c.localName === "p" || c.localName === "tbl"))).map(signature)]));
 }
 
 function listMembership(element: Element): string {
@@ -111,18 +127,24 @@ function listMembership(element: Element): string {
   }));
 }
 
-export type Snapshot = { order: Element[]; signatures: Map<Element, Token[]>; texts: Map<Element, string>; numbering: Map<Element, string> };
+export type Snapshot = { order: Element[]; signatures: Map<Element, Token[]>; texts: Map<Element, string>; numbering: Map<Element, string>; wrappers: string };
 
 export function takeSnapshot(document: Document): Snapshot {
   const order = bodyBlocks(document);
-  return { order, signatures: new Map(order.map(el => [el, signature(el)])), texts: new Map(order.map(el => [el, elementText(el)])), numbering: new Map(order.map(el => [el, listMembership(el)])) };
+  return { order, signatures: new Map(order.map(el => [el, signature(el)])), texts: new Map(order.map(el => [el, elementText(el)])), numbering: new Map(order.map(el => [el, listMembership(el)])), wrappers: wrappers(document) };
 }
 
 export function withoutEnding(sig: Token[]): Token[] {
   const tokens = [...sig];
-  let index = tokens.length - 1;
-  while (index >= 0 && tokens[index][0] !== "t") index--;
-  while (index >= 0 && tokens[index][0] === "t" && ENDING_CHARS.has(tokens[index][1])) { tokens.splice(index, 1); index--; }
+  // Text of a paragraph nested in a text box is not this paragraph's text.
+  const own: number[] = [];
+  let depth = 0;
+  tokens.forEach((token, position) => {
+    if (token[0] === "s" && token[1] === `{${W_NS}}p`) depth++;
+    else if (token[0] === "e" && token[1] === `{${W_NS}}p`) depth--;
+    else if (token[0] === "t" && depth === 0) own.push(position);
+  });
+  while (own.length && ENDING_CHARS.has(tokens[own[own.length - 1]][1])) tokens.splice(own.pop()!, 1);
   return tokens;
 }
 
@@ -195,6 +217,7 @@ export function verifyFormat(before: Snapshot, document: Document, editLog: Map<
   const afterOrder = bodyBlocks(document), afterSet = new Set(afterOrder), beforeSet = new Set(before.order);
   const number = new Map(before.order.map((el, index) => [el, index + 1]));
   const problems: string[] = [];
+  if (wrappers(document) !== before.wrappers) problems.push("内容控件或自定义 XML 容器发生变化");
   const groups = new Map<string, { before: Element[]; after: Element[]; expected: string | null | undefined }>();
   const groupOf = (edit: Edit) => {
     const name = edit.key || "";

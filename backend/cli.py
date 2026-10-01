@@ -34,11 +34,16 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--overwrite", action="store_true", help="Replace previously generated outputs, never inputs")
     args = parser.parse_args(argv)
     source = args.source.resolve()
-    files = sorted(path for path in source.iterdir() if path.is_file() and path.suffix.lower() == ".docx") if source.is_dir() else [source]
+    # Word leaves "~$name.docx" owner files beside documents that are open.
+    files = sorted(
+        path for path in source.iterdir()
+        if path.is_file() and path.suffix.lower() == ".docx" and not path.name.startswith("~$")
+    ) if source.is_dir() else [source]
     if not files or any(not file.is_file() or file.suffix.lower() != ".docx" for file in files):
         parser.error("Provide a DOCX file or a directory containing DOCX files")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     destinations = {file.resolve() for file in files}
+    planned: set[str] = set()  # outputs of this run, case-folded: two inputs never share one
     failures = 0
     for file in files:
         try:
@@ -55,6 +60,9 @@ def run(argv: list[str] | None = None) -> int:
             targets = [report_path] + ([output] if result else [])
             if any(path.resolve() in destinations or (path.exists() and not args.overwrite) for path in targets):
                 raise ValueError("Output exists or would overwrite an input; choose a new output directory")
+            if any(str(path.resolve()).casefold() in planned for path in targets):
+                raise ValueError("Another input in this run already writes this output name")
+            planned.update(str(path.resolve()).casefold() for path in targets)
             if result and any(item.status == "error" for item in result.validations):
                 write_atomic(report_path, json.dumps(report, ensure_ascii=False, indent=2).encode())
                 raise ValueError("Content/format protection failed; no DOCX was written")

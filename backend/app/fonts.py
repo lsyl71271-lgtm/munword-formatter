@@ -13,7 +13,10 @@ from lxml import etree
 ZH_FONT = "SimSun"
 LATIN_FONT = "Times New Roman"
 # Office theme defaults that must not survive into a PKUNMUN document.
-_FORBIDDEN_FONTS = {"Calibri", "Cambria", "Aptos", "Aptos Display"}
+# "Calibri Light" is listed so the theme gets "Times New Roman", not the
+# non-existent "Times New Roman Light".  Shared with the browser engine
+# (docx-browser.ts normalizeFontParts).
+_FORBIDDEN_FONTS = {"Calibri", "Calibri Light", "Cambria", "Aptos", "Aptos Display"}
 
 
 def east_asian_font(language: str) -> str:
@@ -101,21 +104,31 @@ def normalize_font_parts(content: bytes, language: str, *, east_asia: str | None
             elif item.filename == "word/fontTable.xml":
                 data = _normalize_font_table(data, language)
             elif item.filename == "word/theme/theme1.xml":
-                # Longest first: replacing "Aptos" before "Aptos Display" would
-                # leave "Times New Roman Display" behind.
-                for name in sorted(_FORBIDDEN_FONTS, key=len, reverse=True):
-                    data = data.replace(name.encode("utf-8"), LATIN_FONT.encode("utf-8"))
+                data = _normalize_theme_fonts(data)
             elif item.filename == "word/settings.xml":
-                data = data.replace(b"Cambria Math", LATIN_FONT.encode("utf-8"))
+                # The math font stays: Times New Roman has no math table, so
+                # replacing Cambria Math broke the rendering of equations.
                 if language == "zh":
                     data = data.replace(b'w:eastAsia="ja-JP"', b'w:eastAsia="zh-CN"')
             output_zip.writestr(item, data)
     return target.getvalue()
 
 
+def _normalize_theme_fonts(data: bytes) -> bytes:
+    """Change font faces only, never a theme label or Cambria Math substring."""
+    try:
+        root = etree.fromstring(data, etree.XMLParser(resolve_entities=False, no_network=True))
+    except etree.XMLSyntaxError:
+        return data
+    for node in root.iter():
+        if isinstance(node.tag, str) and node.tag.startswith("{http://schemas.openxmlformats.org/drawingml/2006/main}") and node.get("typeface") in _FORBIDDEN_FONTS:
+            node.set("typeface", LATIN_FONT)
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+
 def _normalize_font_table(data: bytes, language: str) -> bytes:
     try:
-        root = etree.fromstring(data)
+        root = etree.fromstring(data, etree.XMLParser(resolve_entities=False, no_network=True))
     except etree.XMLSyntaxError:
         # A damaged font table is not worth failing the run for, but anything
         # else is a real bug and must surface.

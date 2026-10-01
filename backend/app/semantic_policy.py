@@ -65,6 +65,34 @@ ANY_LABEL_PATTERN = re.compile(
 )
 
 
+SUBJECT_LINE_PATTERNS = tuple(_POLICY["subjectLine"]["patterns"])
+_BOUNDARY = _POLICY["headerBoundary"]
+_BODY_MARKER = re.compile(_BOUNDARY["bodyMarker"], re.I)
+_SENTENCE_END = re.compile(_BOUNDARY["sentenceEnd"])
+
+
+def starts_body(text: str, numbered: bool = False) -> bool:
+    """True for the first paragraph of the body (shared policy ``headerBoundary``)."""
+
+    text = text.strip()
+    if not text or ANY_LABEL_PATTERN.match(text):
+        return False
+    if (numbered and _BOUNDARY["nativeNumbering"]) or _BODY_MARKER.match(text) or _SENTENCE_END.search(text):
+        return True
+    return text.endswith(".") and len(text.split()) >= _BOUNDARY["englishSentenceWords"]
+
+
+def header_end(texts: list[str], title_index: int | None, numbered=lambda index: False) -> int:
+    """Index of the first body paragraph after the title: header fields lie before it.
+
+    A body paragraph that starts like "议题：" is the author's text.  Reading it
+    as metadata replaced the real topic, and the label drop deleted its words.
+    """
+
+    start = -1 if title_index is None else title_index
+    return next((index for index in range(start + 1, len(texts)) if starts_body(texts[index], numbered(index))), len(texts))
+
+
 def label_value(text: str) -> tuple[str, str]:
     """Return ``(key, value)`` for a labeled metadata line, or ``("", "")``."""
 

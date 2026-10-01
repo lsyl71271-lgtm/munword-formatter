@@ -68,8 +68,12 @@ VALID_MARGIN_MM = (5, 80)
 
 SECTION_NOISE_TAGS = ("cols", "lnNumType", "pgBorders", "docGrid")
 PARAGRAPH_NOISE_TAGS = ("bidi", "textDirection", "shd", "pBdr", "framePr", "contextualSpacing", "snapToGrid")
+# Formatting never changes what a reader sees or what it means: hidden text
+# (w:vanish, webHidden, specVanish) stays hidden, and strikethrough (a deletion
+# shown in an amendment) stays struck.  Removing them printed text the author
+# had hidden ("内部备注：勿公开") and erased the deletion marks.
 RUN_NOISE_TAGS = (
-    "vanish", "webHidden", "strike", "dstrike", "outline", "shadow",
+    "outline", "shadow",
     "emboss", "imprint", "caps", "smallCaps", "position",
     "spacing", "w", "kern", "color", "highlight", "shd", "bdr",
     "effect", "glow", "reflection", "em", "fitText", "eastAsianLayout",
@@ -81,7 +85,7 @@ TYPOGRAPHIC_NOISE_TAGS = ("em", "fitText", "eastAsianLayout", "w", "position")
 # markers), capitals and text colour (blue links) can be meaningful and are
 # only reset where the whole body is normalized.
 SAFE_RUN_NOISE_TAGS = (
-    "vanish", "webHidden", "specVanish", "strike", "dstrike", "outline", "shadow",
+    "outline", "shadow",
     "emboss", "imprint", "highlight", "shd", "bdr", "effect", "glow", "reflection",
     "spacing", "kern", "color", "rStyle", "caps", "smallCaps",
 )
@@ -195,6 +199,7 @@ class BaseFormatter(HandbookPassMixin):
         self._source_paragraphs = list(body_paragraphs(document))
         before = ContentSnapshot.take(document)
         strict_before = content_guard.Snapshot.take(document)
+        self._kept_hidden = _strip_uniform_damage(document)
         self._configure_page(document, model.language)
         self._configure_styles(document, model.language)
         self._format_document(
@@ -278,6 +283,10 @@ class BaseFormatter(HandbookPassMixin):
             section.left_margin = Mm(layout.margin_left_mm)
             section.right_margin = Mm(layout.margin_right_mm)
             section.gutter = Mm(0)
+            # Every document type, as in the browser engine: a source document
+            # grid ("lines", 312) snapped the lines of amendments and position
+            # papers, which only working papers and resolutions used to clear.
+            _remove_children(section._sectPr, SECTION_NOISE_TAGS)
             if layout.header_distance_mm is not None:
                 section.header_distance = Mm(layout.header_distance_mm)
             if layout.footer_distance_mm is not None:
@@ -314,11 +323,16 @@ class BaseFormatter(HandbookPassMixin):
             style.font.name = LATIN_FONT
             style.font.size = body_size
             style.font.color.rgb = None
-            self._house_fonts(style.element.get_or_add_rPr().get_or_add_rFonts(), language)
+            # The complex-script slot too, as the browser engine writes it:
+            # paragraph marks take their font from these styles.
+            self._house_fonts(style.element.get_or_add_rPr().get_or_add_rFonts(), language, complex_script=True)
         normal = document.styles["Normal"]
         normal.font.bold = False
         normal.font.italic = False
         normal.font.underline = False
+        normal_rpr = normal.element.get_or_add_rPr()
+        for tag in ("bCs", "iCs"):
+            rpr_child(normal_rpr, tag).set(qn("w:val"), "0")
         # Paragraph defaults: no space around paragraphs, single lines.
         # Office's own defaults (8 pt after, 1.08 lines) would reach every
         # paragraph, including the blank lines the handbook pass inserts.
@@ -472,7 +486,14 @@ class BaseFormatter(HandbookPassMixin):
         # Step 03 is surgical: only an actually changed field is rewritten.
         # With no overrides, text, paragraph boundaries and country order are
         # retained exactly and only role styling is applied.
+        # Only the header lines the parser recognized: a body paragraph that
+        # starts like "议题：" is the author's text, never rewritten as a field.
+        recognized = set(model.header_paragraph_indices.values()) | {
+            indices[0] for indices in model.metadata_paragraph_indices.values() if indices
+        }
         for index, paragraph in enumerate(paragraphs):
+            if index not in recognized:
+                continue
             text = visible_text(paragraph).strip()
             key = next((key for key, pattern in LABEL_PATTERNS.items() if pattern.match(text)), None)
             if key is None:
@@ -779,6 +800,8 @@ class BaseFormatter(HandbookPassMixin):
         items.insert(1, ValidationItem("structural_edits", "结构与人工修改记录", "warning" if edits else "pass", "；".join(edits) or "未改写正文文字。"))
         for warning in self._protected_warnings:
             items.append(ValidationItem("content-protected", "为保护原有内容，部分段落未自动改写", "warning", warning))
+        for note in getattr(self, "_kept_hidden", []):
+            items.append(ValidationItem("hidden-text", "隐藏文字与删除线按原稿保留", "warning", note))
         if model.sponsors:
             ok = self._metadata_value_emphasis_ok(document, "sponsors")
             items.append(ValidationItem("sponsors", "起草国顺序保留、值为粗斜体", "pass" if ok else "error"))
@@ -877,6 +900,48 @@ def _first_wrong_size(paragraph: Paragraph, expected: float):
         if size is None or abs(size - expected) > SIZE_TOLERANCE_PT:
             return size
     return False
+
+
+# Hiding or striking through every character cannot be what the author meant;
+# hiding or striking some of them can (a private note, a deletion shown in an
+# amendment).  Only a property that covers the whole text is damage.
+_UNIFORM_DAMAGE = ("vanish", "webHidden", "specVanish", "strike", "dstrike")
+
+
+def _on(rpr, tag: str) -> bool:
+    node = rpr.find(qn(f"w:{tag}")) if rpr is not None else None
+    return node is not None and node.get(qn("w:val")) not in ("0", "false", "off")
+
+
+def _strip_uniform_damage(document: DocumentObject) -> list[str]:
+    """Remove hidden / struck formatting only when it covers every character.
+
+    Returns a note for each paragraph that keeps hidden or struck text, so the
+    user is told rather than it being shown or kept silently.
+    """
+
+    every = [run for paragraph in all_paragraphs(document) for run in visible_runs(paragraph)]
+    runs = [run for run in every if run.text.strip()]
+    if not runs:
+        return []
+    for tag in _UNIFORM_DAMAGE:
+        if all(_on(run._r.rPr, tag) for run in runs):
+            for run in every:  # spaces too
+                if run._r.rPr is not None:
+                    _remove_children(run._r.rPr, (tag,))
+            # A damaged default style must not reapply the removed property
+            # when the exported document is opened by an Office reader.
+            for node in list(document.styles.element.iter(qn(f"w:{tag}"))):
+                node.getparent().remove(node)
+    notes = []
+    for number, paragraph in enumerate(all_paragraphs(document), 1):
+        kept = [run for run in visible_runs(paragraph) if run.text.strip()]
+        hidden = any(_on(run._r.rPr, tag) for run in kept for tag in ("vanish", "webHidden", "specVanish"))
+        struck = any(_on(run._r.rPr, "strike") or _on(run._r.rPr, "dstrike") for run in kept)
+        if hidden or struck:
+            what = "隐藏文字" if hidden and not struck else "删除线文字" if struck and not hidden else "隐藏文字和删除线文字"
+            notes.append(f"第 {number} 段含{what}，已保留原稿的显示、打印或删除标记，请确认是否需要。")
+    return notes
 
 
 def _remove_typographic_noise(run) -> None:

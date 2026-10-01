@@ -378,7 +378,7 @@ def _rewrite_part(content: bytes, name: str, change) -> bytes:
 
 class FailureClassTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app)
+        self.client = TestClient(app, base_url="http://127.0.0.1:8000")
 
     def _post(self, content: bytes, **fields):
         return self.client.post(

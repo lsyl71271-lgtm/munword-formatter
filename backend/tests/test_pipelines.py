@@ -159,8 +159,13 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(repaired.paragraphs[-1].paragraph_format.page_break_before)
         with zipfile.ZipFile(BytesIO(result.content)) as archive:
             xml = archive.read("word/document.xml").decode("utf-8")
-        for tag in ("w:docGrid", "w:vanish", "w:strike", "w:shd"):
+        for tag in ("w:docGrid", "w:shd"):
             self.assertNotIn(f"<{tag}", xml)
+        # Hidden or struck text that covers only part of the document is the
+        # author's (a private note, an amendment's deletion): it is kept as it
+        # was and reported, never shown.  Whole-document hiding is damage.
+        self.assertIn("<w:vanish", xml)
+        self.assertTrue(any(item.code == "hidden-text" for item in result.validations))
 
     def test_docx_package_validation_rejects_plain_bytes(self):
         with self.assertRaisesRegex(ValueError, "有效的 DOCX"):

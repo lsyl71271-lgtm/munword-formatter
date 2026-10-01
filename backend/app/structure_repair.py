@@ -11,7 +11,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 from . import content_guard
-from .docx_view import active_num_id, body_paragraphs, invalidate as invalidate_paragraph_cache, visible_text
+from .docx_view import active_num_id, all_paragraphs, body_paragraphs, invalidate as invalidate_paragraph_cache, visible_text
+from .fonts import rpr_child
 from .ooxml_edit import edit_visible_text, has_complex_content
 from .parser import MANUAL_NUMBER_RE
 from .semantic_policy import label_value
@@ -99,7 +100,8 @@ def repair_structure_with_report(content: bytes, document_type: str) -> Structur
     return StructureRepairResult(stream.getvalue(), tuple(actions))
 
 
-_STYLE_EMPHASIS_TAGS = ("b", "i", "u", "vertAlign")
+_SEMANTIC_STYLE_TAGS = ("vanish", "webHidden", "specVanish", "strike", "dstrike")
+_STYLE_EMPHASIS_TAGS = ("b", "i", "u", "vertAlign", *_SEMANTIC_STYLE_TAGS)
 
 
 def _materialize_style_emphasis(document) -> bool:
@@ -120,7 +122,7 @@ def _materialize_style_emphasis(document) -> bool:
 
     def inherited(style_id, tag):
         seen = set()
-        while style_id and style_id in styles and style_id not in seen and style_id not in defaults:
+        while style_id and style_id in styles and style_id not in seen and (tag in _SEMANTIC_STYLE_TAGS or style_id not in defaults):
             seen.add(style_id)
             found = styles[style_id].find(f"{qn('w:rPr')}/{qn(f'w:{tag}')}")
             if found is not None:
@@ -130,7 +132,9 @@ def _materialize_style_emphasis(document) -> bool:
         return None
 
     changed = False
-    for paragraph in body_paragraphs(document):
+    # Every paragraph: fonts are normalized in table cells and text boxes too,
+    # which drops their run styles (the browser engine does the same).
+    for paragraph in all_paragraphs(document):
         ppr = paragraph._p.pPr
         style = ppr.find(qn("w:pStyle")) if ppr is not None else None
         paragraph_style = style.get(qn("w:val")) if style is not None else None
@@ -144,13 +148,17 @@ def _materialize_style_emphasis(document) -> bool:
                 found = inherited(character_style, tag)
                 if found is None and tag != "vertAlign":
                     found = inherited(paragraph_style, tag)
+                if found is None and tag in _SEMANTIC_STYLE_TAGS:
+                    found = inherited("Normal", tag)
+                    if found is None:
+                        found = document.styles.element.find(f"{qn('w:docDefaults')}/{qn('w:rPrDefault')}/{qn('w:rPr')}/{qn(f'w:{tag}')}")
                 if found is None:
                     continue
                 if rpr is None:
                     rpr = run.get_or_add_rPr()
                 # The schema fixes the order of rPr children; the generated
                 # inserter puts the copy in its legal position.
-                target = getattr(rpr, f"get_or_add_{tag}")()
+                target = rpr_child(rpr, tag)
                 for name, value in found.attrib.items():
                     target.set(name, value)
                 changed = True
@@ -201,7 +209,7 @@ def _materialize_style_list_format(document) -> bool:
 
 
 def _repair_position_header(document) -> list[RepairAction]:
-    paragraphs = document.paragraphs
+    paragraphs = body_paragraphs(document)
     nonempty = [index for index, paragraph in enumerate(paragraphs) if visible_text(paragraph).strip()]
     if not nonempty:
         return []
@@ -239,7 +247,7 @@ def _repair_position_header(document) -> list[RepairAction]:
 
 
 def _repair_first_position_section(document) -> list[RepairAction]:
-    paragraphs = document.paragraphs
+    paragraphs = body_paragraphs(document)
     texts = [visible_text(paragraph).strip() for paragraph in paragraphs]
     markers = [(index, match.group(1)) for index, text in enumerate(texts) if (match := POSITION_SECTION_RE.match(text))]
     if not markers:
@@ -283,7 +291,7 @@ def _split_embedded_resolution_markers(document) -> list[RepairAction]:
     actions: list[RepairAction] = []
     # Work on a snapshot; newly inserted paragraphs are already split at the
     # earliest marker, and the loop below handles any later marker recursively.
-    for original_index, paragraph in enumerate(list(document.paragraphs)):
+    for original_index, paragraph in enumerate(list(body_paragraphs(document))):
         current = paragraph
         position = 0
         while True:
@@ -345,7 +353,7 @@ def _restore_dropped_first_list_item(document) -> list[RepairAction]:
     as a damaged first item. Adding it shifts original numbers and references.
     """
 
-    paragraphs = document.paragraphs
+    paragraphs = body_paragraphs(document)
     nonempty = [index for index, paragraph in enumerate(paragraphs) if visible_text(paragraph).strip()]
     actions: list[RepairAction] = []
     for position, index in enumerate(nonempty[1:-1], start=1):
