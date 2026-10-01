@@ -1,0 +1,929 @@
+{
+  "fields": [
+    "language",
+    "committee",
+    "topic",
+    "country",
+    "delegate",
+    "sponsors",
+    "signatories"
+  ],
+  "cases": {
+    "01_中文立场文件.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "日本国",
+        "delegate": "示例代表",
+        "sponsors": [],
+        "signatories": []
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "日本国",
+        "delegate": "示例代表",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "日本国",
+        "delegate": "示例代表",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "日本国",
+        "delegate": "示例代表",
+        "sponsors": [],
+        "signatories": []
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "日本国",
+        "delegate": "示例代表",
+        "sponsors": [],
+        "signatories": []
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "日本国",
+        "delegate": "示例代表",
+        "sponsors": [],
+        "signatories": []
+      }
+    },
+    "02_English_Position_Paper.docx": {
+      "position-paper": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "Japan",
+        "delegate": "Sample Delegate",
+        "sponsors": [],
+        "signatories": []
+      },
+      "working-paper": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "Japan",
+        "delegate": "Sample Delegate",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-directive": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "Japan",
+        "delegate": "Sample Delegate",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-resolution": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "Japan",
+        "delegate": "Sample Delegate",
+        "sponsors": [],
+        "signatories": []
+      },
+      "friendly-amendment": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "Japan",
+        "delegate": "Sample Delegate",
+        "sponsors": [],
+        "signatories": []
+      },
+      "unfriendly-amendment": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "Japan",
+        "delegate": "Sample Delegate",
+        "sponsors": [],
+        "signatories": []
+      }
+    },
+    "03_中文工作文件.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": []
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": []
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": []
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": []
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": []
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "联合国环境大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": []
+      }
+    },
+    "04_English_Working_Paper.docx": {
+      "position-paper": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": []
+      },
+      "working-paper": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": []
+      },
+      "draft-directive": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": []
+      },
+      "draft-resolution": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": []
+      },
+      "friendly-amendment": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": []
+      },
+      "unfriendly-amendment": {
+        "language": "en",
+        "committee": "United Nations Environment Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": []
+      }
+    },
+    "05_中文指令草案.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "安全理事会",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "安全理事会",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "安全理事会",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "安全理事会",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "安全理事会",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "安全理事会",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      }
+    },
+    "06_English_Draft_Directive.docx": {
+      "position-paper": {
+        "language": "en",
+        "committee": "Security Council",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "France",
+          "Brazil"
+        ],
+        "signatories": [
+          "Canada",
+          "Australia"
+        ]
+      },
+      "working-paper": {
+        "language": "en",
+        "committee": "Security Council",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "France",
+          "Brazil"
+        ],
+        "signatories": [
+          "Canada",
+          "Australia"
+        ]
+      },
+      "draft-directive": {
+        "language": "en",
+        "committee": "Security Council",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "France",
+          "Brazil"
+        ],
+        "signatories": [
+          "Canada",
+          "Australia"
+        ]
+      },
+      "draft-resolution": {
+        "language": "en",
+        "committee": "Security Council",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "France",
+          "Brazil"
+        ],
+        "signatories": [
+          "Canada",
+          "Australia"
+        ]
+      },
+      "friendly-amendment": {
+        "language": "en",
+        "committee": "Security Council",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "France",
+          "Brazil"
+        ],
+        "signatories": [
+          "Canada",
+          "Australia"
+        ]
+      },
+      "unfriendly-amendment": {
+        "language": "en",
+        "committee": "Security Council",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "France",
+          "Brazil"
+        ],
+        "signatories": [
+          "Canada",
+          "Australia"
+        ]
+      }
+    },
+    "07_中文决议草案.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "中国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      }
+    },
+    "08_English_Draft_Resolution.docx": {
+      "position-paper": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": [
+          "Australia",
+          "France"
+        ]
+      },
+      "working-paper": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": [
+          "Australia",
+          "France"
+        ]
+      },
+      "draft-directive": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": [
+          "Australia",
+          "France"
+        ]
+      },
+      "draft-resolution": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": [
+          "Australia",
+          "France"
+        ]
+      },
+      "friendly-amendment": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": [
+          "Australia",
+          "France"
+        ]
+      },
+      "unfriendly-amendment": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Brazil",
+          "Canada"
+        ],
+        "signatories": [
+          "Australia",
+          "France"
+        ]
+      }
+    },
+    "09_中文友好修正案.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大"
+        ]
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大"
+        ]
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大"
+        ]
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大"
+        ]
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大"
+        ]
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国"
+        ],
+        "signatories": [
+          "加拿大"
+        ]
+      }
+    },
+    "10_中文非友好修正案.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "法国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "法国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "法国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "法国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "法国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "联合国大会",
+        "topic": "塑料污染治理",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "法国"
+        ],
+        "signatories": [
+          "加拿大",
+          "澳大利亚"
+        ]
+      }
+    },
+    "11_English_Amendment.docx": {
+      "position-paper": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan"
+        ],
+        "signatories": [
+          "Canada"
+        ]
+      },
+      "working-paper": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan"
+        ],
+        "signatories": [
+          "Canada"
+        ]
+      },
+      "draft-directive": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan"
+        ],
+        "signatories": [
+          "Canada"
+        ]
+      },
+      "draft-resolution": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan"
+        ],
+        "signatories": [
+          "Canada"
+        ]
+      },
+      "friendly-amendment": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan"
+        ],
+        "signatories": [
+          "Canada"
+        ]
+      },
+      "unfriendly-amendment": {
+        "language": "en",
+        "committee": "General Assembly",
+        "topic": "Plastic Pollution",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan"
+        ],
+        "signatories": [
+          "Canada"
+        ]
+      }
+    }
+  }
+}

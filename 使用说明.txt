@@ -1,0 +1,26 @@
+PKUNMUN 2026 文件自动排版系统（macOS 分享版）
+
+首次使用
+1. 解压整个压缩包，不要只拖出其中一个图标。
+2. 确认电脑为 macOS 12 或更高版本，并已安装 Python 3。
+3. 双击“首次安装.command”，按提示完成安装。第一次安装需要联网下载运行组件。
+4. 安装完成后，双击“PKUNMUN 2026 文件排版系统.app”即可打开。
+
+日常使用
+- 选择文件类型，上传 DOCX，确认第 03 步识别结果，再生成并下载。
+- 文件只在使用者自己的电脑上处理，不会上传到云端。
+- 请保留整个解压后的文件夹；更新程序时重新运行“首次安装.command”。
+- 从新版分享包开始，双击程序会自动同步包内更新；如自动更新失败，再运行“首次安装.command”。
+
+如果 macOS 第一次阻止打开
+- 在 Finder 中右键文件，选择“打开”；或前往“系统设置 → 隐私与安全性”确认打开。
+- 不要在不信任来源的电脑上运行本程序。
+
+卸载
+- 删除“~/Library/Application Support/PKUNMUN2026Formatter”中的程序数据。
+- 删除“~/Library/LaunchAgents/org.pkunmun.formatter.2026.local.plist”。
+
+适用范围
+- 本压缩包内的“首次安装.command”用于 macOS；Windows 请双击“Windows 首次安装.bat”，说明见“Windows 使用说明.txt”。
+- 不想安装也可直接使用在线版本（纯浏览器处理，文件不上传）：
+  https://munword.lsyl71271.chatgpt.site/

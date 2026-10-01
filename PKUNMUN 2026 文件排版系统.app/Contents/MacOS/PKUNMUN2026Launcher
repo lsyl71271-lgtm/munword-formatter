@@ -1,0 +1,68 @@
+#!/bin/bash
+set -u
+
+APP_MACOS_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$APP_MACOS_DIR/../../.." && pwd)"
+INSTALL_ROOT="$HOME/Library/Application Support/PKUNMUN2026Formatter"
+RUNTIME_DIR="$INSTALL_ROOT"
+STABLE_PYTHON="$INSTALL_ROOT/venv/bin/python"
+LEGACY_PYTHON="$PROJECT_DIR/.venv/bin/python"
+SOURCE_VERSION_FILE="$PROJECT_DIR/VERSION"
+INSTALLED_VERSION_FILE="$INSTALL_ROOT/.bundle-version"
+LOG_FILE="$RUNTIME_DIR/backend.log"
+APP_ORIGIN="http://127.0.0.1:8000"
+APP_VERSION="$(/bin/cat "$SOURCE_VERSION_FILE" 2>/dev/null || /usr/bin/printf 'current')"
+APP_URL="$APP_ORIGIN/?v=$APP_VERSION"
+HEALTH_URL="$APP_ORIGIN/api/health"
+SERVICE_LABEL="org.pkunmun.formatter.2026.local"
+SERVICE_DOMAIN="gui/$(/usr/bin/id -u)"
+
+show_error() {
+  /usr/bin/osascript -e "display alert \"PKUNMUN 排版系统无法启动\" message \"$1\" as critical buttons {\"好\"} default button \"好\"" >/dev/null 2>&1
+}
+
+open_app() {
+  /usr/bin/open "$APP_URL"
+}
+
+if [[ -x "$STABLE_PYTHON" && -f "$SOURCE_VERSION_FILE" ]] && { [[ ! -f "$INSTALLED_VERSION_FILE" ]] || ! /usr/bin/cmp -s "$SOURCE_VERSION_FILE" "$INSTALLED_VERSION_FILE"; }; then
+  if ! "$PROJECT_DIR/scripts/install-service.sh"; then
+    show_error "自动更新失败。请双击同一文件夹中的“首次安装.command”后重试。"
+    exit 1
+  fi
+fi
+
+if /usr/bin/curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+  open_app
+  exit 0
+fi
+
+if [[ -x "$STABLE_PYTHON" ]]; then
+  PYTHON_BIN="$STABLE_PYTHON"
+  SERVER_SCRIPT="$INSTALL_ROOT/backend/run.py"
+elif [[ -x "$LEGACY_PYTHON" ]]; then
+  PYTHON_BIN="$LEGACY_PYTHON"
+  SERVER_SCRIPT="$PROJECT_DIR/backend/run.py"
+else
+  show_error "缺少本机运行环境。请打开项目目录并先运行 scripts/setup.sh。"
+  exit 1
+fi
+
+/bin/mkdir -p "$RUNTIME_DIR"
+if /bin/launchctl print "$SERVICE_DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1; then
+  /bin/launchctl kickstart -k "$SERVICE_DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
+else
+  /bin/launchctl remove "$SERVICE_LABEL" >/dev/null 2>&1 || true
+  /bin/launchctl submit -l "$SERVICE_LABEL" -o "$LOG_FILE" -e "$LOG_FILE" -- "$PYTHON_BIN" "$SERVER_SCRIPT"
+fi
+
+for _ in {1..60}; do
+  if /usr/bin/curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+    open_app
+    exit 0
+  fi
+  /bin/sleep 0.15
+done
+
+show_error "本机服务没有在预期时间内启动。诊断日志位于项目的 .local-runtime/backend.log。"
+exit 1

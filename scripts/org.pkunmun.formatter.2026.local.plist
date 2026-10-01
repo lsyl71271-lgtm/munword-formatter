@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>org.pkunmun.formatter.2026.local</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON_BIN__</string>
+    <string>__INSTALL_ROOT__/backend/run.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__INSTALL_ROOT__/backend</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__INSTALL_ROOT__/backend.log</string>
+  <key>StandardErrorPath</key>
+  <string>__INSTALL_ROOT__/backend.log</string>
+</dict>
+</plist>

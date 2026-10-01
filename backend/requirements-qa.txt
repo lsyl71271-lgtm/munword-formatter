@@ -1,0 +1,2 @@
+# Optional contact-sheet rendering only; not needed by the DOCX engine.
+Pillow==12.3.0

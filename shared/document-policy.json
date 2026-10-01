@@ -1,0 +1,873 @@
+{
+ "schemaVersion": 3,
+ "standard": "PKUNMUN2026 学术标准手册（94 页）示例：页15–18、31–35、37–38、41–47、52–53",
+ "handbook": {
+  "page": {
+   "widthTwips": 11906,
+   "heightTwips": 16838,
+   "topTwips": 1440,
+   "bottomTwips": 1440,
+   "leftTwips": 1800,
+   "rightTwips": 1800,
+   "headerTwips": 720,
+   "footerTwips": 720,
+   "note": "手册正文区版心参数（A4，上下 25.4 mm、左右 31.75 mm）；独立文件沿用该配置，手册未对独立文件页边距作明文规定。"
+  },
+  "bodySizePt": 12,
+  "noteSizePt": 9,
+  "fonts": {
+   "latin": "Times New Roman",
+   "zh": "SimSun",
+   "en": "Times New Roman",
+   "amendmentZh": "Arial Unicode MS"
+  },
+  "lineSpacing": {
+   "rule": "纯文字段落使用 exact（精确值）= 手册实测基线间距；段落含图片、文本框、嵌入对象或公式时改用 atLeast（最小值），避免内容被行高截断。",
+   "pitchPt": {
+    "zh": 15.5,
+    "en": 13.8,
+    "preambleZh": 18.0,
+    "amendmentZh": 21.0,
+    "amendmentZhSignature": 17.4
+   },
+   "evidence": {
+    "zh": "页41–42 正文行基线间距 15.5（15.4–15.7）",
+    "en": "页18、44 正文行基线间距 13.8（13.7–14.0）",
+    "preambleZh": "页42 序言性条款行基线间距 18.0",
+    "amendmentZh": "页52 修正案正文行基线间距 21.0（20.7–21.1）",
+    "amendmentZhSignature": "页52 国家名单行与其下空行合计 34.8，即每行 17.4"
+   },
+   "decision": "单倍行距（auto 240）在最终页渲染中偏离手册（中文正文实测 21.3 pt，手册 15.5 pt），因此纯文字段不用单倍，改用上表实测值的 exact；只有含图片/文本框/嵌入对象/公式的段落用同值 atLeast。",
+   "renderCheck": {
+    "method": "两个引擎输出 → LibreOffice 无界面转 PDF（宋体映射到 Songti SC）→ PyMuPDF 读取逐行基线；见 docs/v1.6.3-merge-report.md",
+    "result": "两个引擎一致：中文正文 15.5、英文 13.8、序言 18.0、中文修正案 21.0（中位数，与手册相同）；一行+一空行 31.0/27.6（手册 31.3/27.5），国家名单行+空行 34.8（手册 34.8），序言末行→第一条 31.5（手册 31.5）。"
+   }
+  },
+  "signatureLines": {
+   "separator": {
+    "zh": "、",
+    "en": ", "
+   },
+   "note": "起草国、附议国名单只在完整国名之间断行，每行后留一空行供签字（页41“要留出空白签字处”、页52）；国名本身绝不截断。"
+  },
+  "countryOrder": {
+   "zh": "pinyin",
+   "en": "alphabetical",
+   "note": "页41、53 注明按拼音 / 字母顺序排列；用户选择“保留原顺序”时不排序。"
+  },
+  "outputTitles": {
+   "position-paper": {
+    "zh": "立场文件",
+    "en": "Position Paper"
+   },
+   "working-paper": {
+    "zh": "工作文件",
+    "en": "WORKING PAPER"
+   },
+   "draft-directive": {
+    "zh": "指令草案",
+    "en": "Draft Directive"
+   },
+   "draft-resolution": {
+    "zh": "决议草案",
+    "en": "DRAFT RESOLUTION"
+   },
+   "friendly-amendment": {
+    "zh": "修正案",
+    "en": "Amendment"
+   },
+   "unfriendly-amendment": {
+    "zh": "修正案",
+    "en": "Amendment"
+   }
+  },
+  "numbering": {
+   "policy": "保留来源编号数值：原生编号保持 numId、起始值、重启与 lvlOverride；手打编号保留原文，不转换、不填补跳号，只统一其字号、字体与缩进，不连续时提示。"
+  },
+  "types": {
+   "position-paper": {
+    "zh": {
+     "pages": "15–16",
+     "headerFields": "label-bold",
+     "committeeTopicLabels": "keep",
+     "countryLabelItalic": false,
+     "subject": null,
+     "proseFirstLinePt": 24.0,
+     "listIndentsPt": [
+      [
+       45.0,
+       21.0
+      ],
+      [
+       66.0,
+       21.0
+      ],
+      [
+       87.0,
+       21.0
+      ]
+     ],
+     "topLevelVerbItalic": false,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": false,
+     "signatureLines": false,
+     "blankAfter": [
+      "header"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": false,
+     "clausePunctuation": false
+    },
+    "en": {
+     "pages": "17–18",
+     "headerFields": "label-bold",
+     "committeeTopicLabels": "keep",
+     "countryLabelItalic": false,
+     "subject": null,
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       21.0,
+       21.0
+      ],
+      [
+       42.0,
+       21.0
+      ],
+      [
+       63.0,
+       21.0
+      ]
+     ],
+     "topLevelVerbItalic": false,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": false,
+     "signatureLines": false,
+     "blankAfter": [
+      "header"
+     ],
+     "blankBetweenProse": true,
+     "blankBeforeOperative": false,
+     "clausePunctuation": false
+    }
+   },
+   "working-paper": {
+    "zh": {
+     "pages": "31–32",
+     "headerFields": "bold",
+     "committeeTopicLabels": "drop",
+     "countryLabelItalic": true,
+     "subject": null,
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       21.0,
+       21.0
+      ],
+      [
+       42.0,
+       21.0
+      ],
+      [
+       63.0,
+       21.0
+      ],
+      [
+       84.0,
+       21.0
+      ]
+     ],
+     "topLevelVerbItalic": false,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": true,
+     "signatureLines": false,
+     "blankAfter": [],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": false,
+     "clausePunctuation": false
+    },
+    "en": {
+     "pages": "32–35",
+     "headerFields": "bold",
+     "committeeTopicLabels": "keep",
+     "countryLabelItalic": false,
+     "subject": null,
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       21.0,
+       21.0
+      ],
+      [
+       43.0,
+       18.0
+      ],
+      [
+       64.0,
+       18.0
+      ],
+      [
+       85.0,
+       18.0
+      ]
+     ],
+     "topLevelVerbItalic": false,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": true,
+     "signatureLines": false,
+     "blankAfter": [
+      "header"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": false,
+     "clausePunctuation": false
+    }
+   },
+   "draft-directive": {
+    "zh": {
+     "pages": "37–38",
+     "headerFields": "bold",
+     "committeeTopicLabels": "drop",
+     "countryLabelItalic": false,
+     "subject": {
+      "bold": false,
+      "italic": true
+     },
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       48.0,
+       36.0
+      ],
+      [
+       67.5,
+       36.0
+      ],
+      [
+       87.0,
+       36.0
+      ]
+     ],
+     "topLevelVerbItalic": true,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": true,
+     "signatureLines": true,
+     "blankAfter": [
+      "signatories",
+      "sponsors",
+      "subject",
+      "title_block"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": false,
+     "clausePunctuation": true
+    },
+    "en": {
+     "pages": "37–38",
+     "headerFields": "bold",
+     "committeeTopicLabels": "drop",
+     "countryLabelItalic": false,
+     "subject": {
+      "bold": false,
+      "italic": true
+     },
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       21.0,
+       21.0
+      ],
+      [
+       49.5,
+       28.5
+      ],
+      [
+       70.5,
+       21.0
+      ],
+      [
+       91.5,
+       21.0
+      ]
+     ],
+     "topLevelVerbItalic": true,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": true,
+     "signatureLines": true,
+     "blankAfter": [
+      "signatories",
+      "sponsors",
+      "subject",
+      "title_block"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": false,
+     "clausePunctuation": true
+    }
+   },
+   "draft-resolution": {
+    "zh": {
+     "pages": "41–43",
+     "headerFields": "bold",
+     "committeeTopicLabels": "drop",
+     "countryLabelItalic": false,
+     "subject": {
+      "bold": true,
+      "italic": true
+     },
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       48.0,
+       36.0
+      ],
+      [
+       67.5,
+       36.0
+      ],
+      [
+       87.0,
+       36.0
+      ]
+     ],
+     "topLevelVerbItalic": true,
+     "preambleVerbUnderline": true,
+     "clearClauseEmphasis": true,
+     "signatureLines": true,
+     "blankAfter": [
+      "signatories",
+      "sponsors",
+      "subject",
+      "title_block"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": true,
+     "clausePunctuation": true
+    },
+    "en": {
+     "pages": "43–47",
+     "headerFields": "bold",
+     "committeeTopicLabels": "drop",
+     "countryLabelItalic": false,
+     "subject": {
+      "bold": false,
+      "italic": true
+     },
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       18.0,
+       18.0
+      ],
+      [
+       36.0,
+       18.0
+      ],
+      [
+       54.0,
+       18.0
+      ],
+      [
+       72.0,
+       18.0
+      ]
+     ],
+     "topLevelVerbItalic": true,
+     "preambleVerbUnderline": true,
+     "clearClauseEmphasis": true,
+     "signatureLines": true,
+     "blankAfter": [
+      "committee",
+      "signatories",
+      "sponsors",
+      "subject",
+      "title_block"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": true,
+     "clausePunctuation": true
+    }
+   },
+   "amendment": {
+    "zh": {
+     "pages": "52",
+     "headerFields": "bold",
+     "committeeTopicLabels": "drop",
+     "countryLabelItalic": false,
+     "subject": null,
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       18.0,
+       18.0
+      ],
+      [
+       36.0,
+       18.0
+      ],
+      [
+       54.0,
+       18.0
+      ],
+      [
+       72.0,
+       18.0
+      ]
+     ],
+     "topLevelVerbItalic": true,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": true,
+     "signatureLines": true,
+     "blankAfter": [
+      "signatories",
+      "sponsors"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": false,
+     "clausePunctuation": false
+    },
+    "en": {
+     "pages": "53",
+     "headerFields": "bold",
+     "committeeTopicLabels": "drop",
+     "countryLabelItalic": false,
+     "subject": null,
+     "proseFirstLinePt": 0.0,
+     "listIndentsPt": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       42.0,
+       21.0
+      ],
+      [
+       63.0,
+       21.0
+      ],
+      [
+       84.0,
+       21.0
+      ]
+     ],
+     "topLevelVerbItalic": true,
+     "preambleVerbUnderline": false,
+     "clearClauseEmphasis": true,
+     "signatureLines": true,
+     "blankAfter": [
+      "committee",
+      "signatories",
+      "sponsors",
+      "title",
+      "topic"
+     ],
+     "blankBetweenProse": false,
+     "blankBeforeOperative": false,
+     "clausePunctuation": false
+    }
+   }
+  },
+  "amendmentVerbs": {
+   "zh": [
+    "加入",
+    "增加",
+    "添加",
+    "增补",
+    "插入",
+    "删除",
+    "删去",
+    "修改",
+    "修订",
+    "替换",
+    "改为",
+    "调整",
+    "合并",
+    "移动"
+   ],
+   "en": [
+    "Add",
+    "Insert",
+    "Delete",
+    "Remove",
+    "Strike",
+    "Amend",
+    "Modify",
+    "Replace",
+    "Change",
+    "Revise",
+    "Merge",
+    "Move"
+   ],
+   "note": "修正案每条操作开头的操作动词（页52“加入”、页53“Add”），斜体。"
+  }
+ },
+ "titles": {
+  "position-paper": {
+   "zh": "立场文件",
+   "en": "Position Paper"
+  },
+  "working-paper": {
+   "zh": "工作文件",
+   "en": "Working Paper"
+  },
+  "draft-directive": {
+   "zh": "指令草案",
+   "en": "Draft Directive"
+  },
+  "draft-resolution": {
+   "zh": "决议草案",
+   "en": "Draft Resolution"
+  },
+  "friendly-amendment": {
+   "zh": "友好修正案",
+   "en": "Friendly Amendment"
+  },
+  "unfriendly-amendment": {
+   "zh": "非友好修正案",
+   "en": "Unfriendly Amendment"
+  }
+ },
+ "metadata": {
+  "committee": {
+   "aliases": [
+    "委员会",
+    "Committee"
+   ],
+   "output": {
+    "zh": "委员会",
+    "en": "Committee"
+   }
+  },
+  "topic": {
+   "aliases": [
+    "议题",
+    "会议议题",
+    "Topic",
+    "Agenda"
+   ],
+   "output": {
+    "zh": "议题",
+    "en": "Topic"
+   }
+  },
+  "country": {
+   "aliases": [
+    "国家/席位",
+    "国家",
+    "席位",
+    "Country"
+   ],
+   "output": {
+    "zh": "国家",
+    "en": "Country"
+   }
+  },
+  "delegate": {
+   "aliases": [
+    "代表",
+    "Delegate"
+   ],
+   "output": {
+    "zh": "代表",
+    "en": "Delegate"
+   }
+  },
+  "sponsors": {
+   "aliases": [
+    "起草国",
+    "提案国",
+    "主笔国",
+    "Sponsor",
+    "Sponsors"
+   ],
+   "output": {
+    "zh": "起草国",
+    "en": "Sponsors"
+   },
+   "multiline": true
+  },
+  "signatories": {
+   "aliases": [
+    "附议国",
+    "联署国",
+    "Signatory",
+    "Signatories"
+   ],
+   "output": {
+    "zh": "附议国",
+    "en": "Signatories"
+   },
+   "multiline": true
+  }
+ },
+ "prefixes": {
+  "zh": {
+   "preambulatory": [
+    "深刻认识到",
+    "深刻意识到",
+    "完全警惕于",
+    "完全认识到",
+    "遗憾地看到",
+    "欣慰地看到",
+    "进一步指出",
+    "注意并批准",
+    "深切关注",
+    "深感不安",
+    "深感遗憾",
+    "震惊于",
+    "认识到",
+    "考虑到",
+    "注意到",
+    "铭记",
+    "确认",
+    "支持",
+    "相信",
+    "牢记",
+    "确信",
+    "宣布",
+    "深信",
+    "希望",
+    "强调",
+    "期望",
+    "满足于",
+    "履行",
+    "惋惜于",
+    "回顾",
+    "根据",
+    "已采用",
+    "已考虑",
+    "检查",
+    "欣闻",
+    "欣见",
+    "收到",
+    "研究",
+    "欢迎",
+    "呼吁",
+    "关注到",
+    "痛心于",
+    "完全相信",
+    "观察到"
+   ],
+   "operative": [
+    "十分遗憾地看到",
+    "进一步征求",
+    "进一步声明",
+    "进一步建议",
+    "进一步要求",
+    "进一步决定",
+    "充分调动",
+    "强烈反对",
+    "呼吁注意",
+    "要求",
+    "决定",
+    "呼吁",
+    "敦促",
+    "鼓励",
+    "建议",
+    "授权",
+    "邀请",
+    "支持",
+    "谴责",
+    "重申",
+    "申明",
+    "强调",
+    "赞许",
+    "同意",
+    "认可",
+    "铭记",
+    "确定",
+    "考虑",
+    "指定",
+    "宣布",
+    "注意",
+    "断定",
+    "指示",
+    "督促",
+    "关于",
+    "希望",
+    "推动",
+    "明确",
+    "加强",
+    "建立",
+    "提升",
+    "优先",
+    "针对",
+    "通过",
+    "采取",
+    "确保",
+    "加入",
+    "修改",
+    "删除",
+    "阐明",
+    "确立",
+    "签署",
+    "阐明希望",
+    "进一步回顾",
+    "已经决定",
+    "宣告",
+    "回顾",
+    "牢记",
+    "欣慰地看到",
+    "深切关注"
+   ]
+  },
+  "en": {
+   "preambulatory": [
+    "Affirming",
+    "Alarmed by",
+    "Approving",
+    "Aware of",
+    "Believing",
+    "Bearing in mind",
+    "Confident",
+    "Contemplating",
+    "Convinced",
+    "Declaring",
+    "Deeply concerned",
+    "Deeply convinced",
+    "Deeply conscious",
+    "Deeply disturbed",
+    "Deeply regretting",
+    "Desiring",
+    "Emphasizing",
+    "Expecting",
+    "Expressing its satisfaction",
+    "Fulfilling",
+    "Fully alarmed",
+    "Fully aware",
+    "Fully believing",
+    "Further deploring",
+    "Further recalling",
+    "Guided by",
+    "Having adopted",
+    "Having considered",
+    "Having devoted attention",
+    "Having examined",
+    "Having heard",
+    "Having received",
+    "Having studied",
+    "Keeping in mind",
+    "Noting with regret",
+    "Noting with satisfaction",
+    "Noting with deep concern",
+    "Noting further",
+    "Noting with approval",
+    "Observing",
+    "Realizing",
+    "Recalling",
+    "Recognizing",
+    "Referring",
+    "Seeking",
+    "Taking into account",
+    "Welcoming",
+    "Acknowledging",
+    "Reaffirming",
+    "Considering",
+    "Noting"
+   ],
+   "operative": [
+    "Accepts",
+    "Affirms",
+    "Approves",
+    "Authorizes",
+    "Calls",
+    "Calls upon",
+    "Condemns",
+    "Confirms",
+    "Considers",
+    "Declares accordingly",
+    "Deplores",
+    "Designate",
+    "Draws attention",
+    "Emphasizes",
+    "Encourages",
+    "Endorses",
+    "Expresses its hope",
+    "Further invites",
+    "Further proclaims",
+    "Further recommends",
+    "Further reminds",
+    "Further requests",
+    "Further resolves",
+    "Has resolved",
+    "Notes",
+    "Proclaims",
+    "Reaffirms",
+    "Recommends",
+    "Regrets",
+    "Reminds",
+    "Requests",
+    "Resolves",
+    "Solemnly affirms",
+    "Supports",
+    "Takes note of",
+    "Urges",
+    "Decides",
+    "Defines",
+    "Clarifies",
+    "Directs",
+    "Invites",
+    "Promotes",
+    "Modifies",
+    "Deletes",
+    "Adds",
+    "Modify",
+    "Delete",
+    "Add"
+   ]
+  }
+ },
+ "documents": {
+  "position-paper": {
+   "unlabeledHeaderFields": [
+    "committee",
+    "topic",
+    "country",
+    "delegate"
+   ],
+   "restoreMissingHeaderLabels": true,
+   "repairs": [
+    "missing-first-section"
+   ]
+  },
+  "working-paper": {
+   "unlabeledHeaderFields": [
+    "committee",
+    "topic"
+   ]
+  },
+  "draft-directive": {
+   "unlabeledHeaderFields": [
+    "committee",
+    "topic"
+   ]
+  },
+  "draft-resolution": {
+   "unlabeledHeaderFields": [
+    "committee",
+    "topic"
+   ]
+  },
+  "friendly-amendment": {
+   "unlabeledHeaderFields": [
+    "committee",
+    "topic"
+   ]
+  },
+  "unfriendly-amendment": {
+   "unlabeledHeaderFields": [
+    "committee",
+    "topic"
+   ]
+  }
+ }
+}
