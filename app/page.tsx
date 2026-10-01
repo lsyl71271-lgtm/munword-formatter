@@ -3,6 +3,9 @@
 import { DragEvent, useMemo, useRef, useState } from "react";
 import { formatDocxInBrowser, parseDocxInBrowser } from "./docx-browser";
 import type { BrowserDocumentType as DocumentType, BrowserModel as Model, BrowserValidation as Validation } from "./docx-browser";
+import DocxPreview from "./docx-preview";
+import TemplatePanel from "./template-panel";
+import { buildDiagnosticReport } from "./diagnostics";
 
 const DOCUMENT_TYPES: Array<{ id: DocumentType; zh: string; en: string; badge: string }> = [
   { id: "position-paper", zh: "立场文件", en: "Position Paper", badge: "PP" },
@@ -81,6 +84,9 @@ export default function Home() {
   const [sessionLabel, setSessionLabel] = useState("");
   const [submittingCountry, setSubmittingCountry] = useState("");
   const [version, setVersion] = useState("v1");
+  const [formatted, setFormatted] = useState<{ blob: Blob; filename: string } | null>(null);
+  const [showPages, setShowPages] = useState(false);
+  const diagnostic = useMemo(() => model ? buildDiagnosticReport(model, validations) : null, [model, validations]);
 
   const selectedType = DOCUMENT_TYPES.find((item) => item.id === documentType)!;
   const clauses = useMemo(
@@ -98,6 +104,8 @@ export default function Home() {
     setValidations([]);
     setStage("upload");
     setError("");
+    setFormatted(null);
+    setShowPages(false);
   }
 
   function acceptFile(nextFile?: File) {
@@ -153,6 +161,9 @@ export default function Home() {
   }
 
   function updateModel<K extends keyof Model>(key: K, value: Model[K]) {
+    setStage("review");
+    setFormatted(null);
+    setValidations([]);
     setModel((current) => current ? { ...current, [key]: value } : current);
   }
 
@@ -166,6 +177,7 @@ export default function Home() {
         const result = formatDocxInBrowser(await file.arrayBuffer(), model, { sessionLabel, submittingCountry, version, normalizePunctuation, preserveCountryOrder: preserveOrder });
         if (operation !== operationRef.current) return;
         setValidations(result.validations);
+        setFormatted({ blob: result.blob, filename: result.filename });
         download(result.blob, result.filename);
         setStage("done");
         return;
@@ -201,6 +213,7 @@ export default function Home() {
       if (operation !== operationRef.current) return;
       const filename = getDownloadName(response.headers.get("Content-Disposition"));
       setValidations(decodeHeader(response.headers.get("X-PKUNMUN-Validation")));
+      setFormatted({ blob, filename });
       download(blob, filename);
       setStage("done");
     } catch (reason) {
@@ -280,6 +293,7 @@ export default function Home() {
 
         </section>
         </div>
+        <TemplatePanel key={documentType} type={documentType} onGenerated={download} />
         {model && (
           <section className="reviewSection">
             <div className="sectionLabel"><span>03</span><div><h2>确认识别结果</h2><p>无法可靠判断的字段只提示，由你确认后再生成。</p></div></div>
@@ -292,8 +306,15 @@ export default function Home() {
               {!["position-paper", "working-paper"].includes(documentType) && <label className="wide">附议国（逗号分隔）<input value={model.signatories.join("，")} onChange={(e) => updateModel("signatories", splitCountryInput(e.target.value))} /></label>}
             </div>
             {model.warnings.length > 0 && <div className="warningList"><b>需要确认</b>{model.warnings.map((warning, index) => <p key={index}>△ {warning}</p>)}</div>}
+            {diagnostic && <details className="studioTool"><summary>识别依据与诊断报告</summary><p>已识别 {diagnostic.paragraph_count} 个非空段落、{diagnostic.clauses.length} 个正文或条款。结构校验：{diagnostic.structure_status === "checked" ? "已检查" : "尚未执行"}；视觉核验：尚未执行。规则置信值不是格式正确率。</p>
+              {diagnostic.missing_fields.length > 0 && <p>待确认字段：{diagnostic.missing_fields.map(item => item.label).join("、")}</p>}
+              <div className="diagnosticTable"><table><thead><tr><th>原稿段落</th><th>角色 / 层级</th><th>识别依据</th></tr></thead><tbody>{diagnostic.clauses.map((clause, index) => <tr key={index}><td>{clause.paragraph}</td><td>{clause.role} / {clause.level + 1}</td><td>{clause.reason}<small>{clause.text.slice(0, 100)}</small></td></tr>)}</tbody></table></div>
+              <button className="secondaryButton" type="button" onClick={() => download(new Blob([JSON.stringify(diagnostic, null, 2)], { type: "application/json" }), "Munword_诊断报告.json")}>下载诊断报告</button><small>报告包含原稿文字，只保存到你的电脑。</small>
+            </details>}
+            <div className="pagePreviewTools"><button className="secondaryButton" type="button" onClick={() => setShowPages(!showPages)}>{showPages ? "收起页面预览" : "查看实际 DOCX 页面"}</button>{formatted && <button className="secondaryButton" type="button" onClick={() => download(formatted.blob, formatted.filename)}>再次下载成稿</button>}<p>本地 HTML 预览，不发送文件。字体和分页以 Word / WPS 为准；成稿显示上一次生成的版本。</p></div>
+            {showPages && file && <div className="docxPreviewGrid"><DocxPreview blob={file} label="原稿页面" />{formatted ? <DocxPreview blob={formatted.blob} label="生成后的 DOCX 页面" /> : <p>生成文件后，此处显示成稿页面。修改字段后请重新生成。</p>}</div>}
 
-            <div className="previewHeader"><div><span>原稿 / 成稿</span><h3>结构预览</h3></div><small>实际字体、编号和签名空间写入下载的 DOCX</small></div>
+            <div className="previewHeader"><div><span>识别摘要 / 非页面排版</span><h3>结构预览</h3></div><small>实际字号、编号和签名空间请查看上方 DOCX 页面</small></div>
             <div className="previewGrid">
               <article className="paper original"><div className="paperTop"><b>原稿文本</b><span>{model.paragraphs.filter(Boolean).length} 段</span></div>{model.paragraphs.filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</article>
               <article className="paper formatted">
@@ -304,7 +325,7 @@ export default function Home() {
                 {model.country && <p><strong>{model.language === "zh" ? "国家/席位：" : "Country: "}</strong>{model.country}</p>}
                 {model.sponsors.length > 0 && <p><strong>{model.language === "zh" ? "起草国：" : "Sponsors: "}</strong><em>{model.sponsors.join(model.language === "zh" ? "；" : "; ")}</em></p>}
                 {model.signatories.length > 0 && <p><strong>{model.language === "zh" ? "附议国：" : "Signatories: "}</strong><em>{model.signatories.join(model.language === "zh" ? "；" : "; ")}</em></p>}
-                <div className="clausePreview">{clauses.map((clause, index) => <p className={`clause level${clause.level} ${clause.kind}`} key={`${clause.paragraph_index}-${index}`}><span>{clause.kind === "preambulatory" ? "P" : clause.kind === "operative" ? index + 1 : "·"}</span>{clause.text}<small>{Math.round(clause.confidence * 100)}%</small></p>)}</div>
+                <div className="clausePreview">{clauses.map((clause, index) => <p className={`clause level${clause.level} ${clause.kind}`} key={`${clause.paragraph_index}-${index}`}><span>{clause.kind === "preambulatory" ? "P" : clause.kind === "operative" ? "O" : "·"}</span>{clause.text}<small>{Math.round(clause.confidence * 100)}%</small></p>)}</div>
               </article>
             </div>
 
@@ -329,7 +350,7 @@ export default function Home() {
         )}
       </section>
 
-      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v1.6.3</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
+      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v1.7.0</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
     </main>
   );
 }

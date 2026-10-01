@@ -14,6 +14,7 @@ const state = {
   file: null,
   model: null,
   busy: false,
+  operation: 0,
 };
 
 const byId = (id) => document.getElementById(id);
@@ -59,6 +60,7 @@ function updateSteps(stage) {
 }
 
 function renderTypes() {
+  window.dispatchEvent(new CustomEvent("munword:type", { detail: { type: state.documentType } }));
   byId("typeGrid").innerHTML = DOCUMENT_TYPES.map((type) => `
     <button type="button" class="typeCard ${type.id === state.documentType ? "selected" : ""}" data-type="${type.id}">
       <span class="typeBadge">${type.badge}</span><span><b>${type.zh}</b><small>${type.en}</small></span><span class="radio"></span>
@@ -66,6 +68,7 @@ function renderTypes() {
   byId("currentZh").textContent = selectedType().zh;
   byId("currentEn").textContent = selectedType().en;
   document.querySelectorAll("[data-type]").forEach((button) => button.addEventListener("click", () => {
+    state.operation += 1;
     state.documentType = button.dataset.type;
     state.file = null;
     state.model = null;
@@ -81,6 +84,13 @@ function renderTypes() {
 
 function acceptFile(file) {
   if (!file) return;
+  state.operation += 1;
+  state.file = null;
+  state.model = null;
+  window.dispatchEvent(new CustomEvent("munword:model", { detail: null }));
+  byId("reviewSection").classList.add("hidden");
+  byId("validationSection").classList.add("hidden");
+  setBusy(false, "parse");
   if (!file.name.toLowerCase().endsWith(".docx")) return setError("请上传 .docx 文件。旧版 .doc、PDF 和纯文本暂不支持。");
   if (file.size > 20 * 1024 * 1024) return setError("文件超过 20 MB，请精简图片后重试。");
   state.file = file;
@@ -108,22 +118,27 @@ async function readError(response, fallback) {
 
 async function parseDocument() {
   if (!state.file || state.busy) return;
+  const operation = ++state.operation;
   setBusy(true, "parse"); setError(""); setSuccess("");
   try {
     const form = new FormData();
     form.append("file", state.file);
     const response = await fetch(`${API_URL}/api/parse/${state.documentType}`, { method: "POST", body: form });
+    if (operation !== state.operation) return;
     if (!response.ok) throw new Error(await readError(response, "文件识别失败。"));
-    state.model = await response.json();
+    const model = await response.json();
+    if (operation !== state.operation) return;
+    state.model = model;
     byId("submittingCountry").value = state.model.country || state.model.sponsors?.[0] || "";
     renderReview();
     byId("reviewSection").classList.remove("hidden");
     updateSteps("review");
     byId("reviewSection").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
+    if (operation !== state.operation) return;
     const localHint = location.protocol === "file:" ? "请双击“PKUNMUN 2026 文件排版系统”应用图标启动。" : "本机排版引擎暂时无法响应，请重新双击应用图标。";
     setError(error instanceof TypeError ? localHint : error.message);
-  } finally { setBusy(false, "parse"); }
+  } finally { if (operation === state.operation) setBusy(false, "parse"); }
 }
 
 function field(label, id, value, wide = false) {
@@ -163,6 +178,7 @@ function renderReview() {
 function renderPreviews() {
   const model = state.model;
   if (!model) return;
+  window.dispatchEvent(new CustomEvent("munword:model", { detail: { model, file: state.file } }));
   const paragraphs = (model.paragraphs || []).filter(Boolean);
   byId("originalPreview").innerHTML = `<div class="paperTop"><b>原稿文本</b><span>${paragraphs.length} 段</span></div>${paragraphs.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}`;
   const clauses = [...(model.preambulatory_clauses || []), ...(model.operative_clauses || []), ...(model.body_clauses || [])].sort((a, b) => a.paragraph_index - b.paragraph_index);
@@ -173,7 +189,7 @@ function renderPreviews() {
   if (model.country) formatted += `<p><strong>${zh ? "国家/席位：" : "Country: "}</strong>${escapeHtml(model.country)}</p>`;
   if (model.sponsors?.length) formatted += `<p><strong>${zh ? "起草国：" : "Sponsors: "}</strong><em>${escapeHtml(model.sponsors.join(zh ? "；" : "; "))}</em></p>`;
   if (model.signatories?.length) formatted += `<p><strong>${zh ? "附议国：" : "Signatories: "}</strong><em>${escapeHtml(model.signatories.join(zh ? "；" : "; "))}</em></p>`;
-  formatted += `<div class="clausePreview">${clauses.map((clause, index) => `<p class="clause level${Number(clause.level) || 0} ${escapeHtml(clause.kind)}"><span>${clause.kind === "preambulatory" ? "P" : clause.kind === "operative" ? index + 1 : "·"}</span>${escapeHtml(clause.text)}<small>${Math.round((clause.confidence || 0) * 100)}%</small></p>`).join("")}</div>`;
+  formatted += `<div class="clausePreview">${clauses.map((clause) => `<p class="clause level${Number(clause.level) || 0} ${escapeHtml(clause.kind)}"><span>${clause.kind === "preambulatory" ? "P" : clause.kind === "operative" ? "O" : "·"}</span>${escapeHtml(clause.text)}<small>${Math.round((clause.confidence || 0) * 100)}%</small></p>`).join("")}</div>`;
   byId("formattedPreview").innerHTML = formatted;
 }
 
@@ -199,6 +215,7 @@ function renderValidations(items, done) {
 
 async function formatAndDownload() {
   if (!state.file || !state.model || state.busy) return;
+  const operation = ++state.operation;
   setBusy(true, "generate"); setError(""); setSuccess("");
   try {
     const model = state.model;
@@ -212,6 +229,7 @@ async function formatAndDownload() {
     form.append("submitting_country", byId("submittingCountry").value);
     form.append("version", byId("version").value || "v1");
     const response = await fetch(`${API_URL}/api/format/${state.documentType}`, { method:"POST", body:form });
+    if (operation !== state.operation) return;
     if (!response.ok) {
       const copy = response.clone();
       let body = null; try { body = await copy.json(); } catch { /* ignore */ }
@@ -219,15 +237,17 @@ async function formatAndDownload() {
       throw new Error(await readError(response, "格式化失败，请重试；若仍失败，请保留原文件并反馈。"));
     }
     const blob = await response.blob();
+    if (operation !== state.operation) return;
     const filename = downloadName(response.headers.get("Content-Disposition"));
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1500);
     renderValidations(decodeHeader(response.headers.get("X-PKUNMUN-Validation")), true);
+    window.dispatchEvent(new CustomEvent("munword:model", { detail: { model, file: state.file, output: blob, validations: decodeHeader(response.headers.get("X-PKUNMUN-Validation")) } }));
     setSuccess(`已生成并开始下载：${filename}`); updateSteps("done");
     byId("validationSection").scrollIntoView({ behavior:"smooth", block:"start" });
-  } catch (error) { setError(error instanceof TypeError ? "本机排版引擎暂时无法响应，请重新双击应用图标。" : error.message); }
-  finally { setBusy(false, "generate"); }
+  } catch (error) { if (operation === state.operation) setError(error instanceof TypeError ? "本机排版引擎暂时无法响应，请重新双击应用图标。" : error.message); }
+  finally { if (operation === state.operation) setBusy(false, "generate"); }
 }
 
 async function checkEngine() {

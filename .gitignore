@@ -77,6 +77,8 @@ worker-configuration.d.ts
 /output/
 /work/
 /qa/
+/public/studio-tools.js
+/public/licenses/
 /.local-runtime/
 /examples/acceptance-outputs/
 /scripts/fixtures/

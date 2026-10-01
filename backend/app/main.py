@@ -15,6 +15,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .docx_package import validate_docx_package
 from .errors import InvalidDocxError, InvalidRequestError, ProtectedContentError
 from .pipelines import PIPELINES
+from .diagnostics import build_diagnostic_report
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +109,14 @@ def local_app_icon():
     return FileResponse(ROOT / "public" / "favicon.svg", media_type="image/svg+xml")
 
 
+@app.get("/studio-tools.js", include_in_schema=False)
+def local_studio_tools():
+    path = ROOT / "public" / "studio-tools.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Run pnpm build:local-tools, or use the desktop package containing this asset.")
+    return FileResponse(path, media_type="text/javascript; charset=utf-8", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/styles.css", include_in_schema=False)
 def local_app_styles():
     css = (ROOT / "app" / "globals.css").read_text(encoding="utf-8")
@@ -142,7 +151,7 @@ async def parse_document(document_type: str, file: UploadFile = File(...)):
         model = await run_in_threadpool(pipeline.parse, content)
     except Exception as exc:
         raise processing_failure("DOCX 解析失败", exc) from exc
-    return model.to_dict()
+    return {**model.to_dict(), "diagnostics": build_diagnostic_report(model)}
 
 
 @app.post("/api/format/{document_type}")

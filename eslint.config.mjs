@@ -13,6 +13,11 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "worker-configuration.d.ts",
+    ".cache/**",
+    "output/**",
+    "outputs/**",
+    "qa/**",
+    "public/studio-tools.js",
   ]),
 ]);
 

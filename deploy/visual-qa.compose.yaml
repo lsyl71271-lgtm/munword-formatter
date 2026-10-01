@@ -1,0 +1,17 @@
+# Optional local QA only; no public document upload endpoint.
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8.37.0
+    ports: ["127.0.0.1:3000:3000"]
+    command:
+      - "gotenberg"
+      - "--api-timeout=120s"
+      - "--api-body-limit=25MB"
+      - "--chromium-disable-routes=true"
+      - "--webhook-disable=true"
+      - "--api-download-from-deny-list=.*"
+      - "--api-disable-download-from=true"
+      - "--libreoffice-deny-list=.*"
+    mem_limit: 2g
+    cpus: 2
+    security_opt: ["no-new-privileges:true"]

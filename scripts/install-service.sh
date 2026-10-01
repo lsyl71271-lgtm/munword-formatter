@@ -27,6 +27,7 @@ rsync -a --delete "$PROJECT_DIR/templates/" "$INSTALL_ROOT/templates/"
 rsync -a --delete "$PROJECT_DIR/public/" "$INSTALL_ROOT/public/"
 rsync -a --delete "$PROJECT_DIR/shared/" "$INSTALL_ROOT/shared/"
 install -m 0644 "$PROJECT_DIR/VERSION" "$INSTALL_ROOT/.bundle-version"
+install -m 0644 "$PROJECT_DIR/VERSION" "$INSTALL_ROOT/VERSION"
 
 launchctl bootout "$SERVICE_DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
 /usr/bin/plutil -create xml1 "$PLIST_TARGET"

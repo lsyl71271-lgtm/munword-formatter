@@ -1,6 +1,6 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前稳定版 **v1.6.3**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。此仓库是完整源码导入，便于代码审查；不是包含运行时的免安装程序。发布整理没有改动排版引擎、界面或共享排版规则。
+当前版本 **v1.7.0**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建和本机批处理；原有排版引擎、学标规则和内容保护保持不变。本源码仓库不是包含运行时的免安装程序。
 
 ## 功能与运行模式
 
@@ -33,7 +33,7 @@ Windows PowerShell 复制配置的命令：
 Copy-Item .openai/hosting.example.json .openai/hosting.json
 ```
 
-现有 `dev/build/start/typecheck` 使用 POSIX 环境变量语法；Windows 上建议在 WSL 执行网页开发命令。直接使用 Windows Python 本机版不要求 WSL。
+`dev/build/start` 已通过 Node 启动器兼容 Windows。现有 `typecheck` 仍使用 POSIX 环境变量语法，可在 WSL 中执行，或分别运行 Wrangler 类型生成与 TypeScript 检查。直接使用 Windows Python 本机版不要求 WSL。
 
 Vite 启动地址以终端输出为准（通常端口 5173）。生产构建与本机预览：
 
@@ -66,6 +66,39 @@ py -3.12 -m venv .venv
 
 打开 `http://127.0.0.1:8000/`；API 文档 `/docs`，健康检查使用 **GET** `/api/health`（HEAD 返回 405 不代表故障）。端口被占用时先识别已有服务，不要随意终止其他程序。
 
+从源码使用本机版新增工具前，运行 `pnpm build:local-tools`。分享安装包会包含已构建的工具脚本，不需要接收者安装 Node。文件排版继续由本机 Python 引擎完成；模板新建和预览在本机浏览器执行。
+
+## v1.7.0 新增工具
+
+- 上传修复后的第三步可查看隔离的原稿/成稿页面，并下载结构诊断 JSON。诊断报告包含原稿文字，请按原稿同样保护；它不声称已完成视觉验收。
+- “从规范模板新建文件”是独立入口，使用上方文种、用户填写的正文和现有学标策略。不使用 AI，不把原稿转换成模板数据。
+- 批处理不填写第三步字段、不覆盖原文件；同名输出默认拒绝覆盖：
+
+```sh
+.venv/bin/python backend/cli.py /path/to/docx-folder --type working-paper --output-dir output/batch
+.venv/bin/python backend/cli.py /path/to/input.docx --type draft-resolution --output-dir output/diagnosis --diagnose-only
+```
+
+- 安全打包：
+
+```sh
+pnpm build:local-tools
+.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.7.0-desktop-source.zip
+```
+
+包内包含校验清单及依赖许可证，不包含 `.env`、部署账号配置、缓存或用户文档。仍需 Python 和首次安装联网下载依赖，不是无需运行时的 EXE。
+
+- 可选视觉验收：先安装 `backend/requirements-qa.txt` 和 Poppler。使用自己的本机 `render_docx.py`，或启动仅监听本机的 Gotenberg：
+
+```sh
+docker compose -f deploy/visual-qa.compose.yaml up -d
+.venv/bin/python scripts/visual-qa.py /path/to/output.docx --gotenberg-url http://127.0.0.1:3000 --output-dir output/visual-qa --require-italic Requests
+```
+
+无 Docker 时改用 `--renderer /path/to/render_docx.py`。可设置 `MUNWORD_PDF_RASTERIZER` 指向 `pdftocairo` 或 `pdftoppm`；macOS 的部分 Poppler 后端会丢失 CJK 字形，建议 Cairo。`--reference-pages` 只接受同正文、同字体、同渲染环境的基线，失败返回非零状态。报告记录字号、斜体与像素差异，不代表所有学标要求自动验收完成。此服务不部署到公网网站，不自动上传文件。
+
+第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，版本说明见 [v1.7.0](docs/release-1.7.0.md)。
+
 根目录的 macOS/Windows 一键安装入口仍保留。它们会安装依赖、复制程序并配置持续运行的本机服务，不应由云端审查 agent 当作普通测试运行。macOS `.app` 中的启动器是 Bash 源码，生成的代码签名已排除；重新分发签名安装包是独立工作，不属于本源码仓库的可复现性承诺。
 
 ## 测试与检查
@@ -83,6 +116,8 @@ python3 scripts/audit-source.py
 ```
 
 `pnpm test` 组合 Node 单元测试、构建与 HTML 测试，但不执行 Python 测试；`typecheck` 依赖先构建生成的 Wrangler 配置。标准测试使用仓库中的合成输入与 `tests/fixtures/engine-parity.json`，不需要私人文件或云端凭据。
+
+`docs/ci.example.yml` 提供可选的 GitHub Actions 配置。需具有 workflow 写入权限的维护者将其放入 `.github/workflows/` 后才会启用；默认发布不要求扩展现有账户权限。
 
 生成可视检查用的验收输出（输出已忽略）：
 

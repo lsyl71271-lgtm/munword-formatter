@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "requiredFields": {
+    "position-paper": ["committee", "topic", "country"],
+    "working-paper": ["committee", "topic", "sponsors"],
+    "draft-directive": ["committee", "sponsors", "signatories"],
+    "draft-resolution": ["committee", "topic", "sponsors", "signatories"],
+    "friendly-amendment": ["committee", "topic", "sponsors", "signatories"],
+    "unfriendly-amendment": ["committee", "topic", "sponsors", "signatories"]
+  },
+  "fieldLabels": {"committee": "委员会", "topic": "议题", "country": "国家或席位", "sponsors": "起草国", "signatories": "附议国"},
+  "roleLabels": {"body": "正文", "preambulatory": "序言性条款", "operative": "行动性条款", "heading": "标题", "unknown": "待确认"},
+  "roleReasons": {
+    "body": "按当前文种正文区域识别；普通正文的置信值不是视觉验收分数。",
+    "preambulatory": "位于决议案行动性条款之前；具体强调由学标前缀规则决定。",
+    "operative": "位于行动性条款区域；编号及层级沿用原稿，不补齐跳号。",
+    "heading": "按现有结构识别为标题。",
+    "unknown": "没有足够结构证据，需要人工确认。"
+  },
+  "limitations": [
+    "规则置信值不是统计概率，也不是格式正确率。",
+    "结构校验通过不代表 Word 或 WPS 的视觉排版完全一致。",
+    "HTML 预览不具备 Word 的完整分页和域计算能力。"
+  ]
+}
