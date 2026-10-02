@@ -86,6 +86,9 @@ export default function Home() {
   const [version, setVersion] = useState("v1");
   const [formatted, setFormatted] = useState<{ blob: Blob; filename: string } | null>(null);
   const [showPages, setShowPages] = useState(false);
+  // What the user typed in the country fields: splitting on every keystroke
+  // dropped a separator or space typed at the end ("法国，" → "法国").
+  const [countryDrafts, setCountryDrafts] = useState({ sponsors: "", signatories: "" });
   const diagnostic = useMemo(() => model ? buildDiagnosticReport(model, validations) : null, [model, validations]);
 
   const selectedType = DOCUMENT_TYPES.find((item) => item.id === documentType)!;
@@ -150,6 +153,7 @@ export default function Home() {
       }
       if (operation !== operationRef.current) return;
       setModel(body);
+      setCountryDrafts({ sponsors: (body.sponsors || []).join("，"), signatories: (body.signatories || []).join("，") });
       setSubmittingCountry(body.country || body.sponsors?.[0] || "");
       setStage("review");
     } catch (reason) {
@@ -171,6 +175,11 @@ export default function Home() {
   function updateModel<K extends keyof Model>(key: K, value: Model[K]) {
     discardPending();
     setModel((current) => current ? { ...current, [key]: value } : current);
+  }
+
+  function updateCountries(key: "sponsors" | "signatories", text: string) {
+    setCountryDrafts((current) => ({ ...current, [key]: text }));
+    updateModel(key, splitCountryInput(text));
   }
 
   async function formatAndDownload() {
@@ -308,8 +317,8 @@ export default function Home() {
               <label>委员会<input value={model.committee} onChange={(e) => updateModel("committee", e.target.value)} /></label>
               <label>议题<input value={model.topic} onChange={(e) => updateModel("topic", e.target.value)} /></label>
               {documentType === "position-paper" && <><label>国家 / 席位<input value={model.country} onChange={(e) => updateModel("country", e.target.value)} /></label><label>代表<input value={model.delegate} onChange={(e) => updateModel("delegate", e.target.value)} /></label></>}
-              {documentType !== "position-paper" && <label className="wide">起草国（逗号分隔）<input value={model.sponsors.join("，")} onChange={(e) => updateModel("sponsors", splitCountryInput(e.target.value))} /></label>}
-              {!["position-paper", "working-paper"].includes(documentType) && <label className="wide">附议国（逗号分隔）<input value={model.signatories.join("，")} onChange={(e) => updateModel("signatories", splitCountryInput(e.target.value))} /></label>}
+              {documentType !== "position-paper" && <label className="wide">起草国（逗号分隔）<input value={countryDrafts.sponsors} onChange={(e) => updateCountries("sponsors", e.target.value)} /></label>}
+              {!["position-paper", "working-paper"].includes(documentType) && <label className="wide">附议国（逗号分隔）<input value={countryDrafts.signatories} onChange={(e) => updateCountries("signatories", e.target.value)} /></label>}
             </div>
             {model.warnings.length > 0 && <div className="warningList"><b>需要确认</b>{model.warnings.map((warning, index) => <p key={index}>△ {warning}</p>)}</div>}
             {diagnostic && <details className="studioTool"><summary>识别依据与诊断报告</summary><p>已识别 {diagnostic.paragraph_count} 个非空段落、{diagnostic.clauses.length} 个正文或条款。结构校验：{diagnostic.structure_status === "checked" ? "已检查" : "尚未执行"}；视觉核验：尚未执行。规则置信值不是格式正确率。</p>
