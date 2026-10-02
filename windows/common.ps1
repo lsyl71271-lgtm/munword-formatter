@@ -52,13 +52,24 @@ function Confirm-Choice {
     return ((Read-Host "$Text [y/N]") -match '^[yY]')
 }
 
-# 'ours'  - our engine answers on the port
+function Get-InstalledVersion {
+    $versionFile = Join-Path $InstallRoot 'VERSION'
+    if (Test-Path $versionFile) { return (Get-Content $versionFile -Raw).Trim() }
+    return ''
+}
+
+# 'ours'  - our engine answers on the port (in the expected version, if one is given)
+# 'stale' - our engine answers, but in another version (as the macOS launcher checks)
 # 'other' - something else holds the port
 # 'none'  - the port is free
 function Get-EngineState {
+    param([string]$ExpectedVersion = '')
     try {
         $health = Invoke-RestMethod -Uri "$EngineUrl/api/health" -TimeoutSec 2 -UseBasicParsing
-        if ($health.service -eq $ServiceId) { return 'ours' }
+        if ($health.service -eq $ServiceId) {
+            if ($ExpectedVersion -and ("$($health.version)" -ne $ExpectedVersion)) { return 'stale' }
+            return 'ours'
+        }
         return 'other'
     } catch { }
     if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
