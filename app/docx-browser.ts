@@ -1,6 +1,6 @@
 import { zipSync } from "fflate";
-import { readPackage, visibleText, contentSignature, splitParagraphAt } from "./docx-safety.ts";
-import { documentTokens, rewriteKeepsStructure, signature, takeSnapshot, verifyFormat, verifyPackage, verifyRepair } from "./content-guard.ts";
+import { readPackage, visibleText, contentSignature, splitParagraphAt, decodeXml } from "./docx-safety.ts";
+import { documentTokens, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
 import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
@@ -49,7 +49,8 @@ export type BrowserValidation = {
 
 const WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+// XML parts may be UTF-8 or UTF-16 (OPC); outputs are written as UTF-8.
+const decoder = { decode: decodeXml };
 const ZH_MARKER = /^[\s\u00a0]*(?:第[一二三四五六七八九十百千]+条|[一二三四五六七八九十]+[、.]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)]|\d+[.、．)]|[甲乙丙丁戊己庚辛壬癸][、.]|[（(][a-zivx]+[）)]|[（(]\d{1,2}[）)]|[a-z][.)）](?=\s|[^\x00-\x7f]))\s*/i;
 const SUB_MARKER = /^[\s\u00a0]*(?:[（(][一二三四五六七八九十a-zivx]+[）)]|[甲乙丙丁戊己庚辛壬癸][、.])/i;
 type MetadataKey = "committee" | "topic" | "delegate" | "country" | "sponsors" | "signatories";
@@ -214,9 +215,19 @@ function labeledField(text: string): { key: MetadataKey; value: string; labelLen
   return null;
 }
 
-/** A labeled line, a clause marker or prose ends a multi-line country list. */
+/** A labeled line, a clause marker, a subject line, a clause or prose ends a
+ * multi-line country list (parser._collect_multiline_countries). */
 function endsCountryList(text: string) {
-  return Boolean(labeledField(text)) || ZH_MARKER.test(text) || SUB_MARKER.test(text) || !looksLikeCountryContinuation(text);
+  const lower = text.trim().toLowerCase();
+  return Boolean(labeledField(text)) || ZH_MARKER.test(text) || SUB_MARKER.test(text) || PART.test(text.trim())
+    || isCommitteeSubject(text, "") || CLAUSE_WORDS.some(word => lower.startsWith(word)) || !looksLikeCountryContinuation(text);
+}
+
+/** Shared policy ``language`` (parser.detect_language): a few quoted Chinese
+ * characters do not make an English document Chinese. */
+function detectLanguage(text: string): "zh" | "en" {
+  const cjk = (text.match(/[\u3400-\u9fff]/g) || []).length, latin = (text.match(/[A-Za-z]/g) || []).length;
+  return cjk >= Math.max(POLICY.language.minCjk, Math.floor(latin / POLICY.language.latinPerCjk)) ? "zh" : "en";
 }
 
 const BOUNDARY = POLICY.headerBoundary;
@@ -298,7 +309,7 @@ export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDo
   const paragraphs = sourceParagraphs.map(paragraphText);
   const nonEmpty = paragraphs.map((text, index) => ({ text: text.trim(), index })).filter((item) => item.text);
   const joined = nonEmpty.map((item) => item.text).join("\n");
-  const language: "zh" | "en" = /[\u3400-\u9fff]/.test(joined) ? "zh" : "en";
+  const language = detectLanguage(joined);
   const expectedTitle = typeTitle(documentType, language);
   const titleItem = nonEmpty.slice(0, 8).find((item) => matchesTypeTitle(item.text, documentType, language));
   // Labels after the first body paragraph are the author's text.
@@ -318,7 +329,9 @@ export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDo
     const firstLabeled = nonEmpty.find((item) => item.index > (titleItem?.index ?? -1) && isHeaderMetadata(item));
     // Read one contiguous header block. Never skip a name that resembles a
     // marker and take a later body heading as the missing metadata value.
-    const header = nonEmpty.filter(item => item.index > (titleItem?.index ?? -1)
+    // Header lines end where the body starts (shared headerBoundary): a
+    // numbered section heading is never a missing header value.
+    const header = nonEmpty.filter(item => item.index > (titleItem?.index ?? -1) && item.index < limit
       && item.index < (firstLabeled?.index ?? Number.POSITIVE_INFINITY)).slice(0, profile.unlabeledHeaderFields.length);
     const candidates = header.every((item, index) => (
       item.index > (titleItem?.index ?? -1)
@@ -700,11 +713,20 @@ function formatRun(run: Element, ctx: Ctx, emphasis: { bold?: boolean; italic?: 
 /** Hiding or striking every character is damage; hiding or striking some is
  * the author's (a private note, an amendment's deletion) (base._strip_uniform_damage). */
 const UNIFORM_DAMAGE = ["vanish", "webHidden", "specVanish", "strike", "dstrike"];
+const HIDDEN_MARKS = ["vanish", "webHidden", "specVanish"];
+/** A direct run property that is switched on (properties inherited from styles were made direct by parsePackage). */
+function runHas(run: Element, tag: string) {
+  const rPr = directChild(run, "rPr"), node = rPr && directChild(rPr, tag);
+  return Boolean(node) && !["0", "false", "off"].includes(wordAttribute(node, "val") || "");
+}
+/** True when some of the paragraph's text is hidden or struck through.
+ * Rebuilding such a paragraph as one new run would show hidden text and erase
+ * deletion marks, so rewrites edit it in place or leave it alone. */
+function carriesSemanticMarks(paragraph: Element) {
+  return visibleRuns(paragraph).some(run => paragraphText(run).length > 0 && UNIFORM_DAMAGE.some(tag => runHas(run, tag)));
+}
 function stripUniformDamage(document: Document, parts: Record<string, Uint8Array>): string[] {
-  const on = (run: Element, tag: string) => {
-    const node = directChild(rPrOf(run), tag);
-    return Boolean(node) && !["0", "false", "off"].includes(wordAttribute(node, "val") || "");
-  };
+  const on = runHas;
   const every = elements(document, "p").flatMap(p => visibleRuns(p)), runs = every.filter(run => paragraphText(run).trim());
   if (!runs.length) return [];
   const cleared = UNIFORM_DAMAGE.filter(tag => runs.every(run => on(run, tag)));
@@ -719,7 +741,7 @@ function stripUniformDamage(document: Document, parts: Record<string, Uint8Array
   // Told, not shown or kept silently.
   return paragraphElements(document).flatMap((p, index) => {
     const kept = visibleRuns(p).filter(run => paragraphText(run).trim());
-    const hidden = kept.some(run => ["vanish", "webHidden", "specVanish"].some(tag => on(run, tag))), struck = kept.some(run => on(run, "strike") || on(run, "dstrike"));
+    const hidden = kept.some(run => HIDDEN_MARKS.some(tag => on(run, tag))), struck = kept.some(run => on(run, "strike") || on(run, "dstrike"));
     if (!hidden && !struck) return [];
     const what = hidden && !struck ? "隐藏文字" : struck && !hidden ? "删除线文字" : "隐藏文字和删除线文字";
     return [`第 ${index + 1} 段含${what}，已保留原稿的显示、打印或删除标记，请确认是否需要。`];
@@ -749,7 +771,7 @@ function hasComplexContent(paragraph: Element) {
 }
 
 function flatteningIsLossless(paragraph: Element) {
-  if (hasComplexContent(paragraph)) return false;
+  if (hasComplexContent(paragraph) || carriesSemanticMarks(paragraph)) return false;
   const properties = new Set<string>();
   for (const run of elements(paragraph, "r")) {
     if (!elements(run, "t").some(t => t.textContent)) continue;
@@ -960,7 +982,10 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
   // Step-03 values for header lines printed without a label.
   for (const key of ["committee", "topic", "country", "delegate"] as const) {
     if (!ctx.changed.has(key) || !ctx.original[key]) continue;
-    const index = texts.findIndex((text, i) => i < 40 && !labeledField(text) && text === ctx.original[key]);
+    // Only an unlabeled header line: a labeled one is rewritten below, and a
+    // body paragraph that happens to repeat the old value is the author's text.
+    if (texts.some((text, i) => i < ctx.headerEnd && labeledField(text)?.key === key)) continue;
+    const index = texts.findIndex((text, i) => i < ctx.headerEnd && !labeledField(text) && text === ctx.original[key]);
     if (index < 0) continue;
     if (hasComplexContent(paragraphs[index])) throw new ProtectedContentError(index + 1, `第 03 步修改了${POLICY.metadata[key].output[ctx.language]}，但该段含图片、域或修订痕迹，不能安全改写`);
     if (setText(ctx, paragraphs[index], ctx.model[key])) logEdit(ctx, paragraphs[index], "field", key, ctx.model[key]);
@@ -981,6 +1006,7 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
       formatCountryField(ctx, p, continuations, labeled.key);
     } else if (ctx.changed.has(labeled.key)) {
       if (hasComplexContent(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含图片或域，不能安全改写");
+      if (carriesSemanticMarks(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含隐藏或删除线文字，改写会改变其显示或删除含义");
       const target = labelValueText(labeled.key, ctx.model[labeled.key] as string, ctx.language);
       clearParagraph(p);
       formatRun(appendRun(p, target), ctx, { bold: false, italic: false, underline: false });
@@ -1018,7 +1044,7 @@ function formatCountryField(ctx: Ctx, p: Element, continuations: Element[], key:
   const differs = values.length > 0 && (ctx.normalizePunctuation || reordered) && (
     reordered || continuations.some(c => paragraphText(c).trim()) || paragraphText(p).trim() !== expected.trim());
   if (ctx.changed.has(key) || differs) {
-    const complexPart = [p, ...continuations].find(hasComplexContent);
+    const complexPart = [p, ...continuations].find(part => hasComplexContent(part) || carriesSemanticMarks(part));
     if (!complexPart) {
       clearParagraph(p);
       appendRun(p, expected);
@@ -1027,8 +1053,8 @@ function formatCountryField(ctx: Ctx, p: Element, continuations: Element[], key:
       styleCountryLine(ctx, p, true);
       return;
     }
-    if (ctx.changed.has(key)) throw new ProtectedContentError(sourceNumber(ctx, complexPart), "第 03 步修改了国家名单，但名单含图片、域或修订痕迹，不能安全改写");
-    protect(ctx, complexPart, "国家列表含图片、域或修订痕迹，未重写");
+    if (ctx.changed.has(key)) throw new ProtectedContentError(sourceNumber(ctx, complexPart), "第 03 步修改了国家名单，但名单含图片、域、修订痕迹或隐藏/删除线文字，不能安全改写");
+    protect(ctx, complexPart, "国家列表含图片、域、修订痕迹或隐藏/删除线文字，未重写");
   }
   styleCountryLine(ctx, p, true);
   for (const c of continuations) formatRuns(c, ctx, { bold: true, italic: true, underline: false });
@@ -1262,17 +1288,21 @@ function handbookBlocks(ctx: Ctx, paragraphs: Element[], numbering: Map<string, 
 
 function nestUnmarkedItems(roles: Map<number, Block>, texts: string[]) {
   const listLevels = new Map<string, number>();
-  let parentLevel: number | null = null;
+  let parentLevel: number | null = null, parentKey: string | null = null;
   for (const index of [...roles.keys()].sort((a, b) => a - b)) {
     const block = roles.get(index)!;
-    if (block.role !== "item") { parentLevel = null; continue; }
+    if (block.role !== "item") { parentLevel = null; parentKey = null; continue; }
     const active = activeNumbering(block.p);
+    const key = active ? `${active.numId}:${active.ilvl}` : null;
     if (active && !HANDBOOK_MARKER.test(texts[index])) {
-      const key = `${active.numId}:${active.ilvl}`;
-      if (listLevels.has(key)) block.level = listLevels.get(key)!;
-      else if (parentLevel !== null) { block.level = parentLevel + 1; listLevels.set(key, block.level); }
+      if (listLevels.has(key!)) block.level = listLevels.get(key!)!;
+      // The next item of the clause's own list and level is its sibling, not
+      // its subclause: a colon alone does not prove the subclauses exist.
+      else if (parentLevel !== null && key !== parentKey) { block.level = parentLevel + 1; listLevels.set(key!, block.level); }
     }
-    parentLevel = /[：:]$/.test(texts[index]) ? block.level : null;
+    const opens = /[：:]$/.test(texts[index]);
+    parentLevel = opens ? block.level : null;
+    parentKey = opens ? key : null;
   }
 }
 
@@ -1321,6 +1351,41 @@ function endingInRevision(p: Element) {
   return false;
 }
 
+/** Text nodes from the end of the paragraph back to the last one with words in it. */
+function endingTail(p: Element): Element[] {
+  const tail: Element[] = [];
+  for (const node of visibleRuns(p).flatMap(run => Array.from(run.children).filter(child => child.namespaceURI === WORD_NS && child.localName === "t")).reverse()) {
+    if (!node.textContent) continue;
+    tail.push(node);
+    if (node.textContent.replace(ENDING_STRIP, "")) break;
+  }
+  return tail;
+}
+
+/** The run closing the complex field whose result holds ``run``, or null. */
+function fieldResultEnd(p: Element, run: Element): Element | null {
+  const stack: string[] = [];
+  let inside = false;
+  for (const candidate of elements(p, "r")) {
+    if (candidate === run) inside = stack.includes("result");
+    for (const mark of elements(candidate, "fldChar")) {
+      const type = wordAttribute(mark, "fldCharType");
+      if (type === "begin") stack.push("code");
+      else if (type === "separate" && stack.length) stack[stack.length - 1] = "result";
+      else if (type === "end") { stack.pop(); if (inside && !stack.length) return candidate; }
+    }
+  }
+  return null;
+}
+
+/** A field result or link holding ``node``: the element after which new text must go. */
+function endingContainer(p: Element, node: Element): Element | null {
+  for (let ancestor = node.parentElement; ancestor && ancestor !== p; ancestor = ancestor.parentElement) {
+    if (ancestor.namespaceURI === WORD_NS && ["hyperlink", "fldSimple"].includes(ancestor.localName)) return ancestor;
+  }
+  return node.parentElement ? fieldResultEnd(p, node.parentElement) : null;
+}
+
 function setEnding(ctx: Ctx, p: Element, ending: string) {
   const text = paragraphText(p);
   // Only the final punctuation is replaced: trailing spaces at the very end
@@ -1328,6 +1393,25 @@ function setEnding(ctx: Ctx, p: Element, ending: string) {
   const stripped = text.replace(/[ \t]+$/, "").replace(ENDING_PUNCTUATION, "");
   if (!stripped.trim() || text === stripped + ending) return;
   if (endingInRevision(p)) { protect(ctx, p, "句末标点位于修订痕迹中，未自动规范"); return; }
+  const tail = endingTail(p);
+  // Hidden or struck words are not what the reader sees end the sentence.
+  if (tail.some(node => node.parentElement && UNIFORM_DAMAGE.some(tag => runHas(node.parentElement!, tag)))) {
+    protect(ctx, p, "句末文字为隐藏或删除线文字，未自动规范标点"); return;
+  }
+  const container = tail.length ? endingContainer(p, tail[0]) : null;
+  if (container) {
+    // A field result is regenerated by Word and a link's text is the link:
+    // punctuation goes after them, and nothing inside them is changed.
+    if (text !== stripped) { protect(ctx, p, "句末位于域结果或超链接中，未自动规范标点"); return; }
+    const source = tail[0].parentElement!, added = p.ownerDocument.createElementNS(WORD_NS, "w:r");
+    const properties = directChild(source, "rPr");
+    if (properties) { const copy = properties.cloneNode(true) as Element; removeChildren(copy, ["rStyle"]); added.appendChild(copy); }
+    const node = added.appendChild(p.ownerDocument.createElementNS(WORD_NS, "w:t"));
+    node.textContent = ending;
+    container.parentNode!.insertBefore(added, container.nextSibling);
+    logEdit(ctx, p, "ending");
+    return;
+  }
   rewriteLogged(ctx, p, stripped + ending, "ending");
 }
 
@@ -1449,7 +1533,7 @@ function signatureLines(ctx: Ctx, blocks: Block[]): Block[] {
     if (!group.length || group[0].role !== key || !values.length) continue;
     const expected = countryLineText(key, values, ctx.language);
     const written = group.map(b => paragraphText(b.p)).join("");
-    if (written.replace(/\s+/g, "") !== expected.replace(/\s+/g, "") || group.some(b => hasComplexContent(b.p))) continue;
+    if (written.replace(/\s+/g, "") !== expected.replace(/\s+/g, "") || group.some(b => hasComplexContent(b.p) || carriesSemanticMarks(b.p))) continue;
     const label = expected.slice(0, expected.length - values.join(HB.signatureLines.separator[ctx.language]).length);
     const lines = breakCountryList(label, values, ctx.language);
     if (lines.length === 1 && group.length === 1) continue;
@@ -1663,6 +1747,8 @@ function formatInner(
   };
   const snapshot = takeSnapshot(document);
   const keptHidden = stripUniformDamage(document, parts);
+  // After the whole-document damage is cleared: what stays hidden or struck must stay so.
+  const marks = semanticMarks(document);
 
   configurePage(document);
   configureStyles(parts, ctx);
@@ -1685,14 +1771,14 @@ function formatInner(
   handbookNotes(parts, ctx.eastAsia);
   normalizeFontParts(parts, ctx.language);
 
-  const problems = verifyFormat(snapshot, document, ctx.editLog, TITLE_WORDS(ctx.type), [...POLICY.metadata.committee.aliases, ...POLICY.metadata.topic.aliases]);
+  const problems = [...verifyFormat(snapshot, document, ctx.editLog, TITLE_WORDS(ctx.type), [...POLICY.metadata.committee.aliases, ...POLICY.metadata.topic.aliases]), ...verifyMarks(marks, document)];
   parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
   const output = zipSync(parts, { level: 6 });
   const packageProblems = verifyPackage(originalBytes, output);
   const sizeIssues = runSizeIssues(ctx);
   const validations: BrowserValidation[] = [
     { code: "docx_package", label: "DOCX 包结构", status: "pass", detail: "必要的 Word 部件完整。" },
-    { code: "content", label: "逐段严格内容校验（文字、域、链接、书签、脚注、修订）", status: problems.length ? "error" : "pass", detail: problems.slice(0, 6).join("；") || "只允许句末标点、标题用词、页首标签和国家名单顺序/断行等记录在案的修改。" },
+    { code: "content", label: "逐段严格内容校验（文字、域、链接、书签、脚注、修订、隐藏与删除线）", status: problems.length ? "error" : "pass", detail: problems.slice(0, 6).join("；") || "只允许句末标点、标题用词、页首标签和国家名单顺序/断行等记录在案的修改。" },
     { code: "package", label: "链接目标、关系与嵌入资源逐项保留", status: packageProblems.length ? "error" : "pass", detail: packageProblems.slice(0, 6).join("；") || "每个关系的目标、类型、模式及每个图片 / 嵌入对象的字节均与原稿一致。" },
     { code: "font_size", label: "正文与编号字号", status: sizeIssues ? "error" : "pass", detail: sizeIssues ? `仍有 ${sizeIssues} 个文本片段未达到规定字号。` : `正文 ${BODY_PT} 磅、参考文献与脚注 ${NOTE_PT} 磅。` },
     { code: "browser_private", label: "本地处理", status: "pass", detail: "文件在当前浏览器中处理，未发送到外部排版服务。" },

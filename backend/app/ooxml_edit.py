@@ -112,6 +112,27 @@ def has_complex_content(paragraph) -> bool:
     ) for child in paragraph._p)
 
 
+# Run properties that change what a reader sees or what the text means.
+SEMANTIC_MARKS = ("vanish", "webHidden", "specVanish", "strike", "dstrike")
+
+
+def run_has(run_element, tag: str) -> bool:
+    """A switched-on direct run property (style emphasis was made direct by structure repair)."""
+
+    node = run_element.find(f"{qn('w:rPr')}/{qn(f'w:{tag}')}")
+    return node is not None and node.get(qn("w:val")) not in ("0", "false", "off")
+
+
+def carries_semantic_marks(paragraph) -> bool:
+    """True when some of the paragraph's text is hidden or struck through.
+
+    Rebuilding such a paragraph as one new run would show hidden text and erase
+    deletion marks, so rewrites edit it in place or leave it alone.
+    """
+
+    return any(run.text and any(run_has(run._r, tag) for tag in SEMANTIC_MARKS) for run in visible_runs(paragraph))
+
+
 def flattening_is_lossless(paragraph) -> bool:
     """True when rebuilding this paragraph as a single run loses nothing.
 
@@ -121,7 +142,7 @@ def flattening_is_lossless(paragraph) -> bool:
     fields or the author's own bold/italic emphasis.
     """
 
-    if has_complex_content(paragraph):
+    if has_complex_content(paragraph) or carries_semantic_marks(paragraph):
         return False
     signatures = set()
     for run in paragraph._p.iter(qn("w:r")):

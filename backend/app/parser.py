@@ -14,6 +14,7 @@ from .semantic_policy import (
     DOCUMENT_PROFILES,
     ENGLISH_REGIONS,
     HANDBOOK,
+    LANGUAGE_RULE,
     OPERATIVE_EN,
     OPERATIVE_ZH,
     PREAMBLE_EN,
@@ -38,9 +39,11 @@ COUNTRY_FIELDS = ("sponsors", "signatories")
 
 
 def detect_language(text: str) -> str:
+    """Shared policy ``language`` (browser detectLanguage)."""
+
     zh_count = len(ZH_RE.findall(text))
     latin_count = len(re.findall(r"[A-Za-z]", text))
-    return "zh" if zh_count >= max(2, latin_count // 4) else "en"
+    return "zh" if zh_count >= max(LANGUAGE_RULE["minCjk"], latin_count // LANGUAGE_RULE["latinPerCjk"]) else "en"
 
 
 def split_countries(value: str) -> list[str]:
@@ -281,6 +284,7 @@ class DocxParser:
             header_candidates = [
                 index for index in nonempty_indices
                 if title_index < index < first_labeled_metadata
+                and index < limit
                 and not MANUAL_NUMBER_RE.match(texts[index])
                 and len(texts[index]) <= 80
                 and not re.search(r"[。！？!?；;]", texts[index])
@@ -325,8 +329,18 @@ class DocxParser:
         metadata_indices = {item for indices in model.metadata_paragraph_indices.values() for item in indices}
         first_top_level = None
         if document_type == "draft-resolution":
+            # A typed "第一条" / "1." or a top-level Word list number starts the
+            # operative clauses (browser parseDocxInBrowser): a resolution numbered
+            # only by Word has no typed marker, and its "呼吁/支持/希望" clauses
+            # were then read as preambulatory because those verbs are in both lists.
             first_top_level = next(
-                (index for index, text in enumerate(texts) if index >= body_start and TOP_LEVEL_NUMBER_RE.match(text)),
+                (
+                    index for index, text in enumerate(texts)
+                    if index >= body_start and text and index not in metadata_indices
+                    and (TOP_LEVEL_NUMBER_RE.match(text) or (
+                        active_num_id(source[index]) is not None and _numbering_semantic_level(source[index]) == 0
+                    ))
+                ),
                 None,
             )
             # Some committee examples omit the literal "第一条" while later

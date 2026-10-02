@@ -65,7 +65,8 @@ def validate_docx_package(content: bytes) -> None:
             if archive.testzip() is not None:
                 raise InvalidDocxError("DOCX 压缩包校验失败。")
             for info in infos:
-                if not info.filename.endswith((".xml", ".rels")):
+                # Any case: Word reads "header1.XML" as XML too.
+                if not info.filename.lower().endswith((".xml", ".rels")):
                     continue
                 # Scanning the raw bytes avoids the two full-size string copies
                 # that ``.decode().upper()`` needed for a 100 MB part.

@@ -14,11 +14,11 @@ from . import content_guard
 from .docx_view import active_num_id, all_paragraphs, body_paragraphs, invalidate as invalidate_paragraph_cache, visible_text
 from .fonts import rpr_child
 from .ooxml_edit import edit_visible_text, has_complex_content
-from .parser import MANUAL_NUMBER_RE
-from .semantic_policy import label_value
+from .parser import MANUAL_NUMBER_RE, detect_language
+from .semantic_policy import META_LABELS, label_value, starts_body
 
 
-POSITION_LABELS = ("委员会", "议题", "国家", "代表")
+POSITION_KEYS = ("committee", "topic", "country", "delegate")
 POSITION_SECTION_RE = re.compile(r"^\s*[（(]([一二三四五六七八九十百]+)[）)]")
 EMBEDDED_RESOLUTION_MARKER_RE = re.compile(
     r"(?<=[：:；;])\s*(?P<marker>[（(](?:[一二三四五六七八九十百]{1,3}|"
@@ -229,7 +229,12 @@ def _repair_position_header(document) -> list[RepairAction]:
     if any(recognized):
         return []
     candidate_texts = [visible_text(paragraphs[index]).strip() for index in candidates]
+    # A numbered heading or a sentence is body text (shared headerBoundary):
+    # labeling it would turn "一、问题背景" into the delegate.
+    if any(starts_body(text) for text in candidate_texts):
+        return []
     has_body_punctuation = any(re.search(r"[。；;！？!?]", text) for text in candidate_texts)
+    language = detect_language("\n".join(visible_text(paragraph) for paragraph in paragraphs))
     lengths_ok = all(1 <= len(text) <= 80 for text in candidate_texts)
     confidence = 0.97 if lengths_ok and not has_body_punctuation else 0.58
     actions: list[RepairAction] = []
@@ -239,7 +244,8 @@ def _repair_position_header(document) -> list[RepairAction]:
         if key:
             continue
         value = visible_text(paragraph).strip().lstrip("：:").strip()
-        replacement = f"{POSITION_LABELS[slot]}：{value}"
+        label = META_LABELS[language][POSITION_KEYS[slot]]
+        replacement = f"{label}: {value}" if language == "en" else f"{label}：{value}"
         original = visible_text(paragraph)
         applied = confidence >= REPAIR_THRESHOLD and _rewrite_text(paragraph, replacement)
         actions.append(RepairAction("立场文件四行页首标签", index, confidence, original if not applied else value, replacement, applied))
@@ -331,6 +337,7 @@ def _split_embedded_resolution_markers(document) -> list[RepairAction]:
                 try:
                     _break_line_before(current, len(prefix), match.start("marker"))
                 except _Unsplittable:
+                    actions.append(RepairAction(UNSPLIT_CODE, original_index, confidence, text, text, False))
                     break
                 actions.append(RepairAction("决议案内嵌一级条款标记", original_index, confidence, text, replacement, True))
                 # Keep scanning after the new line: a deeper subclause can be
@@ -340,6 +347,7 @@ def _split_embedded_resolution_markers(document) -> list[RepairAction]:
             try:
                 current = _move_to_new_paragraph(current, len(prefix), match.start("marker"))
             except _Unsplittable:
+                actions.append(RepairAction(UNSPLIT_CODE, original_index, confidence, text, text, False))
                 break
             position = 0
             actions.append(RepairAction("决议案内嵌深层条款标记", original_index, confidence, text, f"{prefix}\n{suffix}", True))
@@ -383,8 +391,12 @@ def _restore_dropped_first_list_item(document) -> list[RepairAction]:
 
 # Run children that contribute visible text, as python-docx's Run.text reads them.
 _RUN_TEXT_TAGS = frozenset(qn(tag) for tag in ("w:t", "w:tab", "w:br", "w:cr", "w:noBreakHyphen", "w:ptab"))
-# Inline wrappers a split may cut through; the cut copies the wrapper.
-_SPLITTABLE = frozenset(qn(tag) for tag in ("w:hyperlink", "w:ins", "w:moveTo", "w:smartTag", "w:customXml"))
+# Inline wrappers a split may cut through; the cut copies the wrapper.  A link
+# or a tracked change is not cut: a copied hyperlink or revision is new
+# structure the repair check refuses, which withheld the whole document.  The
+# paragraph is kept as written and reported, as the browser engine does.
+_SPLITTABLE = frozenset(qn(tag) for tag in ("w:smartTag", "w:customXml"))
+UNSPLIT_CODE = "决议案内嵌条款标记（位于链接或修订中，未拆分）"
 # Wrappers whose content is not shown.
 _NOT_SHOWN = frozenset(qn(tag) for tag in ("w:del", "w:moveFrom"))
 

@@ -12,6 +12,7 @@
  * so text that looks like markup cannot be confused with structure.
  */
 import { unzipSync } from "fflate";
+import { decodeXml } from "./docx-safety.ts";
 
 export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const FORMATTING = new Set(["pPr", "rPr", "tblPr", "trPr", "tcPr", "tblGrid", "sectPr", "tblPrEx"]);
@@ -267,6 +268,50 @@ export function verifyFormat(before: Snapshot, document: Document, editLog: Map<
   return problems;
 }
 
+// ------------------------------------------------------- visibility and deletion marks
+
+/** Run properties that change what a reader sees or what the text means.
+ * The signatures above leave run properties out, so they are checked here on
+ * their own: a hidden note must not become visible, a struck deletion must not
+ * lose its strike (content_guard.semantic_marks). */
+const HIDDEN = ["vanish", "webHidden", "specVanish"], STRUCK = ["strike", "dstrike"];
+const markOn = (run: Element, tags: string[]) => {
+  const rPr = Array.from(run.children).find(c => c.namespaceURI === W_NS && c.localName === "rPr");
+  return Boolean(rPr) && Array.from(rPr!.children).some(c => c.namespaceURI === W_NS && tags.includes(c.localName)
+    && !["0", "false", "off"].includes(c.getAttributeNS(W_NS, "val") || ""));
+};
+function marksOf(element: Element): [string, string] {
+  let hidden = "", struck = "";
+  for (const run of Array.from(element.getElementsByTagNameNS(W_NS, "r"))) {
+    let deleted = false;
+    for (let a = run.parentElement; a && a !== element; a = a.parentElement) if (a.namespaceURI === W_NS && ["del", "moveFrom"].includes(a.localName)) deleted = true;
+    if (deleted) continue;
+    const text = Array.from(run.children).filter(c => c.namespaceURI === W_NS && c.localName === "t").map(c => c.textContent || "").join("");
+    if (markOn(run, HIDDEN)) hidden += text;
+    if (markOn(run, STRUCK)) struck += text;
+  }
+  return [hidden, struck];
+}
+export type Marks = Map<Element, [string, string]>;
+export function semanticMarks(document: Document): Marks {
+  return new Map(bodyBlocks(document).map(el => [el, marksOf(el)]));
+}
+const keeps = (before: string, after: string) => { let i = 0; for (const ch of after) if (i < before.length && ch === before[i]) i++; return i === before.length; };
+/** Hidden and struck characters survive, in order, in the same block. */
+export function verifyMarks(before: Marks, document: Document): string[] {
+  const present = new Set(bodyBlocks(document)), problems: string[] = [];
+  let number = 0;
+  for (const [el, [hidden, struck]] of before) {
+    number++;
+    if (!hidden && !struck) continue;
+    if (!present.has(el)) { problems.push(`第 ${number} 段含隐藏或删除线文字，但该段被删除`); continue; }
+    const [nowHidden, nowStruck] = marksOf(el);
+    if (!keeps(hidden, nowHidden)) problems.push(`第 ${number} 段的隐藏文字会变为可见：${hidden.slice(0, 20)}`);
+    if (!keeps(struck, nowStruck)) problems.push(`第 ${number} 段的删除线被移除：${struck.slice(0, 20)}`);
+  }
+  return problems;
+}
+
 /** Structure of a paragraph without its visible characters (for rolling back an edit). */
 export const structureOf = (element: Element) => key(structureOnly(signature(element)));
 
@@ -282,7 +327,7 @@ function packageRelations(parts: Record<string, Uint8Array>) {
   const relations = new Map<string, Map<string, string>>();
   for (const [name, bytes] of Object.entries(parts)) {
     if (!name.endsWith(".rels")) continue;
-    const xml = new DOMParser().parseFromString(new TextDecoder().decode(bytes), "application/xml");
+    const xml = new DOMParser().parseFromString(decodeXml(bytes), "application/xml");
     const map = new Map<string, string>();
     for (const rel of Array.from(xml.getElementsByTagName("Relationship"))) {
       const attrs = Array.from(rel.attributes).map(a => [a.name, a.value]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
@@ -305,7 +350,7 @@ export function verifyPackage(before: Uint8Array, after: Uint8Array): string[] {
     if (name.startsWith("word/media/") || name.startsWith("word/embeddings/")) {
       if (!sameBytes(bytes, newParts[name])) problems.push(`资源 ${name} 的内容发生变化`);
     } else if (/^word\/(?:numbering|footnotes|endnotes|comments|header\d+|footer\d+)\.xml$/.test(name)) {
-      const parse = (data: Uint8Array) => new DOMParser().parseFromString(new TextDecoder().decode(data), "application/xml").documentElement;
+      const parse = (data: Uint8Array) => new DOMParser().parseFromString(decodeXml(data), "application/xml").documentElement;
       if (!newParts[name] || key(signature(parse(bytes))) !== key(signature(parse(newParts[name])))) problems.push(`部件 ${name} 的内容或编号语义发生变化`);
     }
   }

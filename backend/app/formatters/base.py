@@ -42,7 +42,7 @@ from ..docx_view import (
 from ..fingerprint import canonical_body, visible_text_signature
 from ..fonts import LATIN_FONT, normalize_font_parts, rpr_child, set_house_fonts
 from ..models import Clause, IntermediateDocument, ValidationItem
-from ..ooxml_edit import edit_visible_text, flattening_is_lossless, has_complex_content, style_text_range
+from ..ooxml_edit import carries_semantic_marks, edit_visible_text, flattening_is_lossless, has_complex_content, style_text_range
 from ..parser import MANUAL_NUMBER_RE
 from ..semantic_policy import (
     ANY_LABEL_PATTERN,
@@ -200,6 +200,8 @@ class BaseFormatter(HandbookPassMixin):
         before = ContentSnapshot.take(document)
         strict_before = content_guard.Snapshot.take(document)
         self._kept_hidden = _strip_uniform_damage(document)
+        # After the whole-document damage is cleared: what stays hidden or struck must stay so.
+        marks_before = content_guard.semantic_marks(document)
         self._configure_page(document, model.language)
         self._configure_styles(document, model.language)
         self._format_document(
@@ -216,7 +218,7 @@ class BaseFormatter(HandbookPassMixin):
             self._edit_log,
             allowed_titles=TITLES[self.document_type],
             labels=META_ALIASES["committee"] + META_ALIASES["topic"],
-        )
+        ) + content_guard.verify_marks(marks_before, document)
         validations = self._validate(document, model, before, after, preserve_country_order)
         output = BytesIO()
         document.save(output)
@@ -560,7 +562,7 @@ class BaseFormatter(HandbookPassMixin):
             # must be plain text.  Rewriting the first line while a complex
             # continuation stayed would duplicate names; clearing plain
             # continuations after a refused rewrite would delete them.
-            complex_part = next((item for item in [paragraph, *continuations] if has_complex_content(item)), None)
+            complex_part = next((item for item in [paragraph, *continuations] if has_complex_content(item) or carries_semantic_marks(item)), None)
             if complex_part is None:
                 self._write_country_line(paragraph, key, list(values), language)
                 expected = self._country_line_text(key, list(values), language)
@@ -571,9 +573,9 @@ class BaseFormatter(HandbookPassMixin):
                 return
             if key in self._changed_fields:
                 raise ProtectedContentError(
-                    self._source_number(complex_part), "第 03 步修改了国家名单，但名单含图片、域或修订痕迹，不能安全改写"
+                    self._source_number(complex_part), "第 03 步修改了国家名单，但名单含图片、域、修订痕迹或隐藏/删除线文字，不能安全改写"
                 )
-            self._protect(complex_part, "国家列表含图片、域或修订痕迹，未重写")
+            self._protect(complex_part, "国家列表含图片、域、修订痕迹或隐藏/删除线文字，未重写")
         self._style_labeled_paragraph(paragraph, key, language, value_emphasis=True)
         for continuation in continuations:
             self._format_runs(continuation, language, bold=True, italic=True, underline=False)
@@ -651,14 +653,17 @@ class BaseFormatter(HandbookPassMixin):
         if has_complex_content(paragraph):
             self._protect(paragraph, "元数据段含图片或域，未重写标签")
             return False
+        if carries_semantic_marks(paragraph):
+            self._protect(paragraph, "元数据段含隐藏或删除线文字，改写会改变其显示或删除含义，未重写")
+            return False
         paragraph.clear()
         run = paragraph.add_run(self._label_value_text(key, value, language))
         self._format_run(run, language, bold=False, italic=False, underline=False)
         return True
 
     def _write_country_line(self, paragraph: Paragraph, key: str, values: list[str], language: str) -> None:
-        if has_complex_content(paragraph):
-            self._protect(paragraph, "国家列表段含图片或域，未重写")
+        if has_complex_content(paragraph) or carries_semantic_marks(paragraph):
+            self._protect(paragraph, "国家列表段含图片、域或隐藏/删除线文字，未重写")
             return
         paragraph.clear()
         self._add_label_run(paragraph, key, language)
@@ -783,7 +788,7 @@ class BaseFormatter(HandbookPassMixin):
             # and signing lines) may differ.
             ValidationItem(
                 "content",
-                "逐段严格内容校验（文字、域、链接、书签、脚注、修订）",
+                "逐段严格内容校验（文字、域、链接、书签、脚注、修订、隐藏与删除线）",
                 "pass" if not problems else "error",
                 "；".join(problems[:6]) if problems else "只允许句末标点、标题用词、页首标签和国家名单顺序/断行等记录在案的修改。",
             ),
