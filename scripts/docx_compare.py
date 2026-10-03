@@ -18,6 +18,8 @@ from lxml import etree
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 NS = {"w": W, "a": A}
+# Compared files may come from anywhere: no entities, no network (as the engines parse).
+PARSER = etree.XMLParser(resolve_entities=False, no_network=True)
 
 
 def q(tag):
@@ -286,7 +288,7 @@ class Styles:
 
 def theme_fonts(zf):
     try:
-        root = etree.fromstring(zf.read("word/theme/theme1.xml"))
+        root = etree.fromstring(zf.read("word/theme/theme1.xml"), PARSER)
     except KeyError:
         return {}
     out = {}
@@ -342,14 +344,14 @@ def _run_text(run):
 
 def load(content: bytes) -> DocModel:
     zf = zipfile.ZipFile(BytesIO(content))
-    doc = etree.fromstring(zf.read("word/document.xml"))
+    doc = etree.fromstring(zf.read("word/document.xml"), PARSER)
     theme = theme_fonts(zf)
     try:
-        styles = Styles(etree.fromstring(zf.read("word/styles.xml")), theme)
+        styles = Styles(etree.fromstring(zf.read("word/styles.xml"), PARSER), theme)
     except KeyError:
         styles = Styles(None, theme)
     try:
-        numbering = Numbering(etree.fromstring(zf.read("word/numbering.xml")))
+        numbering = Numbering(etree.fromstring(zf.read("word/numbering.xml"), PARSER))
     except KeyError:
         numbering = Numbering(None)
     body = doc.find(q("body"))

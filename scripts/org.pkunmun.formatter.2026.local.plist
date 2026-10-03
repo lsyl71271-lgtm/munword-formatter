@@ -18,7 +18,7 @@
   <key>ProcessType</key>
   <string>Background</string>
   <key>ThrottleInterval</key>
-  <integer>5</integer>
+  <integer>60</integer>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PYTHONUNBUFFERED</key>

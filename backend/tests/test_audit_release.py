@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_mac_app_reports_the_release_version(self):
+        info = plistlib.loads((ROOT / "PKUNMUN 2026 文件排版系统.app" / "Contents" / "Info.plist").read_bytes())
+        self.assertEqual(info["CFBundleShortVersionString"], (ROOT / "VERSION").read_text(encoding="utf-8").strip())
+
     def test_release_package_refuses_uncommitted_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             clone = Path(directory) / "clone"
