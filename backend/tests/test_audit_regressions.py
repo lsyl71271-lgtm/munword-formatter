@@ -223,7 +223,91 @@ class StepThreeTests(unittest.TestCase):
                 self.assertIn(expected, [text_of(p) for p in body(result.content).iter(q("p"))])
 
 
+def shown(element) -> str:
+    """Visible text with line breaks and tabs, as a reader sees it."""
+
+    out = []
+    for node in element.iter(q("t"), q("br"), q("tab")):
+        if any(a.tag == q("del") for a in node.iterancestors()):
+            continue
+        out.append(node.text or "" if node.tag == q("t") else "\n" if node.tag == q("br") else "\t")
+    return "".join(out)
+
+
+def shown_from(content: bytes, start: str) -> list[str]:
+    texts = [shown(p) for p in body(content).iter(q("p")) if shown(p).strip()]
+    return texts[next(index for index, text in enumerate(texts) if text.startswith(start)):]
+
+
+def warnings(result) -> list[str]:
+    return [item.detail for item in result.validations if item.status == "warning"]
+
+
+FLATTENED = "第一条 决定设立工作组：（一）调查网络攻击：（子）收集证据；（丑）提交报告；（二）提出建议。"
+SPLIT = ["第一条 决定设立工作组：\n（一）调查网络攻击：", "（子）收集证据；", "（丑）提交报告；", "（二）提出建议"]
+
+
 class SplitTests(unittest.TestCase):
+    """B11: one splitting rule for both engines (shared policy ``embeddedSubclause``)."""
+
+    def assertSplit(self, result, expected, start="第一条"):
+        """Paragraphs read ``expected``; an item without its ending may gain one punctuation mark."""
+
+        self.assertEqual(errors(result), [])
+        texts = shown_from(result.content, start)[: len(expected)]
+        self.assertEqual(len(texts), len(expected), texts)
+        for text, wanted in zip(texts, expected):
+            self.assertTrue(text == wanted or (text[:-1] == wanted and not wanted.endswith(("：", "；", "。"))), texts)
+
+    def test_level_one_marker_after_a_deeper_subclause_starts_its_own_paragraph(self):
+        content = package(lines(ZH_DR + [FLATTENED, "第二条 决定继续审议此问题。"]))
+        result = format_("draft-resolution", content)
+        self.assertSplit(result, SPLIT)
+        self.assertTrue(shown_from(result.content, "第一条")[4].startswith("第二条"))
+        again = format_("draft-resolution", result.content)
+        self.assertEqual(shown_from(again.content, "第一条"), shown_from(result.content, "第一条"))
+
+    def test_links_and_revisions_wholly_inside_one_subclause_do_not_block_the_split(self):
+        rels = '<Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://www.un.org/" TargetMode="External"/>'
+        link = f'<w:hyperlink r:id="rIdLink">{run("联合国网站")}</w:hyperlink>'
+        linked = "<w:p>" + run("第一条 决定设立工作组：（一）调查网络攻击：（子）收集证据，参见") + link + run("；（丑）提交报告；（二）提出建议。") + "</w:p>"
+        result = format_("draft-resolution", package(lines(ZH_DR) + linked, rels=rels))
+        self.assertSplit(result, [SPLIT[0], "（子）收集证据，参见联合国网站；", *SPLIT[2:]])
+        self.assertEqual(len(list(body(result.content).iter(q("hyperlink")))), 1)
+        insertion = f'<w:ins w:id="21" w:author="A" w:date="2026-01-01T00:00:00Z">{run("（子）收集证据；")}</w:ins>'
+        revised = "<w:p>" + run("第一条 决定设立工作组：（一）调查网络攻击：") + insertion + run("（丑）提交报告；（二）提出建议。") + "</w:p>"
+        result = format_("draft-resolution", package(lines(ZH_DR) + revised))
+        self.assertSplit(result, SPLIT)
+        self.assertEqual(len(list(body(result.content).iter(q("ins")))), 1)
+
+    def test_working_papers_and_directives_split_by_the_same_rule(self):
+        header = ["委员会：安全理事会", "议题：网络安全", "起草国：德国、法国"]
+        result = format_("working-paper", package(lines(["工作文件", *header, "1. 呼吁各国加强合作：（子）建立信息共享机制；（丑）定期举行会议。"])))
+        self.assertSplit(result, ["1. 呼吁各国加强合作：", "（子）建立信息共享机制；", "（丑）定期举行会议"], "1.")
+        result = format_("draft-directive", package(lines(["指令草案", *header, "1. 要求各部门：（一）提交报告；（二）说明进展。"])))
+        self.assertSplit(result, ["1. 要求各部门：", "（一）提交报告；", "（二）说明进展"], "1.")
+
+    def test_markers_outside_a_clause_or_in_a_field_paragraph_are_reported_not_split(self):
+        prose = "回顾其以往决议：（一）第1号决议；（二）第2号决议，"
+        result = format_("draft-resolution", package(lines(ZH_DR[:-1] + [prose, "第一条 决定继续审议此问题。"])))
+        self.assertEqual(errors(result), [])
+        self.assertEqual(shown_from(result.content, "回顾")[0], prose)
+        self.assertTrue(any("第 7 段" in item and "未拆分" in item for item in warnings(result)), warnings(result))
+        field = '<w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>'
+        clause = "<w:p>" + run("第一条 决定设立工作组：（子）收集证据；参见第") + field + run("页。") + "</w:p>"
+        result = format_("draft-resolution", package(lines(ZH_DR) + clause))
+        self.assertEqual(errors(result), [])
+        self.assertTrue(shown_from(result.content, "第一条")[0].startswith("第一条 决定设立工作组：（子）收集证据；"))
+        self.assertTrue(any("第 8 段" in item and "域" in item and "未拆分" in item for item in warnings(result)), warnings(result))
+
+    def test_a_section_break_moves_to_the_last_split_paragraph(self):
+        section = '<w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:pPr>'
+        clause = f"<w:p>{section}{run('第一条 决定设立工作组：（子）收集证据；（丑）提交报告。')}</w:p>"
+        result = format_("draft-resolution", package(lines(ZH_DR) + clause + line("第二条 决定继续审议此问题。")))
+        self.assertEqual(errors(result), [])
+        breaks = [p for p in body(result.content).iter(q("p")) if p.find(f"{q('pPr')}/{q('sectPr')}") is not None]
+        self.assertEqual([shown(p) for p in breaks], ["（丑）提交报告；"])
+
     def test_link_across_an_embedded_marker_is_kept_and_reported(self):
         rels = '<Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://www.un.org/" TargetMode="External"/>'
         link = f'<w:hyperlink r:id="rIdLink">{run("收集证据；（丑）提交报告")}</w:hyperlink>'

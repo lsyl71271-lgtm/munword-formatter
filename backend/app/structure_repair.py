@@ -15,18 +15,16 @@ from .docx_view import active_num_id, all_paragraphs, body_paragraphs, invalidat
 from .fonts import rpr_child
 from .ooxml_edit import edit_visible_text, has_complex_content
 from .parser import MANUAL_NUMBER_RE, detect_language
-from .semantic_policy import META_LABELS, label_value, starts_body
+from .semantic_policy import EMBEDDED_SUBCLAUSE, META_LABELS, label_value, starts_body
 
 
 POSITION_KEYS = ("committee", "topic", "country", "delegate")
 POSITION_SECTION_RE = re.compile(r"^\s*[（(]([一二三四五六七八九十百]+)[）)]")
-EMBEDDED_RESOLUTION_MARKER_RE = re.compile(
-    r"(?<=[：:；;])\s*(?P<marker>[（(](?:[一二三四五六七八九十百]{1,3}|"
-    r"[子丑寅卯辰巳午未申酉戌亥]{1,4}|[甲乙丙丁戊己庚辛壬癸]{1,4})[）)])"
-)
-OPERATIVE_START_RE = re.compile(
-    r"^\s*(?:第[一二三四五六七八九十百]+条\s*)?(?:决定|呼吁|敦促|鼓励|建议|要求|支持|希望|推动|关于|申明|强调)"
-)
+# Shared policy ``embeddedSubclause``: the browser engine applies the same rule.
+_SUBCLAUSE_MARKER_RE = re.compile(EMBEDDED_SUBCLAUSE["marker"])
+_FIRST_LEVEL_RE = re.compile(EMBEDDED_SUBCLAUSE["firstLevel"])
+_ARTICLE_RE = re.compile(EMBEDDED_SUBCLAUSE["article"])
+_CLAUSE_RE = re.compile(EMBEDDED_SUBCLAUSE["clause"])
 REPAIR_THRESHOLD = 0.9
 _LIST_ITEM_END_RE = re.compile(r"[；;。.]$")
 
@@ -88,10 +86,9 @@ def repair_structure_with_report(content: bytes, document_type: str) -> Structur
     if document_type == "position-paper":
         actions.extend(_repair_position_header(document))
         actions.extend(_repair_first_position_section(document))
-    elif document_type == "draft-resolution":
-        actions.extend(_split_embedded_resolution_markers(document))
-        actions.extend(_restore_dropped_first_list_item(document))
-    elif document_type == "working-paper":
+    if document_type in EMBEDDED_SUBCLAUSE["documentTypes"]:
+        actions.extend(_split_embedded_subclauses(document))
+    if document_type in ("draft-resolution", "working-paper"):
         actions.extend(_restore_dropped_first_list_item(document))
     if not normalized and not any(action.applied for action in actions):
         return StructureRepairResult(content, tuple(actions))
@@ -293,64 +290,54 @@ def _repair_first_position_section(document) -> list[RepairAction]:
     return []
 
 
-def _split_embedded_resolution_markers(document) -> list[RepairAction]:
+def _split_embedded_subclauses(document) -> list[RepairAction]:
+    """Split subclauses flattened into one paragraph (shared policy ``embeddedSubclause``)."""
+
     actions: list[RepairAction] = []
-    # Work on a snapshot; newly inserted paragraphs are already split at the
-    # earliest marker, and the loop below handles any later marker recursively.
+    # Work on a snapshot so reports name the paragraph as numbered in the upload.
     for original_index, paragraph in enumerate(list(body_paragraphs(document))):
         current = paragraph
         position = 0
         while True:
             text = visible_text(current)
-            match = EMBEDDED_RESOLUTION_MARKER_RE.search(text, position)
-            if not match or match.start("marker") == 0:
+            match = _SUBCLAUSE_MARKER_RE.search(text, position)
+            if not match:
                 break
-            separator = text[match.start() : match.start("marker")]
+            marker_start = match.start(3)
             # Tabs and manual line breaks are deliberate visible structure in
             # several valid reference files.  They are not evidence that a
             # marker was accidentally flattened into prose; a later marker in
             # the same paragraph still can be.
-            if "\t" in separator or "\n" in separator:
+            if "\t" in match.group(2) or "\n" in match.group(2):
                 position = match.end()
                 continue
-            prefix = text[: match.start("marker")].rstrip()
-            suffix = text[match.start("marker") :].lstrip()
-            if not prefix or not suffix:
+            keep = len(text[:marker_start].rstrip())
+            before = text
+            # An automatically numbered clause is a clause even though its
+            # marker is not part of the text.
+            if not (_CLAUSE_RE.match(text) or active_num_id(current) is not None):
+                actions.append(RepairAction(CONTEXT_CODE, original_index, 0.62, before, before, False))
                 break
-            inner = re.sub(r"[（）()]", "", match.group("marker"))
-            structural_context = bool(
-                OPERATIVE_START_RE.match(prefix)
-                # An automatically numbered clause is a clause even though its
-                # marker is not part of the text.
-                or active_num_id(current) is not None
-                or re.match(r"^\s*(?:第[一二三四五六七八九十百]+条|[（(][一二三四五六七八九十百子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)])", prefix)
-            )
-            confidence = 0.96 if structural_context else 0.62
-            applied = confidence >= REPAIR_THRESHOLD and _can_cut(current)
-            if not applied:
-                actions.append(RepairAction("决议案内嵌条款标记", original_index, confidence, text, text, False))
+            if not _can_cut(current):
+                actions.append(RepairAction(FIELD_CODE, original_index, 0.96, before, before, False))
                 break
-            if re.fullmatch(r"[一二三四五六七八九十百]{1,3}", inner):
-                # First-level subclauses in the reference convention begin on
-                # a new visual line inside the article paragraph.
-                replacement = f"{prefix}\n{suffix}"
-                try:
-                    _break_line_before(current, len(prefix), match.start("marker"))
-                except _Unsplittable:
-                    actions.append(RepairAction(UNSPLIT_CODE, original_index, confidence, text, text, False))
-                    break
-                actions.append(RepairAction("决议案内嵌一级条款标记", original_index, confidence, text, replacement, True))
-                # Keep scanning after the new line: a deeper subclause can be
-                # flattened into the same article.
-                position = len(prefix) + 1 + len(match.group("marker"))
-                continue
+            marker = match.group(3)
+            after = f"{text[:keep]}\n{text[marker_start:]}"
             try:
-                current = _move_to_new_paragraph(current, len(prefix), match.start("marker"))
+                if _FIRST_LEVEL_RE.match(marker) and current is paragraph and _ARTICLE_RE.match(text):
+                    # First-level subclauses in the reference convention begin
+                    # on a new visual line inside the article paragraph.
+                    _break_line_before(current, keep, marker_start)
+                    position = keep + 1 + len(marker)
+                    code = "内嵌一级条款标记"
+                else:
+                    current = _move_to_new_paragraph(current, keep, marker_start)
+                    position = 0
+                    code = "内嵌深层条款标记"
             except _Unsplittable:
-                actions.append(RepairAction(UNSPLIT_CODE, original_index, confidence, text, text, False))
+                actions.append(RepairAction(UNSPLIT_CODE, original_index, 0.96, before, before, False))
                 break
-            position = 0
-            actions.append(RepairAction("决议案内嵌深层条款标记", original_index, confidence, text, f"{prefix}\n{suffix}", True))
+            actions.append(RepairAction(code, original_index, 0.96, before, after, True))
     return actions
 
 
@@ -396,13 +383,15 @@ _RUN_TEXT_TAGS = frozenset(qn(tag) for tag in ("w:t", "w:tab", "w:br", "w:cr", "
 # structure the repair check refuses, which withheld the whole document.  The
 # paragraph is kept as written and reported, as the browser engine does.
 _SPLITTABLE = frozenset(qn(tag) for tag in ("w:smartTag", "w:customXml"))
-UNSPLIT_CODE = "决议案内嵌条款标记（位于链接或修订中，未拆分）"
+UNSPLIT_CODE = "内嵌条款标记（位于链接或修订中，未拆分）"
+CONTEXT_CODE = "内嵌条款标记（所在段落不是条款，未拆分）"
+FIELD_CODE = "内嵌条款标记（段落含域或内容控件，未拆分）"
 # Wrappers whose content is not shown.
 _NOT_SHOWN = frozenset(qn(tag) for tag in ("w:del", "w:moveFrom"))
 
 
 class _Unsplittable(Exception):
-    """The split point falls inside a field or content control."""
+    """The split point falls inside a link, a tracked change or another wrapper that is not copied."""
 
 
 def _visible_length(element) -> int:
@@ -539,6 +528,11 @@ def _move_to_new_paragraph(paragraph, keep: int, resume_at: int):
         for tag in ("w:numPr", "w:ind"):
             for node in list(p.iter(qn(tag))):
                 node.getparent().remove(node)
+        # A section break belongs to the paragraph that ends the section, now
+        # the new one; a copy left behind would start an extra section.
+        section = paragraph._p.pPr.find(qn("w:sectPr"))
+        if section is not None:
+            paragraph._p.pPr.remove(section)
     for child in list(paragraph._p)[index:]:
         if child.tag == qn("w:pPr"):
             continue

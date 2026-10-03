@@ -138,6 +138,74 @@ test("a natively numbered clause ending in a colon does not demote its siblings"
   assert.equal(left("Requests"), left("Decides to establish"));
 });
 
+// ---------------------------------------------------------------- B11 embedded subclauses
+
+/** Visible text with line breaks and tabs, as a reader sees it. */
+const shown = p => [...p.getElementsByTagNameNS(W, "*")].filter(n => ["t", "br", "tab"].includes(n.localName) && !n.closest("del"))
+  .map(n => n.localName === "t" ? n.textContent : n.localName === "br" ? "\n" : "\t").join("");
+const shownFrom = (xml, start) => { const texts = nodes(xml, "p").map(shown).filter(t => t.trim()); return texts.slice(texts.findIndex(t => t.startsWith(start))); };
+const warningsOf = result => result.validations.filter(v => v.status === "warning").map(v => v.detail);
+/** Paragraphs read ``expected``; an item without its ending may gain one punctuation mark. */
+async function assertSplit(result, expected, start = "第一条") {
+  assert.deepEqual(errors(result), []);
+  const texts = shownFrom(await documentOf(result), start).slice(0, expected.length);
+  assert.equal(texts.length, expected.length, JSON.stringify(texts));
+  texts.forEach((text, index) => assert.ok(text === expected[index] || (text.slice(0, -1) === expected[index] && !/[：；。]$/.test(expected[index])), JSON.stringify(texts)));
+}
+const FLATTENED = "第一条 决定设立工作组：（一）调查网络攻击：（子）收集证据；（丑）提交报告；（二）提出建议。";
+const SPLIT = ["第一条 决定设立工作组：\n（一）调查网络攻击：", "（子）收集证据；", "（丑）提交报告；", "（二）提出建议"];
+
+test("a level-one marker after a deeper subclause starts its own paragraph", async () => {
+  const result = format(archive(ZH_DR + line(FLATTENED) + line("第二条 决定继续审议此问题。")), "draft-resolution");
+  await assertSplit(result, SPLIT);
+  const first = await documentOf(result);
+  assert.ok(shownFrom(first, "第一条")[4].startsWith("第二条"));
+  const again = format((await result.blob.arrayBuffer()), "draft-resolution");
+  assert.deepEqual(shownFrom(await documentOf(again), "第一条"), shownFrom(first, "第一条"));
+});
+
+test("links and revisions wholly inside one subclause do not block the split", async () => {
+  const rels = enc.encode('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://www.un.org/" TargetMode="External"/></Relationships>');
+  const linked = `<w:p>${run("第一条 决定设立工作组：（一）调查网络攻击：（子）收集证据，参见")}<w:hyperlink r:id="rIdLink">${run("联合国网站")}</w:hyperlink>${run("；（丑）提交报告；（二）提出建议。")}</w:p>`;
+  let result = format(archive(ZH_DR + linked, { "word/_rels/document.xml.rels": rels }), "draft-resolution");
+  await assertSplit(result, [SPLIT[0], "（子）收集证据，参见联合国网站；", ...SPLIT.slice(2)]);
+  assert.equal(nodes(await documentOf(result), "hyperlink").length, 1);
+  const revised = `<w:p>${run("第一条 决定设立工作组：（一）调查网络攻击：")}<w:ins w:id="21" w:author="A" w:date="2026-01-01T00:00:00Z">${run("（子）收集证据；")}</w:ins>${run("（丑）提交报告；（二）提出建议。")}</w:p>`;
+  result = format(archive(ZH_DR + revised), "draft-resolution");
+  await assertSplit(result, SPLIT);
+  assert.equal(nodes(await documentOf(result), "ins").length, 1);
+});
+
+test("working papers and directives split by the same rule", async () => {
+  const header = ["委员会：安全理事会", "议题：网络安全", "起草国：德国、法国"];
+  let result = format(archive(["工作文件", ...header, "1. 呼吁各国加强合作：（子）建立信息共享机制；（丑）定期举行会议。"].map(t => line(t)).join("")), "working-paper");
+  await assertSplit(result, ["1. 呼吁各国加强合作：", "（子）建立信息共享机制；", "（丑）定期举行会议"], "1.");
+  result = format(archive(["指令草案", ...header, "1. 要求各部门：（一）提交报告；（二）说明进展。"].map(t => line(t)).join("")), "draft-directive");
+  await assertSplit(result, ["1. 要求各部门：", "（一）提交报告；", "（二）说明进展"], "1.");
+});
+
+test("markers outside a clause or in a field paragraph are reported, not split", async () => {
+  const prose = "回顾其以往决议：（一）第1号决议；（二）第2号决议，";
+  const preamble = ["决议草案", "委员会：安全理事会", "议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，"].map(t => line(t)).join("");
+  let result = format(archive(preamble + line(prose) + line("第一条 决定继续审议此问题。")), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  assert.equal(shownFrom(await documentOf(result), "回顾")[0], prose);
+  assert.ok(warningsOf(result).some(w => w.includes("第 7 段") && w.includes("未拆分")), JSON.stringify(warningsOf(result)));
+  const field = '<w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>';
+  result = format(archive(ZH_DR + `<w:p>${run("第一条 决定设立工作组：（子）收集证据；参见第")}${field}${run("页。")}</w:p>`), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  assert.ok(shownFrom(await documentOf(result), "第一条")[0].startsWith("第一条 决定设立工作组：（子）收集证据；"));
+  assert.ok(warningsOf(result).some(w => w.includes("第 8 段") && w.includes("域") && w.includes("未拆分")), JSON.stringify(warningsOf(result)));
+});
+
+test("a section break moves to the last split paragraph", async () => {
+  const section = '<w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:pPr>';
+  const result = format(archive(ZH_DR + `<w:p>${section}${run("第一条 决定设立工作组：（子）收集证据；（丑）提交报告。")}</w:p>` + line("第二条 决定继续审议此问题。")), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const breaks = nodes(await documentOf(result), "p").filter(p => [...p.children].some(c => c.localName === "pPr" && [...c.children].some(d => d.localName === "sectPr")));
+  assert.deepEqual(breaks.map(shown), ["（丑）提交报告；"]);
+});
+
 // ---------------------------------------------------------------- B7 step 03 and the body
 
 test("a step-03 topic change never rewrites a body heading with the old text", async () => {

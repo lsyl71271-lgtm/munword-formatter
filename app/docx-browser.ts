@@ -1,5 +1,5 @@
 import { zipSync } from "fflate";
-import { readPackage, visibleText, contentSignature, splitParagraphAt, decodeXml } from "./docx-safety.ts";
+import { readPackage, visibleText, contentSignature, decodeXml, canCut, breakLineBefore, moveToNewParagraph, Unsplittable } from "./docx-safety.ts";
 import { documentTokens, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
 import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
@@ -387,33 +387,53 @@ export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDo
     max_numbering_level: clauses.reduce((max, item) => Math.max(max, item.level), 0), warnings, paragraphs,
   };
 }
-/** Paragraph numbers whose embedded subclause could not be split (links or revisions inside). */
-let unsplit: number[] = [];
+// Shared policy embeddedSubclause (structure_repair._split_embedded_subclauses).
+const SUBCLAUSE = POLICY.embeddedSubclause;
+const SUBCLAUSE_MARKER = new RegExp(SUBCLAUSE.marker, "g"), FIRST_LEVEL = new RegExp(SUBCLAUSE.firstLevel);
+const ARTICLE = new RegExp(SUBCLAUSE.article), CLAUSE = new RegExp(SUBCLAUSE.clause);
+const UNSPLIT_NOTES = {
+  context: "疑似含有合并进同一段的子条款标记，但所在段落不是条款",
+  field: "含域或内容控件，其中嵌入的子条款",
+  wrapper: "含链接或修订痕迹，其中嵌入的子条款",
+};
+/** Embedded subclauses left as written, by paragraph number in the upload. */
+let unsplit: { number: number; reason: keyof typeof UNSPLIT_NOTES }[] = [];
 function normalizeEmbeddedSubclauses(document: Document, documentType: BrowserDocumentType) {
   unsplit = [];
-  if (!["working-paper", "draft-directive", "draft-resolution"].includes(documentType)) return false;
-  const marker = /([：:])\s*([（(][子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]{1,3}[）)])/;
+  if (!SUBCLAUSE.documentTypes.includes(documentType)) return false;
   let changed = false;
-  for (const original of [...flowParagraphs(document)]) {
-    const initial = paragraphText(original);
-    const firstSub = /[：:][ \u00a0]*[（(]一[）)]/.exec(initial);
-    if (firstSub && /^\s*第[一二三四五六七八九十百]+条/.test(initial)) {
-      changed = splitParagraphAt(original, firstSub.index + 1, true) || changed;
-    }
-    let paragraph = original;
+  flowParagraphs(document).forEach((original, index) => {
+    let current = original, position = 0;
     while (true) {
-      const value = paragraphText(paragraph);
-      const match = marker.exec(value);
-      if (!match || match.index === 0 || !paragraph.parentNode) break;
-      if (/[\t\r\n]/.test(match[0])) break;
-      const splitAt = match.index + match[1].length;
-      const remainder = value.slice(splitAt).trimStart();
-      if (!remainder) break;
-      if (!splitParagraphAt(paragraph, splitAt)) { unsplit.push(flowParagraphs(document).indexOf(paragraph) + 1); break; }
-      paragraph = paragraph.nextElementSibling!;
-      changed = true;
+      const text = paragraphText(current);
+      SUBCLAUSE_MARKER.lastIndex = position;
+      const match = SUBCLAUSE_MARKER.exec(text);
+      if (!match) break;
+      const marker = match[3], markerStart = match.index + match[0].length - marker.length;
+      // Tabs and manual line breaks are deliberate visible structure; a later
+      // marker in the same paragraph can still be flattened.
+      if (/[\t\n]/.test(match[2])) { position = match.index + match[0].length; continue; }
+      const keep = text.slice(0, markerStart).trimEnd().length;
+      // An automatically numbered clause is a clause even though its marker is not part of the text.
+      if (!CLAUSE.test(text) && !activeNumbering(current)) { unsplit.push({ number: index + 1, reason: "context" }); break; }
+      if (!canCut(current)) { unsplit.push({ number: index + 1, reason: "field" }); break; }
+      try {
+        if (FIRST_LEVEL.test(marker) && current === original && ARTICLE.test(text)) {
+          // First-level subclauses begin on a new line inside the article paragraph.
+          breakLineBefore(current, keep, markerStart);
+          position = keep + 1 + marker.length;
+        } else {
+          current = moveToNewParagraph(current, keep, markerStart);
+          position = 0;
+        }
+        changed = true;
+      } catch (reason) {
+        if (!(reason instanceof Unsplittable)) throw reason;
+        unsplit.push({ number: index + 1, reason: "wrapper" });
+        break;
+      }
     }
-  }
+  });
   return changed;
 }
 
@@ -1788,7 +1808,9 @@ function formatInner(
   if (repairProblems.length) validations.push({ code: "repair-content", label: "结构修复严格内容校验", status: "error", detail: repairProblems.slice(0, 6).join("；") });
   for (const note of keptHidden) validations.push({ code: "hidden-text", label: "隐藏文字与删除线按原稿保留", status: "warning", detail: note });
   for (const number of missingListItems) validations.push({ code: "numbering_review", label: "原编号已保留，疑似缺项需人工确认", status: "warning", detail: `第 ${number} 段可能是引言或缺失编号的首项。已保留原样，不自动加入列表，以免后续条号及交叉引用错位。` });
-  for (const number of unsplitParagraphs) validations.push({ code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: `第 ${number} 段含链接或修订痕迹，其中嵌入的子条款未拆分为独立段落，请人工确认。` });
+  for (const { number, reason } of unsplitParagraphs) validations.push(reason === "context"
+    ? { code: "structure_review", label: "结构识别待确认", status: "warning", detail: `第 ${number} 段${UNSPLIT_NOTES.context}，未拆分，请人工确认。` }
+    : { code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: `第 ${number} 段${UNSPLIT_NOTES[reason]}未拆分为独立段落，请人工确认。` });
   for (const note of ctx.protectedNotes) validations.push({ code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: note });
   for (const detail of ctx.warnings) validations.push({ code: "structure_review", label: "结构识别待确认", status: "warning", detail });
   const errors = validations.filter(item => item.status === "error");

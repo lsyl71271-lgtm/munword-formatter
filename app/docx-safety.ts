@@ -129,44 +129,125 @@ export function isPlainParagraph(paragraph: Element): boolean {
   return onlyRunsOf(paragraph, ["rPr", "t"]);
 }
 
-/** Split text/control-only paragraphs without flattening tabs or breaks into w:t. */
-export function splitParagraphAt(paragraph: Element, offset: number, inline = false): boolean {
-  if (!onlyRunsOf(paragraph, ["rPr", "t", "tab", "br", "cr"])) return false;
-  const next = paragraph.cloneNode(false) as Element;
-  const properties = Array.from(paragraph.children).find(child => child.localName === "pPr");
-  if (properties) {
-    next.appendChild(properties.cloneNode(true));
-    for (const numbering of Array.from(next.getElementsByTagNameNS(W, "numPr"))) numbering.remove();
-  }
-  let position = 0;
-  for (const run of Array.from(paragraph.children).filter(child => child.localName === "r")) {
-    const trailing = run.cloneNode(false) as Element;
-    const rPr = Array.from(run.children).find(child => child.localName === "rPr");
-    if (rPr) trailing.appendChild(rPr.cloneNode(true));
-    for (const child of Array.from(run.children).filter(child => child.localName !== "rPr")) {
-      const length = visibleText(child).length;
-      if (position >= offset) trailing.appendChild(child);
-      else if (position + length > offset && child.localName === "t") {
-        const text = child.textContent || "";
-        const tail = child.cloneNode(false) as Element;
-        tail.textContent = text.slice(offset - position);
-        tail.setAttribute("xml:space", "preserve");
-        child.textContent = text.slice(0, offset - position);
-        child.setAttribute("xml:space", "preserve");
-        trailing.appendChild(tail);
-      }
+/** The split point falls inside a link, a tracked change or another wrapper that is not copied. */
+export class Unsplittable extends Error {}
+
+const isWord = (node: Element, name: string) => node.namespaceURI === W && node.localName === name;
+// Inline wrappers a split may cut through; the cut copies the wrapper.  A link
+// or a tracked change is not cut: a copied hyperlink or revision is new
+// structure the repair check refuses (structure_repair._SPLITTABLE).
+const SPLITTABLE = new Set(["smartTag", "customXml"]);
+const UNCUTTABLE = ["fldChar", "instrText", "fldSimple", "sdt"];
+
+/** Fields and content controls span runs in ways a text cut would break. */
+export function canCut(paragraph: Element): boolean {
+  return UNCUTTABLE.every(name => !paragraph.getElementsByTagNameNS(W, name).length);
+}
+
+/** Cut a run at ``offset``; the second half becomes a new run right after it. */
+function splitRun(run: Element, offset: number): Element {
+  const tail = run.ownerDocument.createElementNS(W, "w:r");
+  const properties = Array.from(run.children).find(child => isWord(child, "rPr"));
+  if (properties) tail.appendChild(properties.cloneNode(true));
+  let position = 0, moving = false;
+  for (const child of Array.from(run.children)) {
+    if (isWord(child, "rPr")) continue;
+    if (moving) { tail.appendChild(child); continue; }
+    const length = visibleText(child).length;
+    if (position + length <= offset) {
       position += length;
+      if (position === offset) moving = true;
+      continue;
     }
-    if (Array.from(trailing.children).some(child => child.localName !== "rPr")) next.appendChild(trailing);
-    if (!Array.from(run.children).some(child => child.localName !== "rPr")) run.remove();
+    // The cut falls inside this text node.
+    const text = child.textContent || "", cut = offset - position;
+    const rest = child.cloneNode(false) as Element;
+    rest.textContent = text.slice(cut);
+    rest.setAttribute("xml:space", "preserve");
+    child.textContent = text.slice(0, cut);
+    child.setAttribute("xml:space", "preserve");
+    tail.appendChild(rest);
+    moving = true;
   }
-  if (inline) {
-    const run = paragraph.ownerDocument.createElementNS(W, "w:r");
-    run.appendChild(paragraph.ownerDocument.createElementNS(W, "w:br"));
-    paragraph.appendChild(run);
-    for (const child of Array.from(next.children).filter(child => child.localName !== "pPr")) paragraph.appendChild(child);
-  } else paragraph.parentNode!.insertBefore(next, paragraph.nextSibling);
-  return true;
+  run.parentNode!.insertBefore(tail, run.nextSibling);
+  return tail;
+}
+
+/** Make a child boundary at visible ``offset``; return the first child after it (null at the end). */
+function splitAt(parent: Element, offset: number): Element | null {
+  let position = 0;
+  for (const child of Array.from(parent.children)) {
+    if (isWord(child, "pPr") || isWord(child, "rPr")) continue;
+    if (position === offset) return child;
+    const length = visibleText(child).length;
+    if (position < offset && offset < position + length) {
+      let tail: Element;
+      if (isWord(child, "r")) tail = splitRun(child, offset - position);
+      else if (child.namespaceURI === W && SPLITTABLE.has(child.localName)) {
+        tail = child.ownerDocument.createElementNS(W, child.tagName);
+        for (const attribute of Array.from(child.attributes)) tail.setAttributeNS(attribute.namespaceURI, attribute.name, attribute.value);
+        for (let moving = splitAt(child, offset - position); moving;) {
+          const next = moving.nextElementSibling;
+          tail.appendChild(moving);
+          moving = next;
+        }
+        parent.insertBefore(tail, child.nextSibling);
+      } else throw new Unsplittable(child.localName);
+      return tail;
+    }
+    position += length;
+  }
+  return null;
+}
+
+/** Cut at ``keep`` and at ``resumeAt``, dropping plain whitespace runs between; return where ``resumeAt`` starts. */
+function cutAtResume(paragraph: Element, keep: number, resumeAt: number): Element | null {
+  splitAt(paragraph, resumeAt);
+  let middle = splitAt(paragraph, keep);
+  const resumed = splitAt(paragraph, resumeAt);
+  while (middle && middle !== resumed) {
+    const next = middle.nextElementSibling;
+    const plain = isWord(middle, "r") && Array.from(middle.children).every(item => isWord(item, "rPr") || isWord(item, "t"));
+    if (plain && !visibleText(middle).trim()) middle.remove();
+    middle = next;
+  }
+  return resumed;
+}
+
+/** Start the text at ``resumeAt`` on a new line of the same paragraph, in place. */
+export function breakLineBefore(paragraph: Element, keep: number, resumeAt: number): void {
+  const resumed = cutAtResume(paragraph, keep, resumeAt);
+  let anchor = resumed ? resumed.previousElementSibling : paragraph.lastElementChild;
+  while (anchor && !isWord(anchor, "r")) anchor = anchor.previousElementSibling;
+  const lineBreak = paragraph.ownerDocument.createElementNS(W, "w:r");
+  const properties = anchor && Array.from(anchor.children).find(child => isWord(child, "rPr"));
+  if (properties) lineBreak.appendChild(properties.cloneNode(true));
+  lineBreak.appendChild(paragraph.ownerDocument.createElementNS(W, "w:br"));
+  paragraph.insertBefore(lineBreak, resumed);
+}
+
+/** Move the text from ``resumeAt`` on into a new paragraph right after this one; return it. */
+export function moveToNewParagraph(paragraph: Element, keep: number, resumeAt: number): Element {
+  let moving = cutAtResume(paragraph, keep, resumeAt);
+  const next = paragraph.ownerDocument.createElementNS(W, "w:p");
+  const properties = Array.from(paragraph.children).find(child => isWord(child, "pPr"));
+  if (properties) {
+    const copy = properties.cloneNode(true) as Element;
+    // The split-off text is a deeper subclause: neither the parent's list
+    // membership nor its indentation applies to it.
+    for (const name of ["numPr", "ind"]) for (const node of Array.from(copy.getElementsByTagNameNS(W, name))) node.remove();
+    next.appendChild(copy);
+    // A section break belongs to the paragraph that ends the section, now
+    // the new one; a copy left behind would start an extra section.
+    Array.from(properties.children).find(child => isWord(child, "sectPr"))?.remove();
+  }
+  while (moving) {
+    const following = moving.nextElementSibling;
+    if (!isWord(moving, "pPr")) next.appendChild(moving);
+    moving = following;
+  }
+  paragraph.parentNode!.insertBefore(next, paragraph.nextSibling);
+  return next;
 }
 
 export function contentSignature(document: Document): string {
