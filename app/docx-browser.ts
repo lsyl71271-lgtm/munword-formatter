@@ -371,7 +371,11 @@ function matchesTypeTitle(text: string, type: BrowserDocumentType, language: "zh
 }
 
 export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDocumentType): BrowserModel {
-  const { document } = parsePackage(content);
+  return recognize(parsePackage(content).document, documentType);
+}
+
+/** Recognition on an already parsed main document; reads it, never changes it. */
+function recognize(document: Document, documentType: BrowserDocumentType): BrowserModel {
   const sourceParagraphs = flowParagraphs(document);
   const paragraphs = sourceParagraphs.map(paragraphText);
   const nonEmpty = paragraphs.map((text, index) => ({ text: text.trim(), index })).filter((item) => item.text);
@@ -1829,7 +1833,7 @@ function formatInner(
 ) {
   const originalBytes = new Uint8Array(content.slice(0));
   const { parts, document } = parsePackage(content);
-  const original = parseDocxInBrowser(content, model.document_type);
+  const original = recognize(document, model.document_type);
 
   // Structure repair, checked on its own: splits and the markers it reports only.
   const repairBefore = documentTokens(document);
@@ -1838,8 +1842,7 @@ function formatInner(
   const missingListItems = suspectedMissingListItems(document, model.document_type);
   const unsplitParagraphs = [...unsplit];
   const repairProblems = repaired || split ? verifyRepair(repairBefore, documentTokens(document), repaired ? ["（一）"] : []) : [];
-  parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
-  const recognized = { ...parseDocxInBrowser(zipSync(parts).slice().buffer as ArrayBuffer, model.document_type), language: model.language };
+  const recognized = { ...recognize(document, model.document_type), language: model.language };
 
   const changed = new Set((["title", "committee", "topic", "country", "delegate", "sponsors", "signatories"] as const)
     .filter(key => JSON.stringify(model[key]) !== JSON.stringify(original[key])));
