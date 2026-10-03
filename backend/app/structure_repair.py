@@ -7,11 +7,15 @@ from io import BytesIO
 
 from docx import Document
 from docx.text.paragraph import Paragraph
-from docx.oxml import OxmlElement
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
 
 from . import content_guard
-from .docx_view import active_num_id, all_paragraphs, body_paragraphs, invalidate as invalidate_paragraph_cache, visible_text
+from .docx_view import (
+    active_num_id, all_paragraphs, body_paragraphs, default_style_id, invalidate as invalidate_paragraph_cache, own_runs,
+    style_chain, style_index, visible_text,
+)
 from .fonts import rpr_child
 from .ooxml_edit import edit_visible_text, has_complex_content
 from .parser import MANUAL_NUMBER_RE, detect_language
@@ -111,11 +115,9 @@ def _materialize_style_emphasis(document) -> bool:
     Normal style would otherwise turn a whole document bold.
     """
 
-    styles = {style.get(qn("w:styleId")): style for style in document.styles.element.findall(qn("w:style"))}
-    defaults = {
-        style_id for style_id, style in styles.items()
-        if style.get(qn("w:type")) == "paragraph" and style.get(qn("w:default")) in ("1", "true")
-    } | {"Normal"}
+    styles = style_index(document)
+    default_paragraph = default_style_id(styles, "paragraph") or "Normal"
+    defaults = {default_paragraph, "Normal"}
 
     def inherited(style_id, tag):
         seen = set()
@@ -135,7 +137,8 @@ def _materialize_style_emphasis(document) -> bool:
         ppr = paragraph._p.pPr
         style = ppr.find(qn("w:pStyle")) if ppr is not None else None
         paragraph_style = style.get(qn("w:val")) if style is not None else None
-        for run in paragraph._p.iter(qn("w:r")):
+        # A text box's paragraphs inherit from their own styles.
+        for run in own_runs(paragraph._p):
             rpr = run.find(qn("w:rPr"))
             run_style = rpr.find(qn("w:rStyle")) if rpr is not None else None
             character_style = run_style.get(qn("w:val")) if run_style is not None else None
@@ -146,7 +149,7 @@ def _materialize_style_emphasis(document) -> bool:
                 if found is None and tag != "vertAlign":
                     found = inherited(paragraph_style, tag)
                 if found is None and tag in _SEMANTIC_STYLE_TAGS:
-                    found = inherited("Normal", tag)
+                    found = inherited(default_paragraph, tag)
                     if found is None:
                         found = document.styles.element.find(f"{qn('w:docDefaults')}/{qn('w:rPrDefault')}/{qn('w:rPr')}/{qn(f'w:{tag}')}")
                 if found is None:
@@ -170,15 +173,11 @@ def _materialize_style_list_format(document) -> bool:
     without this the automatic numbers vanished from the output.
     """
 
-    styles = {style.get(qn("w:styleId")): style for style in document.styles.element.findall(qn("w:style"))}
+    styles = style_index(document)
+    definitions = _numbering_definitions(document)
 
     def chain(style_id):
-        seen = set()
-        while style_id and style_id in styles and style_id not in seen:
-            seen.add(style_id)
-            yield styles[style_id]
-            based = styles[style_id].find(qn("w:basedOn"))
-            style_id = based.get(qn("w:val")) if based is not None else None
+        return [item for _, item in style_chain(styles, style_id)]
 
     changed = False
     for paragraph in body_paragraphs(document):
@@ -191,10 +190,17 @@ def _materialize_style_list_format(document) -> bool:
         if numbering is None or ppr.numPr is not None or numbering.find(qn("w:numId")) is None:
             continue
         num_pr = deepcopy(numbering)
-        if num_pr.find(qn("w:ilvl")) is None:
+        level = num_pr.find(qn("w:ilvl"))
+        if level is None:
             level = OxmlElement("w:ilvl")
             level.set(qn("w:val"), "0")
             num_pr.insert(0, level)
+        # ECMA-376 §17.9.23: a level that names the paragraph style is that
+        # style's level, whatever the style's own numPr says.
+        linked = _linked_level(definitions, numbering.find(qn("w:numId")).get(qn("w:val")),
+                               [style_id for style_id, _ in style_chain(styles, style.get(qn("w:val")))])
+        if linked is not None:
+            level.set(qn("w:val"), linked)
         ppr._insert_numPr(num_pr)
         if ppr.find(qn("w:ind")) is None:
             indent = next((item.find(f"{qn('w:pPr')}/{qn('w:ind')}") for item in chain(style.get(qn("w:val")))
@@ -203,6 +209,37 @@ def _materialize_style_list_format(document) -> bool:
                 ppr._insert_ind(deepcopy(indent))
         changed = True
     return changed
+
+
+def _numbering_definitions(document):
+    """The numbering part's root, or ``None``; never creates the part."""
+
+    try:
+        part = document.part.part_related_by(RT.NUMBERING)
+    except KeyError:
+        return None
+    return part.element if hasattr(part, "element") else parse_xml(part.blob)
+
+
+def _linked_level(definitions, num_id: str, style_ids: list[str]) -> str | None:
+    """The ``w:ilvl`` of the level whose ``w:pStyle`` names one of ``style_ids`` (nearest style first)."""
+
+    if definitions is None:
+        return None
+    num = next((item for item in definitions.findall(qn("w:num")) if item.get(qn("w:numId")) == num_id), None)
+    reference = num.find(qn("w:abstractNumId")) if num is not None else None
+    if reference is None:
+        return None
+    abstract = next((item for item in definitions.findall(qn("w:abstractNum"))
+                     if item.get(qn("w:abstractNumId")) == reference.get(qn("w:val"))), None)
+    if abstract is None:
+        return None
+    linked: dict = {}
+    for level in abstract.findall(qn("w:lvl")):
+        style = level.find(qn("w:pStyle"))
+        if style is not None:
+            linked.setdefault(style.get(qn("w:val")), level.get(qn("w:ilvl")) or "0")
+    return next((linked[style_id] for style_id in style_ids if style_id in linked), None)
 
 
 def _repair_position_header(document) -> list[RepairAction]:

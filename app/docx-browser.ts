@@ -83,38 +83,105 @@ function parsePackage(content: ArrayBuffer) {
     const styles = new DOMParser().parseFromString(decoder.decode(parts["word/styles.xml"]), "application/xml");
     if (styles.getElementsByTagName("parsererror").length) throw new InvalidDocxError("DOCX 样式 XML 损坏。");
     const index = new Map(elements(styles, "style").map(s => [wordAttribute(s, "styleId"), s]));
+    const chain = (id: string | null | undefined) => styleChain(index, id);
     const inherit = (id: string | null | undefined, group: string, property: string): Element | null => {
-      const seen = new Set<string>();
-      while (id && !seen.has(id)) {
-        seen.add(id); const style = index.get(id); if (!style) break;
-        const props = directChild(style,group), node = props && directChild(props,property);
+      for (const [, style] of chain(id)) {
+        const props = directChild(style, group), node = props && directChild(props, property);
         if (node) return node;
-        id = wordAttribute(directChild(style,"basedOn"),"val");
       }
       return null;
     };
     // The default paragraph style is not copied onto runs: a damaged bold
     // Normal style would otherwise turn a whole document bold (as in Python).
-    const defaults = new Set(["Normal", ...elements(styles, "style").filter(s => wordAttribute(s, "type") === "paragraph" && wordAttribute(s, "default") === "1").map(s => wordAttribute(s, "styleId") || "")]);
+    // Chinese Word names it "a", not "Normal".
+    const defaultParagraph = defaultStyleId(styles, "paragraph") || "Normal";
+    const defaults = new Set(["Normal", defaultParagraph]);
+    const semanticMarks = ["vanish", "webHidden", "specVanish", "strike", "dstrike"];
+    const fromStyle = (id: string | null | undefined, property: string): Element | null => {
+      for (const [styleId, style] of chain(id)) {
+        if (!semanticMarks.includes(property) && defaults.has(styleId)) break;
+        const props = directChild(style, "rPr"), node = props && directChild(props, property);
+        if (node) return node;
+      }
+      return null;
+    };
+    const defaultRun = (() => {
+      const root = elements(styles, "docDefaults")[0], rPrDefault = root && directChild(root, "rPrDefault");
+      return rPrDefault && directChild(rPrDefault, "rPr");
+    })();
+    const numbering = parts["word/numbering.xml"] ? new DOMParser().parseFromString(decoder.decode(parts["word/numbering.xml"]), "application/xml") : null;
     for (const p of paragraphElements(document)) {
       const props = ensureChild(p,"pPr",true);
-      const id = wordAttribute(directChild(props,"pStyle"),"val") || "Normal";
-      const num = !directChild(props,"numPr") && inherit(id,"pPr","numPr");
-      if (num) props.appendChild(document.importNode(num,true));
-      for (const run of elements(p,"r")) {
+      const paragraphStyle = wordAttribute(directChild(props,"pStyle"),"val");
+      const num = !directChild(props,"numPr") && inherit(paragraphStyle || "Normal","pPr","numPr");
+      if (num) {
+        const copy = document.importNode(num, true) as Element;
+        // ECMA-376 §17.9.23: a level that names the paragraph style is that
+        // style's level, whatever the style's own numPr says.
+        const level = numbering && linkedLevel(numbering, wordAttribute(directChild(copy, "numId"), "val"), chain(paragraphStyle).map(([id]) => id));
+        if (level) {
+          let ilvl = directChild(copy, "ilvl");
+          if (!ilvl) { ilvl = document.createElementNS(WORD_NS, "w:ilvl"); copy.insertBefore(ilvl, copy.firstChild); }
+          setWordAttribute(ilvl, "val", level);
+        }
+        props.appendChild(copy);
+      }
+      // A text box's paragraphs inherit from their own styles.
+      for (const run of elements(p,"r").filter(run => ownParagraph(run) === p)) {
         const rPr = ensureChild(run,"rPr",true), character = wordAttribute(directChild(rPr,"rStyle"),"val");
-        for (const name of ["b","i","u","vertAlign","vanish","webHidden","specVanish","strike","dstrike"]) {
+        for (const name of ["b","i","u","vertAlign", ...semanticMarks]) {
           if (directChild(rPr,name)) continue;
           // Visibility/deletion marks are semantic, including inherited defaults.
-          const semantic = ["vanish","webHidden","specVanish","strike","dstrike"].includes(name);
-          const inherited = inherit(character,"rPr",name) || (name !== "vertAlign" && (semantic || !defaults.has(id)) && inherit(id,"rPr",name))
-            || (semantic && elements(styles,"docDefaults").flatMap(node => elements(node,name))[0]);
+          const semantic = semanticMarks.includes(name);
+          const inherited = fromStyle(character, name) || (name !== "vertAlign" && fromStyle(paragraphStyle, name))
+            || (semantic && (fromStyle(defaultParagraph, name) || (defaultRun && directChild(defaultRun, name))));
           if (inherited) { const target = rChild(rPr,name); for (const attr of Array.from(inherited.attributes)) target.setAttributeNS(attr.namespaceURI,attr.name,attr.value); }
         }
       }
     }
   }
   return { parts, document };
+}
+
+const ON = ["1", "true", "on"];
+/** The style Word applies when nothing names one (w:default); docx_view.default_style_id. */
+function defaultStyleId(styles: Document, kind: string): string | null {
+  const style = elements(styles, "style").find(s => wordAttribute(s, "type") === kind && ON.includes(wordAttribute(s, "default") || ""));
+  return (style && wordAttribute(style, "styleId")) || null;
+}
+
+/** [id, element] for a style and the styles it is based on, nearest first (docx_view.style_chain). */
+function styleChain(index: Map<string | null | undefined, Element>, id: string | null | undefined): [string, Element][] {
+  const chain: [string, Element][] = [], seen = new Set<string>();
+  while (id && !seen.has(id)) {
+    seen.add(id);
+    const style = index.get(id);
+    if (!style) break;
+    chain.push([id, style]);
+    id = wordAttribute(directChild(style, "basedOn"), "val");
+  }
+  return chain;
+}
+
+/** w:ilvl of the level whose w:pStyle names one of ``styleIds`` (structure_repair._linked_level). */
+function linkedLevel(numbering: Document, numId: string | null | undefined, styleIds: string[]): string | null {
+  const num = elements(numbering, "num").find(item => wordAttribute(item, "numId") === numId);
+  const reference = num && wordAttribute(directChild(num, "abstractNumId"), "val");
+  const abstract = reference != null ? elements(numbering, "abstractNum").find(item => wordAttribute(item, "abstractNumId") === reference) : undefined;
+  if (!abstract) return null;
+  const linked = new Map<string, string>();
+  for (const level of Array.from(abstract.children).filter(child => child.namespaceURI === WORD_NS && child.localName === "lvl")) {
+    const style = wordAttribute(directChild(level, "pStyle"), "val");
+    if (style && !linked.has(style)) linked.set(style, wordAttribute(level, "ilvl") || "0");
+  }
+  return styleIds.map(id => linked.get(id)).find(level => level !== undefined) ?? null;
+}
+
+/** The paragraph a run belongs to; a text box's runs belong to its own paragraphs. */
+function ownParagraph(run: Element): Element | null {
+  let node = run.parentElement;
+  while (node && !(node.namespaceURI === WORD_NS && node.localName === "p")) node = node.parentElement;
+  return node;
 }
 
 function elements(parent: Document | Element, localName: string): Element[] {
@@ -753,9 +820,11 @@ function stripUniformDamage(document: Document, parts: Record<string, Uint8Array
   for (const tag of cleared) for (const run of every) removeChildren(rPrOf(run), [tag]);
   // Removing direct properties alone lets a damaged Normal/docDefault style
   // immediately hide/strike the text again when Word opens the output.
+  // A style only footnotes or headers use keeps it: their hidden notes are
+  // not part of the damage (formatters/base._styles_applied_to_body).
   if (cleared.length && parts["word/styles.xml"]) {
     const styles = new DOMParser().parseFromString(decoder.decode(parts["word/styles.xml"]), "application/xml");
-    for (const tag of cleared) for (const node of elements(styles, tag)) node.remove();
+    for (const root of stylesAppliedToBody(document, styles)) for (const tag of cleared) for (const node of elements(root, tag)) node.remove();
     parts["word/styles.xml"] = encoder.encode(new XMLSerializer().serializeToString(styles));
   }
   // Told, not shown or kept silently.
@@ -766,6 +835,17 @@ function stripUniformDamage(document: Document, parts: Record<string, Uint8Array
     const what = hidden && !struck ? "隐藏文字" : struck && !hidden ? "删除线文字" : "隐藏文字和删除线文字";
     return [`第 ${index + 1} 段含${what}，已保留原稿的显示、打印或删除标记，请确认是否需要。`];
   });
+}
+
+/** Document defaults and every style the body text can take, with the styles they are based on. */
+function stylesAppliedToBody(document: Document, styles: Document): Element[] {
+  const index = new Map(elements(styles, "style").map(s => [wordAttribute(s, "styleId"), s]));
+  const body = elements(document, "body")[0];
+  const named = new Set<string | null>(["pStyle", "rStyle", "tblStyle"].flatMap(tag => body ? elements(body, tag).map(node => wordAttribute(node, "val") || null) : []));
+  for (const kind of ["character", "table"]) named.add(defaultStyleId(styles, kind));
+  named.add(defaultStyleId(styles, "paragraph") || "Normal");
+  const applied = new Set<Element>([...named].flatMap(id => styleChain(index, id).map(([, style]) => style)));
+  return [...elements(styles, "docDefaults"), ...applied];
 }
 
 /** Runs whose text the reader sees (not deleted revisions or text boxes). */

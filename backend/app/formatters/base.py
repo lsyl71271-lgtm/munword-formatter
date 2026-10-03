@@ -32,9 +32,12 @@ from ..countries import country_sort_key, informal_country_warnings
 from ..docx_view import (
     all_paragraphs,
     body_paragraphs,
+    default_style_id,
     invalidate as invalidate_paragraph_cache,
     structure_losses,
     structure_signature,
+    style_chain,
+    style_index,
     table_paragraphs,
     visible_runs,
     visible_text,
@@ -918,6 +921,18 @@ def _on(rpr, tag: str) -> bool:
     return node is not None and node.get(qn("w:val")) not in ("0", "false", "off")
 
 
+def _styles_applied_to_body(document: DocumentObject) -> list:
+    """Document defaults and every style the body text can take, with the styles they are based on."""
+
+    styles = style_index(document)
+    named = {node.get(qn("w:val")) for tag in ("w:pStyle", "w:rStyle", "w:tblStyle") for node in document.element.body.iter(qn(tag))}
+    named |= {default_style_id(styles, kind) for kind in ("character", "table")}
+    named.add(default_style_id(styles, "paragraph") or "Normal")
+    applied = {id(element): element for style_id in named for _, element in style_chain(styles, style_id)}
+    defaults = document.styles.element.find(qn("w:docDefaults"))
+    return ([defaults] if defaults is not None else []) + list(applied.values())
+
+
 def _strip_uniform_damage(document: DocumentObject) -> list[str]:
     """Remove hidden / struck formatting only when it covers every character.
 
@@ -929,15 +944,20 @@ def _strip_uniform_damage(document: DocumentObject) -> list[str]:
     runs = [run for run in every if run.text.strip()]
     if not runs:
         return []
+    applied = None
     for tag in _UNIFORM_DAMAGE:
         if all(_on(run._r.rPr, tag) for run in runs):
             for run in every:  # spaces too
                 if run._r.rPr is not None:
                     _remove_children(run._r.rPr, (tag,))
             # A damaged default style must not reapply the removed property
-            # when the exported document is opened by an Office reader.
-            for node in list(document.styles.element.iter(qn(f"w:{tag}"))):
-                node.getparent().remove(node)
+            # when the exported document is opened by an Office reader.  A
+            # style only footnotes or headers use keeps it: their hidden
+            # notes are not part of the damage.
+            applied = _styles_applied_to_body(document) if applied is None else applied
+            for root in applied:
+                for node in list(root.iter(qn(f"w:{tag}"))):
+                    node.getparent().remove(node)
     notes = []
     for number, paragraph in enumerate(all_paragraphs(document), 1):
         kept = [run for run in visible_runs(paragraph) if run.text.strip()]

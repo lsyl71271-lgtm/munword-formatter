@@ -46,14 +46,17 @@ def lines(texts) -> str:
     return "".join(line(text) for text in texts)
 
 
-def package(body: str, *, numbering: str | None = None, rels: str = "", extra: dict | None = None) -> bytes:
+def package(body: str, *, numbering: str | None = None, styles: str | None = None, footnotes: str | None = None,
+            rels: str = "", extra: dict | None = None) -> bytes:
     overrides = ['<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>']
     relations = []
     files = {}
-    if numbering is not None:
-        overrides.append('<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>')
-        relations.append('<Relationship Id="rIdNum" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>')
-        files["word/numbering.xml"] = f'<w:numbering xmlns:w="{W}">{numbering}</w:numbering>'
+    for part, root, content in (("numbering", "numbering", numbering), ("styles", "styles", styles), ("footnotes", "footnotes", footnotes)):
+        if content is None:
+            continue
+        overrides.append(f'<Override PartName="/word/{part}.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.{part}+xml"/>')
+        relations.append(f'<Relationship Id="rId{part}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/{part}" Target="{part}.xml"/>')
+        files[f"word/{part}.xml"] = f'<w:{root} xmlns:w="{W}">{content}</w:{root}>'
     files.update({
         "[Content_Types].xml": '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' + "".join(overrides) + "</Types>",
         "_rels/.rels": '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
@@ -317,6 +320,91 @@ class SplitTests(unittest.TestCase):
         root = body(result.content)
         self.assertEqual(len(list(root.iter(q("hyperlink")))), 1)
         self.assertTrue(any("未" in item.detail and "拆分" in item.detail for item in result.validations if item.status == "warning"))
+
+
+def part(content: bytes, name: str):
+    return etree.fromstring(zipfile.ZipFile(BytesIO(content)).read(name))
+
+
+def switched_on(run_, tag: str) -> bool:
+    node = run_.find(f"{q('rPr')}/{q(tag)}")
+    return node is not None and node.get(q("val")) not in ("0", "false", "off", "none")
+
+
+NORMAL = '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
+TEXT_BOX = (
+    '<w:r><w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">'
+    '<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>'
+    '<wp:extent cx="1000000" cy="300000"/><wp:wrapNone/><wp:docPr id="1" name="Box"/>'
+    '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+    '<wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:cNvSpPr txBox="1"/><wps:spPr/><wps:txbx><w:txbxContent>'
+    '<w:p><w:r><w:t>框内普通说明</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>'
+)
+
+
+class StyleInheritanceTests(unittest.TestCase):
+    """Formatting resets paragraph and run styles, so what they meant is made direct first."""
+
+    def test_a_default_style_with_another_id_is_cleared_like_normal(self):
+        # Chinese Word names the default paragraph style "a"; hiding it hides the whole document.
+        for style_id in ("Normal", "a"):
+            with self.subTest(style_id=style_id):
+                styles = f'<w:style w:type="paragraph" w:default="1" w:styleId="{style_id}"><w:name w:val="Normal"/><w:rPr><w:vanish/></w:rPr></w:style>'
+                result = format_("draft-resolution", package(lines(ZH_DR + ["第一条 决定继续审议此问题。"]), styles=styles))
+                self.assertEqual(errors(result), [])
+                self.assertEqual(list(part(result.content, "word/styles.xml").iter(q("vanish"))), [])
+                self.assertEqual(list(body(result.content).iter(q("vanish"))), [])
+
+    def test_text_box_text_does_not_take_the_outer_paragraph_style(self):
+        bold = '<w:style w:type="paragraph" w:styleId="Bold"><w:name w:val="Bold"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:u w:val="single"/></w:rPr></w:style>'
+        clause = '<w:p><w:pPr><w:pStyle w:val="Bold"/></w:pPr>' + run("第一条 决定继续审议此问题。") + TEXT_BOX + "</w:p>"
+        result = format_("draft-resolution", package(lines(ZH_DR) + clause, styles=NORMAL + bold))
+        self.assertEqual(errors(result), [])
+        boxed = next(r for r in body(result.content).iter(q("r")) if "".join(t.text or "" for t in r.findall(q("t"))) == "框内普通说明")
+        self.assertFalse(switched_on(boxed, "b") or switched_on(boxed, "u"))
+
+    def test_list_level_comes_from_the_level_linked_to_the_style(self):
+        # ECMA-376 §17.9.23: a level naming a paragraph style is that style's level.
+        numbering = (
+            '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:pStyle w:val="ListA"/><w:lvlText w:val="%1."/></w:lvl>'
+            '<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:pStyle w:val="ListB"/><w:lvlText w:val="(%2)"/></w:lvl></w:abstractNum>'
+            '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>'
+        )
+        styles = NORMAL + "".join(
+            f'<w:style w:type="paragraph" w:styleId="{sid}"><w:name w:val="{sid}"/><w:basedOn w:val="Normal"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>'
+            for sid in ("ListA", "ListB")
+        )
+        en = ["DRAFT RESOLUTION", "Committee: Security Council", "Topic: Cyber Security", "Sponsors: France, Germany", "Signatories: China, Japan", "The Security Council,", "Recognizing the importance of cyber security,"]
+        clauses = [("ListA", "Decides to establish a working group:"), ("ListB", "Collect evidence;"), ("ListB", "Submit a report;"), ("ListA", "Decides to remain seized of the matter.")]
+        source = lines(en) + "".join(f'<w:p><w:pPr><w:pStyle w:val="{sid}"/></w:pPr>{run(text)}</w:p>' for sid, text in clauses)
+        result = format_("draft-resolution", package(source, numbering=numbering, styles=styles))
+        self.assertEqual(errors(result), [])
+        levels = {}
+        for p in body(result.content).iter(q("p")):
+            level = p.find(f"{q('pPr')}/{q('numPr')}/{q('ilvl')}")
+            levels[text_of(p)[:8]] = level.get(q("val")) if level is not None else "0"
+        self.assertEqual([levels[text[:8]] for _, text in clauses], ["0", "1", "1", "0"])
+
+    def test_a_damaged_bold_default_style_does_not_reach_text_through_a_style_based_on_it(self):
+        styles = ('<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:b/></w:rPr></w:style>'
+                  '<w:style w:type="paragraph" w:styleId="Body"><w:name w:val="Body"/><w:basedOn w:val="Normal"/></w:style>')
+        source = lines(["立场文件", "委员会：安全理事会", "议题：网络安全", "国家：法国", "代表：张三", "（一）问题背景"])
+        source += f'<w:p><w:pPr><w:pStyle w:val="Body"/></w:pPr>{run("网络安全关系到各国的共同利益。")}</w:p>'
+        result = format_("position-paper", package(source, styles=styles))
+        self.assertEqual(errors(result), [])
+        prose = next(r for r in body(result.content).iter(q("r")) if "共同利益" in text_of(r))
+        self.assertFalse(switched_on(prose, "b"))
+
+    def test_clearing_whole_document_damage_keeps_styles_the_body_does_not_use(self):
+        texts = ZH_DR + ["第一条 决定继续审议此问题。"]
+        hidden_body = "".join(f"<w:p>{run(text, '<w:vanish/>')}</w:p>" for text in texts)
+        secret = '<w:style w:type="character" w:styleId="Secret"><w:name w:val="Secret"/><w:rPr><w:vanish/></w:rPr></w:style>'
+        notes = '<w:footnote w:id="1"><w:p><w:r><w:t xml:space="preserve">Public source. </w:t></w:r><w:r><w:rPr><w:rStyle w:val="Secret"/></w:rPr><w:t>Private drafting note.</w:t></w:r></w:p></w:footnote>'
+        result = format_("draft-resolution", package(hidden_body, styles=NORMAL + secret, footnotes=notes))
+        self.assertEqual(errors(result), [])
+        self.assertEqual(list(body(result.content).iter(q("vanish"))), [])
+        kept = next(s for s in part(result.content, "word/styles.xml").iter(q("style")) if s.get(q("styleId")) == "Secret")
+        self.assertIsNotNone(kept.find(f"{q('rPr')}/{q('vanish')}"))
 
 
 class PackageTests(unittest.TestCase):

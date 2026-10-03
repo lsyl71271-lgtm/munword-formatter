@@ -206,6 +206,77 @@ test("a section break moves to the last split paragraph", async () => {
   assert.deepEqual(breaks.map(shown), ["（丑）提交报告；"]);
 });
 
+// ---------------------------------------------------------------- C1/C3–C5 style inheritance
+
+const stylesPart = body => enc.encode(`<w:styles xmlns:w="${W}">${body}</w:styles>`);
+async function partOf(result, name) {
+  const parts = unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
+  return new DOMParser().parseFromString(dec.decode(parts[name]), "application/xml");
+}
+const NORMAL = '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>';
+const TEXT_BOX = '<w:r><w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">'
+  + '<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>'
+  + '<wp:extent cx="1000000" cy="300000"/><wp:wrapNone/><wp:docPr id="1" name="Box"/>'
+  + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+  + '<wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:cNvSpPr txBox="1"/><wps:spPr/><wps:txbx><w:txbxContent>'
+  + '<w:p><w:r><w:t>框内普通说明</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>';
+const switchedOn = (r, tag) => { const n = [...r.children].find(c => c.localName === "rPr")?.getElementsByTagNameNS(W, tag)[0]; return Boolean(n) && !["0", "false", "off", "none"].includes(n.getAttributeNS(W, "val") || ""); };
+
+test("a default style with another id is cleared like Normal", async () => {
+  // Chinese Word names the default paragraph style "a"; hiding it hides the whole document.
+  for (const id of ["Normal", "a"]) {
+    const styles = stylesPart(`<w:style w:type="paragraph" w:default="1" w:styleId="${id}"><w:name w:val="Normal"/><w:rPr><w:vanish/></w:rPr></w:style>`);
+    const result = format(archive(ZH_DR + line("第一条 决定继续审议此问题。"), { "word/styles.xml": styles }), "draft-resolution");
+    assert.deepEqual(errors(result), []);
+    assert.equal(nodes(await partOf(result, "word/styles.xml"), "vanish").length, 0, id);
+    assert.equal(nodes(await documentOf(result), "vanish").length, 0, id);
+  }
+});
+
+test("text-box text does not take the outer paragraph style", async () => {
+  const bold = '<w:style w:type="paragraph" w:styleId="Bold"><w:name w:val="Bold"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:u w:val="single"/></w:rPr></w:style>';
+  const clause = `<w:p><w:pPr><w:pStyle w:val="Bold"/></w:pPr>${run("第一条 决定继续审议此问题。")}${TEXT_BOX}</w:p>`;
+  const result = format(archive(ZH_DR + clause, { "word/styles.xml": stylesPart(NORMAL + bold) }), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const boxed = nodes(await documentOf(result), "r").find(r => [...r.children].filter(c => c.localName === "t").map(t => t.textContent).join("") === "框内普通说明");
+  assert.ok(!switchedOn(boxed, "b") && !switchedOn(boxed, "u"));
+});
+
+test("a list level comes from the level linked to the style", async () => {
+  // ECMA-376 §17.9.23: a level naming a paragraph style is that style's level.
+  const numbering = enc.encode(`<w:numbering xmlns:w="${W}"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:pStyle w:val="ListA"/><w:lvlText w:val="%1."/></w:lvl>`
+    + `<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:pStyle w:val="ListB"/><w:lvlText w:val="(%2)"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`);
+  const styles = stylesPart(NORMAL + ["ListA", "ListB"].map(id => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${id}"/><w:basedOn w:val="Normal"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>`).join(""));
+  const en = ["DRAFT RESOLUTION", "Committee: Security Council", "Topic: Cyber Security", "Sponsors: France, Germany", "Signatories: China, Japan", "The Security Council,", "Recognizing the importance of cyber security,"].map(t => line(t)).join("");
+  const clauses = [["ListA", "Decides to establish a working group:"], ["ListB", "Collect evidence;"], ["ListB", "Submit a report;"], ["ListA", "Decides to remain seized of the matter."]];
+  const source = en + clauses.map(([id, text]) => `<w:p><w:pPr><w:pStyle w:val="${id}"/></w:pPr>${run(text)}</w:p>`).join("");
+  const result = format(archive(source, { "word/numbering.xml": numbering, "word/styles.xml": styles }), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const xml = await documentOf(result);
+  const levels = clauses.map(([, text]) => nodes(paragraph(xml, text.slice(0, 8)), "ilvl")[0]?.getAttributeNS(W, "val") || "0");
+  assert.deepEqual(levels, ["0", "1", "1", "0"]);
+});
+
+test("a damaged bold default style does not reach text through a style based on it", async () => {
+  const styles = stylesPart('<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:b/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Body"><w:name w:val="Body"/><w:basedOn w:val="Normal"/></w:style>');
+  const source = ["立场文件", "委员会：安全理事会", "议题：网络安全", "国家：法国", "代表：张三", "（一）问题背景"].map(t => line(t)).join("") + `<w:p><w:pPr><w:pStyle w:val="Body"/></w:pPr>${run("网络安全关系到各国的共同利益。")}</w:p>`;
+  const result = format(archive(source, { "word/styles.xml": styles }), "position-paper");
+  assert.deepEqual(errors(result), []);
+  const prose = nodes(await documentOf(result), "r").find(r => r.textContent.includes("共同利益"));
+  assert.ok(!switchedOn(prose, "b"));
+});
+
+test("clearing whole-document damage keeps styles the body does not use", async () => {
+  const body = [...["决议草案", "委员会：安全理事会", "议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，", "认识到网络安全的重要性，"], "第一条 决定继续审议此问题。"].map(t => line(t, "<w:vanish/>")).join("");
+  const secret = '<w:style w:type="character" w:styleId="Secret"><w:name w:val="Secret"/><w:rPr><w:vanish/></w:rPr></w:style>';
+  const notes = enc.encode(`<w:footnotes xmlns:w="${W}"><w:footnote w:id="1"><w:p><w:r><w:t xml:space="preserve">Public source. </w:t></w:r><w:r><w:rPr><w:rStyle w:val="Secret"/></w:rPr><w:t>Private drafting note.</w:t></w:r></w:p></w:footnote></w:footnotes>`);
+  const result = format(archive(body, { "word/styles.xml": stylesPart(NORMAL + secret), "word/footnotes.xml": notes }), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  assert.equal(nodes(await documentOf(result), "vanish").length, 0);
+  const kept = nodes(await partOf(result, "word/styles.xml"), "style").find(s => s.getAttributeNS(W, "styleId") === "Secret");
+  assert.equal(nodes(kept, "vanish").length, 1);
+});
+
 // ---------------------------------------------------------------- B7 step 03 and the body
 
 test("a step-03 topic change never rewrites a body heading with the old text", async () => {
