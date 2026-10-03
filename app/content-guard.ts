@@ -112,7 +112,9 @@ export function bodyBlocks(document: Document): Element[] {
 function wrappers(document: Document): string {
   const body = document.getElementsByTagNameNS(W_NS, "body")[0];
   if (!body) return "[]";
-  const found = Array.from(body.getElementsByTagNameNS(W_NS, "*")).filter(el => WRAPPERS.has(el.localName) && el.localName !== "sdtContent");
+  // One collection per wrapper name: walking every element of the body was
+  // quadratic in jsdom (the test environment), though linear in browsers.
+  const found = ["sdt", "customXml"].flatMap(name => Array.from(body.getElementsByTagNameNS(W_NS, name)));
   return JSON.stringify(found.map(el => [el.localName, Array.from(el.attributes).map(a => [a.namespaceURI, a.localName, a.value]).sort(),
     Array.from(el.children).filter(c => !(c.namespaceURI === W_NS && (WRAPPERS.has(c.localName) || c.localName === "p" || c.localName === "tbl"))).map(signature)]));
 }
