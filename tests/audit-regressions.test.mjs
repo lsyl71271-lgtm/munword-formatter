@@ -101,6 +101,18 @@ test("a clause ending is written after a cross-reference field, not into its res
   assert.equal(textOf(paragraph(xml, "第四条")), "第四条 决定继续审议第一条。");
 });
 
+test("a clause ending before a page or line break is normalized and the break kept", async () => {
+  for (const [kind, br] of [["page", '<w:br w:type="page"/>'], ["line", "<w:br/>"]]) {
+    const clause = `<w:p>${run("第一条 决定继续审议此问题。")}<w:r>${br}</w:r></w:p>`;
+    const result = format(archive(ZH_DR + clause + line("第二条 请秘书长提交报告。")), "draft-resolution");
+    assert.deepEqual(errors(result), []);
+    const first = paragraph(await documentOf(result), "第一条");
+    assert.equal(textOf(first), "第一条 决定继续审议此问题；", kind);
+    assert.deepEqual(nodes(first, "br").map(b => b.getAttributeNS(W, "type") || null), [kind === "page" ? "page" : null], kind);
+    assert.ok(!result.validations.some(v => v.status === "warning" && v.detail.includes("已保留原样")), kind);
+  }
+});
+
 // ---------------------------------------------------------------- B3 / B4 recognition
 
 test("a subject line naming States Parties is not read as a signatory", async () => {
@@ -299,6 +311,16 @@ test("a numbered section heading after a short header is not taken as the delega
 test("an upper-case .XML part with a DTD is refused like any XML part", () => {
   const input = archive(ZH_DR, { "word/header1.XML": enc.encode(`<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "b">]><w:hdr xmlns:w="${W}"/>`) });
   assert.throws(() => readPackage(input), /DTD/);
+});
+
+test("XML nested deeper than lxml accepts is a file problem in the browser too", () => {
+  const nested = depth => enc.encode('<?xml version="1.0"?><!-- c --><a>' + "<b x='>'>".repeat(depth - 1) + "<c/>" + "</b>".repeat(depth - 1) + "</a>");
+  assert.doesNotThrow(() => readPackage(archive(ZH_DR, { "word/custom.xml": nested(256) })));
+  assert.throws(() => readPackage(archive(ZH_DR, { "word/custom.xml": nested(257) })), /嵌套层级过深/);
+  let inner = line("第一条 决定继续审议。");
+  for (let index = 0; index < 300; index++) inner = `<w:sdt><w:sdtPr><w:id w:val="${index}"/></w:sdtPr><w:sdtContent>${inner}</w:sdtContent></w:sdt>`;
+  const deep = archive(line("决议草案") + inner);
+  assert.throws(() => parseDocxInBrowser(deep, "draft-resolution"), /嵌套层级过深/);
 });
 
 test("a UTF-16 main document part is read", () => {

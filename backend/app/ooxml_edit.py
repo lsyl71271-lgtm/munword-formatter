@@ -103,12 +103,18 @@ def _set_boolean_property(rpr, name: str, value) -> None:
     rpr_child(rpr, name).set(qn("w:val"), "1" if value else "0")
 
 
+def _typed_break(node) -> bool:
+    """A page or column break (or one that clears floats); ``add_run`` would write a plain line break."""
+
+    return node.tag == qn("w:br") and any(key != qn("w:type") or value != "textWrapping" for key, value in node.attrib.items())
+
+
 def has_complex_content(paragraph) -> bool:
     """True when flattening this paragraph would discard non-text OOXML."""
     return any(child.tag != qn("w:pPr") and (
         child.tag != qn("w:r") or any(node.tag not in {
             qn("w:rPr"), qn("w:t"), qn("w:tab"), qn("w:br"), qn("w:cr")
-        } for node in child)
+        } or _typed_break(node) for node in child)
     ) for child in paragraph._p)
 
 

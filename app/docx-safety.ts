@@ -53,6 +53,32 @@ export function declaresDtd(bytes: Uint8Array): boolean {
   return /<!\s*(?:DOCTYPE|ENTITY)/i.test(text.replace(/\0/g, ""));
 }
 
+/** True when elements nest deeper than libxml2 accepts (256 levels), found without building a tree.
+ * The Python engine refuses such parts while parsing; here deep recursion
+ * overflowed the stack and was reported as an internal error. */
+export function nestsTooDeep(text: string, limit = 256): boolean {
+  let depth = 0;
+  for (let at = text.indexOf("<"); at !== -1; at = text.indexOf("<", at + 1)) {
+    const next = text[at + 1];
+    if (next === "?" || next === "!") {
+      const close = next === "?" ? "?>" : text.startsWith("<!--", at) ? "-->" : text.startsWith("<![CDATA[", at) ? "]]>" : ">";
+      at = text.indexOf(close, at + 2);
+      if (at === -1) return false;
+      continue;
+    }
+    if (next === "/") { depth--; continue; }
+    // A start tag ends at the first ">" outside quotes; attribute values may contain ">".
+    let end = at + 1, quote = "";
+    for (; end < text.length; end++) {
+      const ch = text[end];
+      if (quote) { if (ch === quote) quote = ""; } else if (ch === '"' || ch === "'") quote = ch; else if (ch === ">") break;
+    }
+    if (text[end - 1] !== "/" && ++depth > limit) return true;
+    at = end;
+  }
+  return false;
+}
+
 /** Inspect every entry before allowing fflate to allocate any expanded buffers. */
 export function readPackage(content: ArrayBuffer): Record<string, Uint8Array> {
   const data = new Uint8Array(content);
@@ -86,6 +112,7 @@ export function readPackage(content: ArrayBuffer): Record<string, Uint8Array> {
         // DOCX parts do not need DTDs. Disallow entity declarations in both engines.
         if (bytes.length > 16 * 1024 * 1024) throw new Error("XML 部件过大，请拆分文档");
         if (declaresDtd(bytes)) throw new Error("不支持 XML 实体或 DTD");
+        if (nestsTooDeep(decodeXml(bytes).replace(/\0/g, ""))) throw new Error("XML 嵌套层级过深（超过 256 层）");
       }
     }
     return parts;

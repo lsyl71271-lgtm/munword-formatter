@@ -99,6 +99,10 @@ def failure_detail(prefix: str, exc: Exception) -> str:
 def processing_failure(prefix: str, exc: Exception) -> HTTPException:
     """Map an exception to one of the three failure classes (see ``errors.py``)."""
 
+    if isinstance(exc, etree.XMLSyntaxError) and "Excessive depth" in str(exc):
+        # libxml2 refuses more than 256 nested elements; the browser engine
+        # applies the same limit (docx-safety.nestsTooDeep).
+        return HTTPException(status_code=422, detail="文件无法读取：XML 嵌套层级过深（超过 256 层）。")
     if isinstance(exc, (InvalidDocxError, zipfile.BadZipFile, etree.XMLSyntaxError)):
         return HTTPException(status_code=422, detail=f"文件无法读取：{exc}")
     if isinstance(exc, InvalidRequestError):

@@ -172,6 +172,20 @@ NUMBERING = ('<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:va
              '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>')
 
 
+class TrailingBreakTests(unittest.TestCase):
+    def test_a_clause_ending_before_a_page_or_line_break_is_normalized_and_the_break_kept(self):
+        for kind, br in (("page", '<w:br w:type="page"/>'), ("line", "<w:br/>")):
+            with self.subTest(kind=kind):
+                clause = "<w:p>" + run("第一条 决定继续审议此问题。") + f"<w:r>{br}</w:r></w:p>"
+                result = format_("draft-resolution", package(lines(ZH_DR) + clause + line("第二条 请秘书长提交报告。")))
+                self.assertEqual(errors(result), [])
+                first = paragraph(body(result.content), "第一条")
+                self.assertEqual(text_of(first), "第一条 决定继续审议此问题；")
+                breaks = list(first.iter(q("br")))
+                self.assertEqual([b.get(q("type")) for b in breaks], ["page" if kind == "page" else None])
+                self.assertFalse([w for w in warnings(result) if "已保留原样" in w])
+
+
 def numbered(text: str) -> str:
     return line(text, ppr='<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>')
 

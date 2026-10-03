@@ -24,6 +24,7 @@ class ServiceTests(unittest.TestCase):
         client = TestClient(app, base_url="http://127.0.0.1:8000")
         response = client.post("/api/parse/draft-resolution", files={"file": ("deep.docx", package(lines(["决议草案"]) + inner), "application/octet-stream")})
         self.assertEqual(response.status_code, 422)
+        self.assertIn("嵌套层级过深", response.json()["detail"])
 
     def test_api_refuses_requests_from_unlisted_origins(self):
         client = TestClient(app, base_url="http://127.0.0.1:8000")
