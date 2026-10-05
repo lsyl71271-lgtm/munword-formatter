@@ -49,6 +49,10 @@ pnpm start
 
 ### Cloudflare 静态托管（GitHub 自动构建）
 
+Pages 访问入口：[munword-formatter.pages.dev](https://munword-formatter.pages.dev/)。Pages 与现有 Workers、本机版使用同一套界面和浏览器排版引擎，不另建一套程序。Cloudflare Pages 的 Git 导入设置为：仓库 `lsyl71271-lgtm/munword-formatter`，生产分支 `main`，框架预设“无”，根目录 `/`，构建命令 `pnpm build:static`，输出目录 `static-site`；无需填写 Workers 部署命令。后续推送 `main` 自动更新站点。
+
+连通性验收必须区分代理访问与直连：2026-10-05 的本机检查中，Pages 首页、JS、CSS 和版本摘要不经 curl 代理均返回 200，且与发布构建逐字节一致；同期 `workers.dev` 入口直连失败。此结果仅覆盖当时的测试连接，不能承诺所有运营商永久可达。浏览器需另行关闭代理/VPN 验证，不能把构建成功或代理下的 200 当作国内直连成功。官方步骤见 [Pages Git 导入](https://developers.cloudflare.com/pages/get-started/git-integration/) 与 [静态站点部署](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/)；如需自有域名，按 [自定义域名](https://developers.cloudflare.com/pages/configuration/custom-domains/) 配置并重新测试。
+
 复用 `app/page.tsx`、共享样式和浏览器排版引擎，不需要 `.openai/hosting.json`、Python、账号登录或 API Key：
 
 ```sh
