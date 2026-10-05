@@ -350,3 +350,27 @@ test("the guard reports hidden text that became visible and a strike that was re
   for (const tag of ["vanish", "strike"]) nodes(xml, tag)[0].remove();
   assert.equal(verifyMarks(before, xml).length, 2);
 });
+
+// ---------------------------------------------------------------- hidden / struck characters outside the BMP
+
+const NON_BMP_HIDDEN = "（备注😀𠀀）", NON_BMP_STRUCK = "删去𠀁词😀";
+
+test("hidden and struck characters outside the BMP pass the guard unchanged and fail it when exposed", async () => {
+  const { semanticMarks, verifyMarks } = await import("../app/content-guard.ts");
+  const xml = new DOMParser().parseFromString(`<w:document xmlns:w="${W}"><w:body><w:p>${run("可见")}${run(NON_BMP_HIDDEN, "<w:vanish/>")}${run(NON_BMP_STRUCK, "<w:strike/>")}</w:p></w:body></w:document>`, "application/xml");
+  const before = semanticMarks(xml);
+  assert.deepEqual(verifyMarks(before, xml), []);
+  nodes(xml, "vanish")[0].remove();
+  assert.equal(verifyMarks(before, xml).length, 1);
+  nodes(xml, "strike")[0].remove();
+  assert.equal(verifyMarks(before, xml).length, 2);
+});
+
+test("a clause with hidden and struck characters outside the BMP formats with its marks intact", async () => {
+  const clause = `<w:p>${run("第一条 决定继续审议此问题")}${run(NON_BMP_HIDDEN, "<w:vanish/>")}${run("并")}${run(NON_BMP_STRUCK, "<w:strike/>")}${run("请秘书长提交报告。")}</w:p>`;
+  const result = format(archive(ZH_DR + clause + line("第二条 决定继续处理此案。")), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const xml = await documentOf(result);
+  assert.equal(marked(xml, "vanish"), NON_BMP_HIDDEN);
+  assert.equal(marked(xml, "strike"), NON_BMP_STRUCK);
+});

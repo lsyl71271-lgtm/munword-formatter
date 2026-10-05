@@ -428,5 +428,35 @@ class PackageTests(unittest.TestCase):
             validate_docx_package(content)
 
 
+NON_BMP_HIDDEN = "（备注😀𠀀）"
+NON_BMP_STRUCK = "删去𠀁词😀"
+
+
+class NonBmpMarkTests(unittest.TestCase):
+    def test_hidden_and_struck_characters_outside_the_bmp_pass_the_guard_unchanged_and_fail_it_when_exposed(self):
+        root = etree.fromstring(f'<w:document xmlns:w="{W}"><w:body><w:p>{run("可见")}{run(NON_BMP_HIDDEN, "<w:vanish/>")}{run(NON_BMP_STRUCK, "<w:strike/>")}</w:p></w:body></w:document>')
+
+        class Doc:  # the guard only needs ``element.body``
+            class element:  # noqa: N801
+                pass
+        Doc.element.body = root.find(q("body"))
+        before = content_guard.semantic_marks(Doc)
+        self.assertEqual(content_guard.verify_marks(before, Doc), [])
+        node = next(root.iter(q("vanish")))
+        node.getparent().remove(node)
+        self.assertEqual(len(content_guard.verify_marks(before, Doc)), 1)
+        node = next(root.iter(q("strike")))
+        node.getparent().remove(node)
+        self.assertEqual(len(content_guard.verify_marks(before, Doc)), 2)
+
+    def test_a_clause_with_hidden_and_struck_characters_outside_the_bmp_formats_with_its_marks_intact(self):
+        clause = ("<w:p>" + run("第一条 决定继续审议此问题") + run(NON_BMP_HIDDEN, "<w:vanish/>") + run("并")
+                  + run(NON_BMP_STRUCK, "<w:strike/>") + run("请秘书长提交报告。") + "</w:p>")
+        result = format_("draft-resolution", package(lines(ZH_DR) + clause + line("第二条 决定继续处理此案。")))
+        self.assertEqual(errors(result), [])
+        root = body(result.content)
+        self.assertEqual(marked(root, "vanish"), NON_BMP_HIDDEN)
+        self.assertEqual(marked(root, "strike"), NON_BMP_STRUCK)
+
 if __name__ == "__main__":
     unittest.main()

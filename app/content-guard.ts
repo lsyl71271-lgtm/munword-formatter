@@ -298,7 +298,14 @@ export type Marks = Map<Element, [string, string]>;
 export function semanticMarks(document: Document): Marks {
   return new Map(bodyBlocks(document).map(el => [el, marksOf(el)]));
 }
-const keeps = (before: string, after: string) => { let i = 0; for (const ch of after) if (i < before.length && ch === before[i]) i++; return i === before.length; };
+/** ``before`` survives in order inside ``after``, compared by code point (an emoji or a CJK Extension B character is one). */
+const keeps = (before: string, after: string) => {
+  const wanted = [...before];
+  let i = 0;
+  for (const ch of after) if (i < wanted.length && ch === wanted[i]) i++;
+  return i === wanted.length;
+};
+const excerpt = (text: string) => [...text].slice(0, 20).join("");
 /** Hidden and struck characters survive, in order, in the same block. */
 export function verifyMarks(before: Marks, document: Document): string[] {
   const present = new Set(bodyBlocks(document)), problems: string[] = [];
@@ -308,8 +315,8 @@ export function verifyMarks(before: Marks, document: Document): string[] {
     if (!hidden && !struck) continue;
     if (!present.has(el)) { problems.push(`第 ${number} 段含隐藏或删除线文字，但该段被删除`); continue; }
     const [nowHidden, nowStruck] = marksOf(el);
-    if (!keeps(hidden, nowHidden)) problems.push(`第 ${number} 段的隐藏文字会变为可见：${hidden.slice(0, 20)}`);
-    if (!keeps(struck, nowStruck)) problems.push(`第 ${number} 段的删除线被移除：${struck.slice(0, 20)}`);
+    if (!keeps(hidden, nowHidden)) problems.push(`第 ${number} 段的隐藏文字会变为可见：${excerpt(hidden)}`);
+    if (!keeps(struck, nowStruck)) problems.push(`第 ${number} 段的删除线被移除：${excerpt(struck)}`);
   }
   return problems;
 }
