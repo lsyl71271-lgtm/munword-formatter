@@ -302,6 +302,7 @@ class DocxParser:
                 or single_committee
             ):
                 header_candidates = []
+            # zip already stops at the shorter input; strict=False needs Python 3.10.
             for key, index in zip(fields, header_candidates):
                 value = re.sub(r"^\s*[:：]\s*", "", texts[index]).strip()
                 setattr(model, key, value)
