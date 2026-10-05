@@ -32,9 +32,12 @@ from ..countries import country_sort_key, informal_country_warnings
 from ..docx_view import (
     all_paragraphs,
     body_paragraphs,
+    default_style_id,
     invalidate as invalidate_paragraph_cache,
     structure_losses,
     structure_signature,
+    style_chain,
+    style_index,
     table_paragraphs,
     visible_runs,
     visible_text,
@@ -42,7 +45,7 @@ from ..docx_view import (
 from ..fingerprint import canonical_body, visible_text_signature
 from ..fonts import LATIN_FONT, normalize_font_parts, rpr_child, set_house_fonts
 from ..models import Clause, IntermediateDocument, ValidationItem
-from ..ooxml_edit import edit_visible_text, flattening_is_lossless, has_complex_content, style_text_range
+from ..ooxml_edit import carries_semantic_marks, edit_visible_text, flattening_is_lossless, has_complex_content, style_text_range
 from ..parser import MANUAL_NUMBER_RE
 from ..semantic_policy import (
     ANY_LABEL_PATTERN,
@@ -200,6 +203,8 @@ class BaseFormatter(HandbookPassMixin):
         before = ContentSnapshot.take(document)
         strict_before = content_guard.Snapshot.take(document)
         self._kept_hidden = _strip_uniform_damage(document)
+        # After the whole-document damage is cleared: what stays hidden or struck must stay so.
+        marks_before = content_guard.semantic_marks(document)
         self._configure_page(document, model.language)
         self._configure_styles(document, model.language)
         self._format_document(
@@ -216,7 +221,7 @@ class BaseFormatter(HandbookPassMixin):
             self._edit_log,
             allowed_titles=TITLES[self.document_type],
             labels=META_ALIASES["committee"] + META_ALIASES["topic"],
-        )
+        ) + content_guard.verify_marks(marks_before, document)
         validations = self._validate(document, model, before, after, preserve_country_order)
         output = BytesIO()
         document.save(output)
@@ -560,7 +565,7 @@ class BaseFormatter(HandbookPassMixin):
             # must be plain text.  Rewriting the first line while a complex
             # continuation stayed would duplicate names; clearing plain
             # continuations after a refused rewrite would delete them.
-            complex_part = next((item for item in [paragraph, *continuations] if has_complex_content(item)), None)
+            complex_part = next((item for item in [paragraph, *continuations] if has_complex_content(item) or carries_semantic_marks(item)), None)
             if complex_part is None:
                 self._write_country_line(paragraph, key, list(values), language)
                 expected = self._country_line_text(key, list(values), language)
@@ -571,9 +576,9 @@ class BaseFormatter(HandbookPassMixin):
                 return
             if key in self._changed_fields:
                 raise ProtectedContentError(
-                    self._source_number(complex_part), "第 03 步修改了国家名单，但名单含图片、域或修订痕迹，不能安全改写"
+                    self._source_number(complex_part), "第 03 步修改了国家名单，但名单含图片、域、修订痕迹或隐藏/删除线文字，不能安全改写"
                 )
-            self._protect(complex_part, "国家列表含图片、域或修订痕迹，未重写")
+            self._protect(complex_part, "国家列表含图片、域、修订痕迹或隐藏/删除线文字，未重写")
         self._style_labeled_paragraph(paragraph, key, language, value_emphasis=True)
         for continuation in continuations:
             self._format_runs(continuation, language, bold=True, italic=True, underline=False)
@@ -651,14 +656,17 @@ class BaseFormatter(HandbookPassMixin):
         if has_complex_content(paragraph):
             self._protect(paragraph, "元数据段含图片或域，未重写标签")
             return False
+        if carries_semantic_marks(paragraph):
+            self._protect(paragraph, "元数据段含隐藏或删除线文字，改写会改变其显示或删除含义，未重写")
+            return False
         paragraph.clear()
         run = paragraph.add_run(self._label_value_text(key, value, language))
         self._format_run(run, language, bold=False, italic=False, underline=False)
         return True
 
     def _write_country_line(self, paragraph: Paragraph, key: str, values: list[str], language: str) -> None:
-        if has_complex_content(paragraph):
-            self._protect(paragraph, "国家列表段含图片或域，未重写")
+        if has_complex_content(paragraph) or carries_semantic_marks(paragraph):
+            self._protect(paragraph, "国家列表段含图片、域或隐藏/删除线文字，未重写")
             return
         paragraph.clear()
         self._add_label_run(paragraph, key, language)
@@ -730,16 +738,25 @@ class BaseFormatter(HandbookPassMixin):
         # title inside a field), the paragraph is restored and left as is.
         backup = copy.deepcopy(paragraph._p)
         old_signature = content_guard.signature(paragraph._p)
-        if self._set_text(paragraph, text, language) and not content_guard.rewrite_keeps_structure(
-            kind, old_signature, content_guard.signature(paragraph._p)
-        ):
+        old_marks = content_guard.paragraph_marks(paragraph._p)
+
+        def restore(reason: str) -> bool:
             # Restore in place: the element keeps its identity for the check.
             for child in list(paragraph._p):
                 paragraph._p.remove(child)
             for child in list(backup):
                 paragraph._p.append(child)
-            self._protect(paragraph, "改写会改变该段中的链接、域、书签或修订结构，已保留原样")
+            self._protect(paragraph, reason)
             return False
+
+        written = self._set_text(paragraph, text, language)
+        if written and not content_guard.rewrite_keeps_structure(kind, old_signature, content_guard.signature(paragraph._p)):
+            return restore("改写会改变该段中的链接、域、书签或修订结构，已保留原样")
+        if written and not content_guard.marks_kept(old_marks, paragraph._p):
+            # Any automatic rewrite (title word, label, marker, ending) that
+            # would delete hidden or struck characters, or drop their mark,
+            # is undone here, for this paragraph only; the final guard stays strict.
+            return restore("改写会删除隐藏或删除线文字或去掉其标记，已保留原样")
         if visible_text(paragraph) == text:
             expected = text if kind in ("label-restore", "field") else None
             if previous is not None and previous.kind == "field" and kind in ("label-drop", "title"):
@@ -783,7 +800,7 @@ class BaseFormatter(HandbookPassMixin):
             # and signing lines) may differ.
             ValidationItem(
                 "content",
-                "逐段严格内容校验（文字、域、链接、书签、脚注、修订）",
+                "逐段严格内容校验（文字、域、链接、书签、脚注、修订、隐藏与删除线）",
                 "pass" if not problems else "error",
                 "；".join(problems[:6]) if problems else "只允许句末标点、标题用词、页首标签和国家名单顺序/断行等记录在案的修改。",
             ),
@@ -913,6 +930,18 @@ def _on(rpr, tag: str) -> bool:
     return node is not None and node.get(qn("w:val")) not in ("0", "false", "off")
 
 
+def _styles_applied_to_body(document: DocumentObject) -> list:
+    """Document defaults and every style the body text can take, with the styles they are based on."""
+
+    styles = style_index(document)
+    named = {node.get(qn("w:val")) for tag in ("w:pStyle", "w:rStyle", "w:tblStyle") for node in document.element.body.iter(qn(tag))}
+    named |= {default_style_id(styles, kind) for kind in ("character", "table")}
+    named.add(default_style_id(styles, "paragraph") or "Normal")
+    applied = {id(element): element for style_id in named for _, element in style_chain(styles, style_id)}
+    defaults = document.styles.element.find(qn("w:docDefaults"))
+    return ([defaults] if defaults is not None else []) + list(applied.values())
+
+
 def _strip_uniform_damage(document: DocumentObject) -> list[str]:
     """Remove hidden / struck formatting only when it covers every character.
 
@@ -924,15 +953,20 @@ def _strip_uniform_damage(document: DocumentObject) -> list[str]:
     runs = [run for run in every if run.text.strip()]
     if not runs:
         return []
+    applied = None
     for tag in _UNIFORM_DAMAGE:
         if all(_on(run._r.rPr, tag) for run in runs):
             for run in every:  # spaces too
                 if run._r.rPr is not None:
                     _remove_children(run._r.rPr, (tag,))
             # A damaged default style must not reapply the removed property
-            # when the exported document is opened by an Office reader.
-            for node in list(document.styles.element.iter(qn(f"w:{tag}"))):
-                node.getparent().remove(node)
+            # when the exported document is opened by an Office reader.  A
+            # style only footnotes or headers use keeps it: their hidden
+            # notes are not part of the damage.
+            applied = _styles_applied_to_body(document) if applied is None else applied
+            for root in applied:
+                for node in list(root.iter(qn(f"w:{tag}"))):
+                    node.getparent().remove(node)
     notes = []
     for number, paragraph in enumerate(all_paragraphs(document), 1):
         kept = [run for run in visible_runs(paragraph) if run.text.strip()]

@@ -103,17 +103,21 @@ class PositionPaperFormatter(BaseFormatter):
         return items
 
     def _validate_header_fields(self, document, model) -> ValidationItem:
-        source_metadata: dict[str, str] = {}
-        for text in model.paragraphs:
+        # Every labeled line keeps its label and value, in order; a header line
+        # confirmed in step 03 carries the confirmed value instead.
+        source_metadata: dict[str, list[str]] = {}
+        for index, text in enumerate(model.paragraphs):
             key, value = label_value(text.strip())
             if key in HEADER_FIELDS:
-                source_metadata[key] = value
-        output_metadata: dict[str, str] = {}
+                if key in self._changed_fields and model.header_paragraph_indices.get(key) == index:
+                    value = str(getattr(model, key)).strip()
+                source_metadata.setdefault(key, []).append(value)
+        output_metadata: dict[str, list[str]] = {}
         for paragraph in body_paragraphs(document):
             key, value = label_value(visible_text(paragraph).strip())
             if key in HEADER_FIELDS:
-                output_metadata[key] = value
-        metadata_ok = all(output_metadata.get(key) == value for key, value in source_metadata.items())
+                output_metadata.setdefault(key, []).append(value)
+        metadata_ok = all(output_metadata.get(key) == values for key, values in source_metadata.items())
         return ValidationItem(
             "position-metadata",
             "委员会、议题、国家、代表标签和值完整保留",

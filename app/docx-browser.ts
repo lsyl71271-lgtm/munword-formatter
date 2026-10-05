@@ -1,6 +1,6 @@
 import { zipSync } from "fflate";
-import { readPackage, visibleText, contentSignature, splitParagraphAt } from "./docx-safety.ts";
-import { documentTokens, rewriteKeepsStructure, signature, takeSnapshot, verifyFormat, verifyPackage, verifyRepair } from "./content-guard.ts";
+import { readPackage, visibleText, contentSignature, decodeXml, canCut, breakLineBefore, moveToNewParagraph, Unsplittable } from "./docx-safety.ts";
+import { documentTokens, marksKept, paragraphMarks, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
 import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
@@ -49,7 +49,8 @@ export type BrowserValidation = {
 
 const WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+// XML parts may be UTF-8 or UTF-16 (OPC); outputs are written as UTF-8.
+const decoder = { decode: decodeXml };
 const ZH_MARKER = /^[\s\u00a0]*(?:第[一二三四五六七八九十百千]+条|[一二三四五六七八九十]+[、.]|[（(][一二三四五六七八九十子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)]|\d+[.、．)]|[甲乙丙丁戊己庚辛壬癸][、.]|[（(][a-zivx]+[）)]|[（(]\d{1,2}[）)]|[a-z][.)）](?=\s|[^\x00-\x7f]))\s*/i;
 const SUB_MARKER = /^[\s\u00a0]*(?:[（(][一二三四五六七八九十a-zivx]+[）)]|[甲乙丙丁戊己庚辛壬癸][、.])/i;
 type MetadataKey = "committee" | "topic" | "delegate" | "country" | "sponsors" | "signatories";
@@ -82,38 +83,105 @@ function parsePackage(content: ArrayBuffer) {
     const styles = new DOMParser().parseFromString(decoder.decode(parts["word/styles.xml"]), "application/xml");
     if (styles.getElementsByTagName("parsererror").length) throw new InvalidDocxError("DOCX 样式 XML 损坏。");
     const index = new Map(elements(styles, "style").map(s => [wordAttribute(s, "styleId"), s]));
+    const chain = (id: string | null | undefined) => styleChain(index, id);
     const inherit = (id: string | null | undefined, group: string, property: string): Element | null => {
-      const seen = new Set<string>();
-      while (id && !seen.has(id)) {
-        seen.add(id); const style = index.get(id); if (!style) break;
-        const props = directChild(style,group), node = props && directChild(props,property);
+      for (const [, style] of chain(id)) {
+        const props = directChild(style, group), node = props && directChild(props, property);
         if (node) return node;
-        id = wordAttribute(directChild(style,"basedOn"),"val");
       }
       return null;
     };
     // The default paragraph style is not copied onto runs: a damaged bold
     // Normal style would otherwise turn a whole document bold (as in Python).
-    const defaults = new Set(["Normal", ...elements(styles, "style").filter(s => wordAttribute(s, "type") === "paragraph" && wordAttribute(s, "default") === "1").map(s => wordAttribute(s, "styleId") || "")]);
+    // Chinese Word names it "a", not "Normal".
+    const defaultParagraph = defaultStyleId(styles, "paragraph") || "Normal";
+    const defaults = new Set(["Normal", defaultParagraph]);
+    const semanticMarks = ["vanish", "webHidden", "specVanish", "strike", "dstrike"];
+    const fromStyle = (id: string | null | undefined, property: string): Element | null => {
+      for (const [styleId, style] of chain(id)) {
+        if (!semanticMarks.includes(property) && defaults.has(styleId)) break;
+        const props = directChild(style, "rPr"), node = props && directChild(props, property);
+        if (node) return node;
+      }
+      return null;
+    };
+    const defaultRun = (() => {
+      const root = elements(styles, "docDefaults")[0], rPrDefault = root && directChild(root, "rPrDefault");
+      return rPrDefault && directChild(rPrDefault, "rPr");
+    })();
+    const numbering = parts["word/numbering.xml"] ? new DOMParser().parseFromString(decoder.decode(parts["word/numbering.xml"]), "application/xml") : null;
     for (const p of paragraphElements(document)) {
       const props = ensureChild(p,"pPr",true);
-      const id = wordAttribute(directChild(props,"pStyle"),"val") || "Normal";
-      const num = !directChild(props,"numPr") && inherit(id,"pPr","numPr");
-      if (num) props.appendChild(document.importNode(num,true));
-      for (const run of elements(p,"r")) {
+      const paragraphStyle = wordAttribute(directChild(props,"pStyle"),"val");
+      const num = !directChild(props,"numPr") && inherit(paragraphStyle || "Normal","pPr","numPr");
+      if (num) {
+        const copy = document.importNode(num, true) as Element;
+        // ECMA-376 §17.9.23: a level that names the paragraph style is that
+        // style's level, whatever the style's own numPr says.
+        const level = numbering && linkedLevel(numbering, wordAttribute(directChild(copy, "numId"), "val"), chain(paragraphStyle).map(([id]) => id));
+        if (level) {
+          let ilvl = directChild(copy, "ilvl");
+          if (!ilvl) { ilvl = document.createElementNS(WORD_NS, "w:ilvl"); copy.insertBefore(ilvl, copy.firstChild); }
+          setWordAttribute(ilvl, "val", level);
+        }
+        props.appendChild(copy);
+      }
+      // A text box's paragraphs inherit from their own styles.
+      for (const run of elements(p,"r").filter(run => ownParagraph(run) === p)) {
         const rPr = ensureChild(run,"rPr",true), character = wordAttribute(directChild(rPr,"rStyle"),"val");
-        for (const name of ["b","i","u","vertAlign","vanish","webHidden","specVanish","strike","dstrike"]) {
+        for (const name of ["b","i","u","vertAlign", ...semanticMarks]) {
           if (directChild(rPr,name)) continue;
           // Visibility/deletion marks are semantic, including inherited defaults.
-          const semantic = ["vanish","webHidden","specVanish","strike","dstrike"].includes(name);
-          const inherited = inherit(character,"rPr",name) || (name !== "vertAlign" && (semantic || !defaults.has(id)) && inherit(id,"rPr",name))
-            || (semantic && elements(styles,"docDefaults").flatMap(node => elements(node,name))[0]);
+          const semantic = semanticMarks.includes(name);
+          const inherited = fromStyle(character, name) || (name !== "vertAlign" && fromStyle(paragraphStyle, name))
+            || (semantic && (fromStyle(defaultParagraph, name) || (defaultRun && directChild(defaultRun, name))));
           if (inherited) { const target = rChild(rPr,name); for (const attr of Array.from(inherited.attributes)) target.setAttributeNS(attr.namespaceURI,attr.name,attr.value); }
         }
       }
     }
   }
   return { parts, document };
+}
+
+const ON = ["1", "true", "on"];
+/** The style Word applies when nothing names one (w:default); docx_view.default_style_id. */
+function defaultStyleId(styles: Document, kind: string): string | null {
+  const style = elements(styles, "style").find(s => wordAttribute(s, "type") === kind && ON.includes(wordAttribute(s, "default") || ""));
+  return (style && wordAttribute(style, "styleId")) || null;
+}
+
+/** [id, element] for a style and the styles it is based on, nearest first (docx_view.style_chain). */
+function styleChain(index: Map<string | null | undefined, Element>, id: string | null | undefined): [string, Element][] {
+  const chain: [string, Element][] = [], seen = new Set<string>();
+  while (id && !seen.has(id)) {
+    seen.add(id);
+    const style = index.get(id);
+    if (!style) break;
+    chain.push([id, style]);
+    id = wordAttribute(directChild(style, "basedOn"), "val");
+  }
+  return chain;
+}
+
+/** w:ilvl of the level whose w:pStyle names one of ``styleIds`` (structure_repair._linked_level). */
+function linkedLevel(numbering: Document, numId: string | null | undefined, styleIds: string[]): string | null {
+  const num = elements(numbering, "num").find(item => wordAttribute(item, "numId") === numId);
+  const reference = num && wordAttribute(directChild(num, "abstractNumId"), "val");
+  const abstract = reference != null ? elements(numbering, "abstractNum").find(item => wordAttribute(item, "abstractNumId") === reference) : undefined;
+  if (!abstract) return null;
+  const linked = new Map<string, string>();
+  for (const level of Array.from(abstract.children).filter(child => child.namespaceURI === WORD_NS && child.localName === "lvl")) {
+    const style = wordAttribute(directChild(level, "pStyle"), "val");
+    if (style && !linked.has(style)) linked.set(style, wordAttribute(level, "ilvl") || "0");
+  }
+  return styleIds.map(id => linked.get(id)).find(level => level !== undefined) ?? null;
+}
+
+/** The paragraph a run belongs to; a text box's runs belong to its own paragraphs. */
+function ownParagraph(run: Element): Element | null {
+  let node = run.parentElement;
+  while (node && !(node.namespaceURI === WORD_NS && node.localName === "p")) node = node.parentElement;
+  return node;
 }
 
 function elements(parent: Document | Element, localName: string): Element[] {
@@ -214,9 +282,19 @@ function labeledField(text: string): { key: MetadataKey; value: string; labelLen
   return null;
 }
 
-/** A labeled line, a clause marker or prose ends a multi-line country list. */
+/** A labeled line, a clause marker, a subject line, a clause or prose ends a
+ * multi-line country list (parser._collect_multiline_countries). */
 function endsCountryList(text: string) {
-  return Boolean(labeledField(text)) || ZH_MARKER.test(text) || SUB_MARKER.test(text) || !looksLikeCountryContinuation(text);
+  const lower = text.trim().toLowerCase();
+  return Boolean(labeledField(text)) || ZH_MARKER.test(text) || SUB_MARKER.test(text) || PART.test(text.trim())
+    || isCommitteeSubject(text, "") || CLAUSE_WORDS.some(word => lower.startsWith(word)) || !looksLikeCountryContinuation(text);
+}
+
+/** Shared policy ``language`` (parser.detect_language): a few quoted Chinese
+ * characters do not make an English document Chinese. */
+function detectLanguage(text: string): "zh" | "en" {
+  const cjk = (text.match(/[\u3400-\u9fff]/g) || []).length, latin = (text.match(/[A-Za-z]/g) || []).length;
+  return cjk >= Math.max(POLICY.language.minCjk, Math.floor(latin / POLICY.language.latinPerCjk)) ? "zh" : "en";
 }
 
 const BOUNDARY = POLICY.headerBoundary;
@@ -293,12 +371,16 @@ function matchesTypeTitle(text: string, type: BrowserDocumentType, language: "zh
 }
 
 export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDocumentType): BrowserModel {
-  const { document } = parsePackage(content);
+  return recognize(parsePackage(content).document, documentType);
+}
+
+/** Recognition on an already parsed main document; reads it, never changes it. */
+function recognize(document: Document, documentType: BrowserDocumentType): BrowserModel {
   const sourceParagraphs = flowParagraphs(document);
   const paragraphs = sourceParagraphs.map(paragraphText);
   const nonEmpty = paragraphs.map((text, index) => ({ text: text.trim(), index })).filter((item) => item.text);
   const joined = nonEmpty.map((item) => item.text).join("\n");
-  const language: "zh" | "en" = /[\u3400-\u9fff]/.test(joined) ? "zh" : "en";
+  const language = detectLanguage(joined);
   const expectedTitle = typeTitle(documentType, language);
   const titleItem = nonEmpty.slice(0, 8).find((item) => matchesTypeTitle(item.text, documentType, language));
   // Labels after the first body paragraph are the author's text.
@@ -318,7 +400,9 @@ export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDo
     const firstLabeled = nonEmpty.find((item) => item.index > (titleItem?.index ?? -1) && isHeaderMetadata(item));
     // Read one contiguous header block. Never skip a name that resembles a
     // marker and take a later body heading as the missing metadata value.
-    const header = nonEmpty.filter(item => item.index > (titleItem?.index ?? -1)
+    // Header lines end where the body starts (shared headerBoundary): a
+    // numbered section heading is never a missing header value.
+    const header = nonEmpty.filter(item => item.index > (titleItem?.index ?? -1) && item.index < limit
       && item.index < (firstLabeled?.index ?? Number.POSITIVE_INFINITY)).slice(0, profile.unlabeledHeaderFields.length);
     const candidates = header.every((item, index) => (
       item.index > (titleItem?.index ?? -1)
@@ -374,33 +458,53 @@ export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDo
     max_numbering_level: clauses.reduce((max, item) => Math.max(max, item.level), 0), warnings, paragraphs,
   };
 }
-/** Paragraph numbers whose embedded subclause could not be split (links or revisions inside). */
-let unsplit: number[] = [];
+// Shared policy embeddedSubclause (structure_repair._split_embedded_subclauses).
+const SUBCLAUSE = POLICY.embeddedSubclause;
+const SUBCLAUSE_MARKER = new RegExp(SUBCLAUSE.marker, "g"), FIRST_LEVEL = new RegExp(SUBCLAUSE.firstLevel);
+const ARTICLE = new RegExp(SUBCLAUSE.article), CLAUSE = new RegExp(SUBCLAUSE.clause);
+const UNSPLIT_NOTES = {
+  context: "疑似含有合并进同一段的子条款标记，但所在段落不是条款",
+  field: "含域或内容控件，其中嵌入的子条款",
+  wrapper: "含链接或修订痕迹，其中嵌入的子条款",
+};
+/** Embedded subclauses left as written, by paragraph number in the upload. */
+let unsplit: { number: number; reason: keyof typeof UNSPLIT_NOTES }[] = [];
 function normalizeEmbeddedSubclauses(document: Document, documentType: BrowserDocumentType) {
   unsplit = [];
-  if (!["working-paper", "draft-directive", "draft-resolution"].includes(documentType)) return false;
-  const marker = /([：:])\s*([（(][子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]{1,3}[）)])/;
+  if (!SUBCLAUSE.documentTypes.includes(documentType)) return false;
   let changed = false;
-  for (const original of [...flowParagraphs(document)]) {
-    const initial = paragraphText(original);
-    const firstSub = /[：:][ \u00a0]*[（(]一[）)]/.exec(initial);
-    if (firstSub && /^\s*第[一二三四五六七八九十百]+条/.test(initial)) {
-      changed = splitParagraphAt(original, firstSub.index + 1, true) || changed;
-    }
-    let paragraph = original;
+  flowParagraphs(document).forEach((original, index) => {
+    let current = original, position = 0;
     while (true) {
-      const value = paragraphText(paragraph);
-      const match = marker.exec(value);
-      if (!match || match.index === 0 || !paragraph.parentNode) break;
-      if (/[\t\r\n]/.test(match[0])) break;
-      const splitAt = match.index + match[1].length;
-      const remainder = value.slice(splitAt).trimStart();
-      if (!remainder) break;
-      if (!splitParagraphAt(paragraph, splitAt)) { unsplit.push(flowParagraphs(document).indexOf(paragraph) + 1); break; }
-      paragraph = paragraph.nextElementSibling!;
-      changed = true;
+      const text = paragraphText(current);
+      SUBCLAUSE_MARKER.lastIndex = position;
+      const match = SUBCLAUSE_MARKER.exec(text);
+      if (!match) break;
+      const marker = match[3], markerStart = match.index + match[0].length - marker.length;
+      // Tabs and manual line breaks are deliberate visible structure; a later
+      // marker in the same paragraph can still be flattened.
+      if (/[\t\n]/.test(match[2])) { position = match.index + match[0].length; continue; }
+      const keep = text.slice(0, markerStart).trimEnd().length;
+      // An automatically numbered clause is a clause even though its marker is not part of the text.
+      if (!CLAUSE.test(text) && !activeNumbering(current)) { unsplit.push({ number: index + 1, reason: "context" }); break; }
+      if (!canCut(current)) { unsplit.push({ number: index + 1, reason: "field" }); break; }
+      try {
+        if (FIRST_LEVEL.test(marker) && current === original && ARTICLE.test(text)) {
+          // First-level subclauses begin on a new line inside the article paragraph.
+          breakLineBefore(current, keep, markerStart);
+          position = keep + 1 + marker.length;
+        } else {
+          current = moveToNewParagraph(current, keep, markerStart);
+          position = 0;
+        }
+        changed = true;
+      } catch (reason) {
+        if (!(reason instanceof Unsplittable)) throw reason;
+        unsplit.push({ number: index + 1, reason: "wrapper" });
+        break;
+      }
     }
-  }
+  });
   return changed;
 }
 
@@ -700,30 +804,65 @@ function formatRun(run: Element, ctx: Ctx, emphasis: { bold?: boolean; italic?: 
 /** Hiding or striking every character is damage; hiding or striking some is
  * the author's (a private note, an amendment's deletion) (base._strip_uniform_damage). */
 const UNIFORM_DAMAGE = ["vanish", "webHidden", "specVanish", "strike", "dstrike"];
+const HIDDEN_MARKS = ["vanish", "webHidden", "specVanish"];
+/** A direct run property that is switched on (properties inherited from styles were made direct by parsePackage). */
+function runHas(run: Element, tag: string) {
+  const rPr = directChild(run, "rPr"), node = rPr && directChild(rPr, tag);
+  return Boolean(node) && !["0", "false", "off"].includes(wordAttribute(node, "val") || "");
+}
+/** True when some of the paragraph's text is hidden or struck through.
+ * Rebuilding such a paragraph as one new run would show hidden text and erase
+ * deletion marks, so rewrites edit it in place or leave it alone. */
+function carriesSemanticMarks(paragraph: Element) {
+  return visibleRuns(paragraph).some(run => paragraphText(run).length > 0 && UNIFORM_DAMAGE.some(tag => runHas(run, tag)));
+}
+/** True when rewriting the paragraph to ``kept`` (its trailing visible part) would delete hidden or struck characters (ooxml_edit.removes_marked_text). */
+function removesMarkedText(paragraph: Element, kept: string): boolean {
+  const runs = visibleRuns(paragraph).map(run => [run, paragraphText(run)] as const);
+  const full = runs.map(([, text]) => text).join(""), start = full.lastIndexOf(kept);
+  if (start < 0) return carriesSemanticMarks(paragraph);
+  const end = start + kept.length;
+  let offset = 0;
+  return runs.some(([run, text]) => {
+    const first = offset, last = offset + text.length;
+    offset = last;
+    return (Math.min(last, start) > first || last > Math.max(first, end)) && UNIFORM_DAMAGE.some(tag => runHas(run, tag));
+  });
+}
 function stripUniformDamage(document: Document, parts: Record<string, Uint8Array>): string[] {
-  const on = (run: Element, tag: string) => {
-    const node = directChild(rPrOf(run), tag);
-    return Boolean(node) && !["0", "false", "off"].includes(wordAttribute(node, "val") || "");
-  };
+  const on = runHas;
   const every = elements(document, "p").flatMap(p => visibleRuns(p)), runs = every.filter(run => paragraphText(run).trim());
   if (!runs.length) return [];
   const cleared = UNIFORM_DAMAGE.filter(tag => runs.every(run => on(run, tag)));
   for (const tag of cleared) for (const run of every) removeChildren(rPrOf(run), [tag]);
   // Removing direct properties alone lets a damaged Normal/docDefault style
   // immediately hide/strike the text again when Word opens the output.
+  // A style only footnotes or headers use keeps it: their hidden notes are
+  // not part of the damage (formatters/base._styles_applied_to_body).
   if (cleared.length && parts["word/styles.xml"]) {
     const styles = new DOMParser().parseFromString(decoder.decode(parts["word/styles.xml"]), "application/xml");
-    for (const tag of cleared) for (const node of elements(styles, tag)) node.remove();
+    for (const root of stylesAppliedToBody(document, styles)) for (const tag of cleared) for (const node of elements(root, tag)) node.remove();
     parts["word/styles.xml"] = encoder.encode(new XMLSerializer().serializeToString(styles));
   }
   // Told, not shown or kept silently.
   return paragraphElements(document).flatMap((p, index) => {
     const kept = visibleRuns(p).filter(run => paragraphText(run).trim());
-    const hidden = kept.some(run => ["vanish", "webHidden", "specVanish"].some(tag => on(run, tag))), struck = kept.some(run => on(run, "strike") || on(run, "dstrike"));
+    const hidden = kept.some(run => HIDDEN_MARKS.some(tag => on(run, tag))), struck = kept.some(run => on(run, "strike") || on(run, "dstrike"));
     if (!hidden && !struck) return [];
     const what = hidden && !struck ? "隐藏文字" : struck && !hidden ? "删除线文字" : "隐藏文字和删除线文字";
     return [`第 ${index + 1} 段含${what}，已保留原稿的显示、打印或删除标记，请确认是否需要。`];
   });
+}
+
+/** Document defaults and every style the body text can take, with the styles they are based on. */
+function stylesAppliedToBody(document: Document, styles: Document): Element[] {
+  const index = new Map(elements(styles, "style").map(s => [wordAttribute(s, "styleId"), s]));
+  const body = elements(document, "body")[0];
+  const named = new Set<string | null>(["pStyle", "rStyle", "tblStyle"].flatMap(tag => body ? elements(body, tag).map(node => wordAttribute(node, "val") || null) : []));
+  for (const kind of ["character", "table"]) named.add(defaultStyleId(styles, kind));
+  named.add(defaultStyleId(styles, "paragraph") || "Normal");
+  const applied = new Set<Element>([...named].flatMap(id => styleChain(index, id).map(([, style]) => style)));
+  return [...elements(styles, "docDefaults"), ...applied];
 }
 
 /** Runs whose text the reader sees (not deleted revisions or text boxes). */
@@ -743,13 +882,15 @@ function formatRuns(paragraph: Element, ctx: Ctx, emphasis: { bold?: boolean; it
 }
 
 const COMPLEX_RUN_CHILDREN = new Set(["rPr", "t", "tab", "br", "cr"]);
+/** A page or column break (or one that clears floats) is not a plain line break; rebuilding the run would turn it into one. */
+const typedBreak = (node: Element) => node.localName === "br" && Array.from(node.attributes).some(a => a.localName !== "type" || a.value !== "textWrapping");
 function hasComplexContent(paragraph: Element) {
   return Array.from(paragraph.children).some(child => child.localName !== "pPr" && (child.localName !== "r"
-    || Array.from(child.children).some(node => !COMPLEX_RUN_CHILDREN.has(node.localName))));
+    || Array.from(child.children).some(node => !COMPLEX_RUN_CHILDREN.has(node.localName) || typedBreak(node))));
 }
 
 function flatteningIsLossless(paragraph: Element) {
-  if (hasComplexContent(paragraph)) return false;
+  if (hasComplexContent(paragraph) || carriesSemanticMarks(paragraph)) return false;
   const properties = new Set<string>();
   for (const run of elements(paragraph, "r")) {
     if (!elements(run, "t").some(t => t.textContent)) continue;
@@ -806,9 +947,10 @@ function editVisibleText(paragraph: Element, next: string): boolean {
 
 function appendRun(paragraph: Element, text: string): Element {
   const run = paragraph.ownerDocument.createElementNS(WORD_NS, "w:r");
-  const parts = text.split("\t");
-  parts.forEach((part, index) => {
-    if (index) run.appendChild(paragraph.ownerDocument.createElementNS(WORD_NS, "w:tab"));
+  // Tabs and line breaks are elements, as python-docx's add_run writes them.
+  const parts = text.split(/([\t\n])/);
+  parts.forEach(part => {
+    if (part === "\t" || part === "\n") { run.appendChild(paragraph.ownerDocument.createElementNS(WORD_NS, part === "\t" ? "w:tab" : "w:br")); return; }
     if (!part) return;
     const node = paragraph.ownerDocument.createElementNS(WORD_NS, "w:t");
     if (/^\s|\s$/.test(part)) node.setAttribute("xml:space", "preserve");
@@ -863,16 +1005,21 @@ function rewriteLogged(ctx: Ctx, p: Element, text: string, kind: string, key = "
   if (paragraphText(p) === text) return true;
   const previous = ctx.editLog.get(p);
   const backup = Array.from(p.childNodes).map(node => node.cloneNode(true));
-  const before = signature(p);
-  const written = setText(ctx, p, text);
-  const exact = paragraphText(p) === text;
-  if (written && (!exact || !rewriteKeepsStructure(kind, before, signature(p)))) {
+  const before = signature(p), marks = paragraphMarks(p);
+  const restore = (reason: string) => {
     // Restore in place (the element keeps its identity for the content check).
     for (const child of Array.from(p.childNodes)) p.removeChild(child);
     for (const child of backup) p.appendChild(child);
-    protect(ctx, p, "改写会改变该段中的链接、域、书签或修订结构，已保留原样");
+    protect(ctx, p, reason);
     return false;
-  }
+  };
+  const written = setText(ctx, p, text);
+  const exact = paragraphText(p) === text;
+  if (written && (!exact || !rewriteKeepsStructure(kind, before, signature(p)))) return restore("改写会改变该段中的链接、域、书签或修订结构，已保留原样");
+  // Any automatic rewrite (title word, label, marker, ending) that would delete
+  // hidden or struck characters, or drop their mark, is undone here, for this
+  // paragraph only; the final guard stays strict.
+  if (written && !marksKept(marks, p)) return restore("改写会删除隐藏或删除线文字或去掉其标记，已保留原样");
   if (!exact) return false;
   let expected: string | null = ["label-restore", "field"].includes(kind) ? text : null;
   if (previous?.kind === "field" && ["label-drop", "title"].includes(kind)) { kind = "field"; key = previous.key || ""; expected = text; }
@@ -960,7 +1107,10 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
   // Step-03 values for header lines printed without a label.
   for (const key of ["committee", "topic", "country", "delegate"] as const) {
     if (!ctx.changed.has(key) || !ctx.original[key]) continue;
-    const index = texts.findIndex((text, i) => i < 40 && !labeledField(text) && text === ctx.original[key]);
+    // Only an unlabeled header line: a labeled one is rewritten below, and a
+    // body paragraph that happens to repeat the old value is the author's text.
+    if (texts.some((text, i) => i < ctx.headerEnd && labeledField(text)?.key === key)) continue;
+    const index = texts.findIndex((text, i) => i < ctx.headerEnd && !labeledField(text) && text === ctx.original[key]);
     if (index < 0) continue;
     if (hasComplexContent(paragraphs[index])) throw new ProtectedContentError(index + 1, `第 03 步修改了${POLICY.metadata[key].output[ctx.language]}，但该段含图片、域或修订痕迹，不能安全改写`);
     if (setText(ctx, paragraphs[index], ctx.model[key])) logEdit(ctx, paragraphs[index], "field", key, ctx.model[key]);
@@ -981,6 +1131,7 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
       formatCountryField(ctx, p, continuations, labeled.key);
     } else if (ctx.changed.has(labeled.key)) {
       if (hasComplexContent(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含图片或域，不能安全改写");
+      if (carriesSemanticMarks(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含隐藏或删除线文字，改写会改变其显示或删除含义");
       const target = labelValueText(labeled.key, ctx.model[labeled.key] as string, ctx.language);
       clearParagraph(p);
       formatRun(appendRun(p, target), ctx, { bold: false, italic: false, underline: false });
@@ -1018,7 +1169,7 @@ function formatCountryField(ctx: Ctx, p: Element, continuations: Element[], key:
   const differs = values.length > 0 && (ctx.normalizePunctuation || reordered) && (
     reordered || continuations.some(c => paragraphText(c).trim()) || paragraphText(p).trim() !== expected.trim());
   if (ctx.changed.has(key) || differs) {
-    const complexPart = [p, ...continuations].find(hasComplexContent);
+    const complexPart = [p, ...continuations].find(part => hasComplexContent(part) || carriesSemanticMarks(part));
     if (!complexPart) {
       clearParagraph(p);
       appendRun(p, expected);
@@ -1027,8 +1178,8 @@ function formatCountryField(ctx: Ctx, p: Element, continuations: Element[], key:
       styleCountryLine(ctx, p, true);
       return;
     }
-    if (ctx.changed.has(key)) throw new ProtectedContentError(sourceNumber(ctx, complexPart), "第 03 步修改了国家名单，但名单含图片、域或修订痕迹，不能安全改写");
-    protect(ctx, complexPart, "国家列表含图片、域或修订痕迹，未重写");
+    if (ctx.changed.has(key)) throw new ProtectedContentError(sourceNumber(ctx, complexPart), "第 03 步修改了国家名单，但名单含图片、域、修订痕迹或隐藏/删除线文字，不能安全改写");
+    protect(ctx, complexPart, "国家列表含图片、域、修订痕迹或隐藏/删除线文字，未重写");
   }
   styleCountryLine(ctx, p, true);
   for (const c of continuations) formatRuns(c, ctx, { bold: true, italic: true, underline: false });
@@ -1262,17 +1413,21 @@ function handbookBlocks(ctx: Ctx, paragraphs: Element[], numbering: Map<string, 
 
 function nestUnmarkedItems(roles: Map<number, Block>, texts: string[]) {
   const listLevels = new Map<string, number>();
-  let parentLevel: number | null = null;
+  let parentLevel: number | null = null, parentKey: string | null = null;
   for (const index of [...roles.keys()].sort((a, b) => a - b)) {
     const block = roles.get(index)!;
-    if (block.role !== "item") { parentLevel = null; continue; }
+    if (block.role !== "item") { parentLevel = null; parentKey = null; continue; }
     const active = activeNumbering(block.p);
+    const key = active ? `${active.numId}:${active.ilvl}` : null;
     if (active && !HANDBOOK_MARKER.test(texts[index])) {
-      const key = `${active.numId}:${active.ilvl}`;
-      if (listLevels.has(key)) block.level = listLevels.get(key)!;
-      else if (parentLevel !== null) { block.level = parentLevel + 1; listLevels.set(key, block.level); }
+      if (listLevels.has(key!)) block.level = listLevels.get(key!)!;
+      // The next item of the clause's own list and level is its sibling, not
+      // its subclause: a colon alone does not prove the subclauses exist.
+      else if (parentLevel !== null && key !== parentKey) { block.level = parentLevel + 1; listLevels.set(key!, block.level); }
     }
-    parentLevel = /[：:]$/.test(texts[index]) ? block.level : null;
+    const opens = /[：:]$/.test(texts[index]);
+    parentLevel = opens ? block.level : null;
+    parentKey = opens ? key : null;
   }
 }
 
@@ -1302,10 +1457,14 @@ function headerText(ctx: Ctx, blocks: Block[]) {
       if (target === text) continue;
       if (!ctx.changed.has("title")) rewriteLogged(ctx, block.p, target, "title");
       else if (!rewriteLogged(ctx, block.p, target, "field", "title"))
-        throw new ProtectedContentError(sourceNumber(ctx, block.p), "第 03 步修改了标题，但标题含链接、域或修订痕迹，不能安全改写");
+        throw new ProtectedContentError(sourceNumber(ctx, block.p), "第 03 步修改了标题，但标题含链接、域、修订、隐藏或删除线文字，不能安全改写");
     } else if ((block.role === "committee" || block.role === "topic") && ctx.spec.committeeTopicLabels === "drop") {
       const labeled = labeledField(text);
-      if (labeled && (labeled.key === "committee" || labeled.key === "topic") && labeled.value) rewriteLogged(ctx, block.p, labeled.value, "label-drop");
+      if (labeled && (labeled.key === "committee" || labeled.key === "topic") && labeled.value) {
+        // Dropping the label would delete hidden or struck words.
+        if (removesMarkedText(block.p, labeled.value)) protect(ctx, block.p, "委员会/议题标签含隐藏或删除线文字，未按范例删除标签");
+        else rewriteLogged(ctx, block.p, labeled.value, "label-drop");
+      }
     }
   }
 }
@@ -1321,14 +1480,70 @@ function endingInRevision(p: Element) {
   return false;
 }
 
+/** Text nodes from the end of the paragraph back to the last one with words in it. */
+function endingTail(p: Element): Element[] {
+  const tail: Element[] = [];
+  for (const node of visibleRuns(p).flatMap(run => Array.from(run.children).filter(child => child.namespaceURI === WORD_NS && child.localName === "t")).reverse()) {
+    if (!node.textContent) continue;
+    tail.push(node);
+    if (node.textContent.replace(ENDING_STRIP, "")) break;
+  }
+  return tail;
+}
+
+/** The run closing the complex field whose result holds ``run``, or null. */
+function fieldResultEnd(p: Element, run: Element): Element | null {
+  const stack: string[] = [];
+  let inside = false;
+  for (const candidate of elements(p, "r")) {
+    if (candidate === run) inside = stack.includes("result");
+    for (const mark of elements(candidate, "fldChar")) {
+      const type = wordAttribute(mark, "fldCharType");
+      if (type === "begin") stack.push("code");
+      else if (type === "separate" && stack.length) stack[stack.length - 1] = "result";
+      else if (type === "end") { stack.pop(); if (inside && !stack.length) return candidate; }
+    }
+  }
+  return null;
+}
+
+/** A field result or link holding ``node``: the element after which new text must go. */
+function endingContainer(p: Element, node: Element): Element | null {
+  for (let ancestor = node.parentElement; ancestor && ancestor !== p; ancestor = ancestor.parentElement) {
+    if (ancestor.namespaceURI === WORD_NS && ["hyperlink", "fldSimple"].includes(ancestor.localName)) return ancestor;
+  }
+  return node.parentElement ? fieldResultEnd(p, node.parentElement) : null;
+}
+
 function setEnding(ctx: Ctx, p: Element, ending: string) {
   const text = paragraphText(p);
   // Only the final punctuation is replaced: trailing spaces at the very end
   // go, but a space inside the sentence (before a field or a link) stays.
-  const stripped = text.replace(/[ \t]+$/, "").replace(ENDING_PUNCTUATION, "");
-  if (!stripped.trim() || text === stripped + ending) return;
+  // Line and page breaks after the sentence stay after its new ending.
+  const stripped = text.replace(/[ \t\n]+$/, "").replace(ENDING_PUNCTUATION, "");
+  const breaks = "\n".repeat((text.slice(text.replace(/[ \t\n]+$/, "").length).match(/\n/g) || []).length);
+  if (!stripped.trim() || text === stripped + ending + breaks) return;
   if (endingInRevision(p)) { protect(ctx, p, "句末标点位于修订痕迹中，未自动规范"); return; }
-  rewriteLogged(ctx, p, stripped + ending, "ending");
+  const tail = endingTail(p);
+  // Hidden or struck words are not what the reader sees end the sentence.
+  if (tail.some(node => node.parentElement && UNIFORM_DAMAGE.some(tag => runHas(node.parentElement!, tag)))) {
+    protect(ctx, p, "句末文字为隐藏或删除线文字，未自动规范标点"); return;
+  }
+  const container = tail.length ? endingContainer(p, tail[0]) : null;
+  if (container) {
+    // A field result is regenerated by Word and a link's text is the link:
+    // punctuation goes after them, and nothing inside them is changed.
+    if (text.replace(/\n+$/, "") !== stripped) { protect(ctx, p, "句末位于域结果或超链接中，未自动规范标点"); return; }
+    const source = tail[0].parentElement!, added = p.ownerDocument.createElementNS(WORD_NS, "w:r");
+    const properties = directChild(source, "rPr");
+    if (properties) { const copy = properties.cloneNode(true) as Element; removeChildren(copy, ["rStyle"]); added.appendChild(copy); }
+    const node = added.appendChild(p.ownerDocument.createElementNS(WORD_NS, "w:t"));
+    node.textContent = ending;
+    container.parentNode!.insertBefore(added, container.nextSibling);
+    logEdit(ctx, p, "ending");
+    return;
+  }
+  rewriteLogged(ctx, p, stripped + ending + breaks, "ending");
 }
 
 function punctuation(ctx: Ctx, blocks: Block[]) {
@@ -1449,7 +1664,7 @@ function signatureLines(ctx: Ctx, blocks: Block[]): Block[] {
     if (!group.length || group[0].role !== key || !values.length) continue;
     const expected = countryLineText(key, values, ctx.language);
     const written = group.map(b => paragraphText(b.p)).join("");
-    if (written.replace(/\s+/g, "") !== expected.replace(/\s+/g, "") || group.some(b => hasComplexContent(b.p))) continue;
+    if (written.replace(/\s+/g, "") !== expected.replace(/\s+/g, "") || group.some(b => hasComplexContent(b.p) || carriesSemanticMarks(b.p))) continue;
     const label = expected.slice(0, expected.length - values.join(HB.signatureLines.separator[ctx.language]).length);
     const lines = breakCountryList(label, values, ctx.language);
     if (lines.length === 1 && group.length === 1) continue;
@@ -1640,7 +1855,7 @@ function formatInner(
 ) {
   const originalBytes = new Uint8Array(content.slice(0));
   const { parts, document } = parsePackage(content);
-  const original = parseDocxInBrowser(content, model.document_type);
+  const original = recognize(document, model.document_type);
 
   // Structure repair, checked on its own: splits and the markers it reports only.
   const repairBefore = documentTokens(document);
@@ -1649,8 +1864,7 @@ function formatInner(
   const missingListItems = suspectedMissingListItems(document, model.document_type);
   const unsplitParagraphs = [...unsplit];
   const repairProblems = repaired || split ? verifyRepair(repairBefore, documentTokens(document), repaired ? ["（一）"] : []) : [];
-  parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
-  const recognized = { ...parseDocxInBrowser(zipSync(parts).slice().buffer as ArrayBuffer, model.document_type), language: model.language };
+  const recognized = { ...recognize(document, model.document_type), language: model.language };
 
   const changed = new Set((["title", "committee", "topic", "country", "delegate", "sponsors", "signatories"] as const)
     .filter(key => JSON.stringify(model[key]) !== JSON.stringify(original[key])));
@@ -1663,6 +1877,8 @@ function formatInner(
   };
   const snapshot = takeSnapshot(document);
   const keptHidden = stripUniformDamage(document, parts);
+  // After the whole-document damage is cleared: what stays hidden or struck must stay so.
+  const marks = semanticMarks(document);
 
   configurePage(document);
   configureStyles(parts, ctx);
@@ -1685,14 +1901,14 @@ function formatInner(
   handbookNotes(parts, ctx.eastAsia);
   normalizeFontParts(parts, ctx.language);
 
-  const problems = verifyFormat(snapshot, document, ctx.editLog, TITLE_WORDS(ctx.type), [...POLICY.metadata.committee.aliases, ...POLICY.metadata.topic.aliases]);
+  const problems = [...verifyFormat(snapshot, document, ctx.editLog, TITLE_WORDS(ctx.type), [...POLICY.metadata.committee.aliases, ...POLICY.metadata.topic.aliases]), ...verifyMarks(marks, document)];
   parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
   const output = zipSync(parts, { level: 6 });
   const packageProblems = verifyPackage(originalBytes, output);
   const sizeIssues = runSizeIssues(ctx);
   const validations: BrowserValidation[] = [
     { code: "docx_package", label: "DOCX 包结构", status: "pass", detail: "必要的 Word 部件完整。" },
-    { code: "content", label: "逐段严格内容校验（文字、域、链接、书签、脚注、修订）", status: problems.length ? "error" : "pass", detail: problems.slice(0, 6).join("；") || "只允许句末标点、标题用词、页首标签和国家名单顺序/断行等记录在案的修改。" },
+    { code: "content", label: "逐段严格内容校验（文字、域、链接、书签、脚注、修订、隐藏与删除线）", status: problems.length ? "error" : "pass", detail: problems.slice(0, 6).join("；") || "只允许句末标点、标题用词、页首标签和国家名单顺序/断行等记录在案的修改。" },
     { code: "package", label: "链接目标、关系与嵌入资源逐项保留", status: packageProblems.length ? "error" : "pass", detail: packageProblems.slice(0, 6).join("；") || "每个关系的目标、类型、模式及每个图片 / 嵌入对象的字节均与原稿一致。" },
     { code: "font_size", label: "正文与编号字号", status: sizeIssues ? "error" : "pass", detail: sizeIssues ? `仍有 ${sizeIssues} 个文本片段未达到规定字号。` : `正文 ${BODY_PT} 磅、参考文献与脚注 ${NOTE_PT} 磅。` },
     { code: "browser_private", label: "本地处理", status: "pass", detail: "文件在当前浏览器中处理，未发送到外部排版服务。" },
@@ -1702,7 +1918,9 @@ function formatInner(
   if (repairProblems.length) validations.push({ code: "repair-content", label: "结构修复严格内容校验", status: "error", detail: repairProblems.slice(0, 6).join("；") });
   for (const note of keptHidden) validations.push({ code: "hidden-text", label: "隐藏文字与删除线按原稿保留", status: "warning", detail: note });
   for (const number of missingListItems) validations.push({ code: "numbering_review", label: "原编号已保留，疑似缺项需人工确认", status: "warning", detail: `第 ${number} 段可能是引言或缺失编号的首项。已保留原样，不自动加入列表，以免后续条号及交叉引用错位。` });
-  for (const number of unsplitParagraphs) validations.push({ code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: `第 ${number} 段含链接或修订痕迹，其中嵌入的子条款未拆分为独立段落，请人工确认。` });
+  for (const { number, reason } of unsplitParagraphs) validations.push(reason === "context"
+    ? { code: "structure_review", label: "结构识别待确认", status: "warning", detail: `第 ${number} 段${UNSPLIT_NOTES.context}，未拆分，请人工确认。` }
+    : { code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: `第 ${number} 段${UNSPLIT_NOTES[reason]}未拆分为独立段落，请人工确认。` });
   for (const note of ctx.protectedNotes) validations.push({ code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: note });
   for (const detail of ctx.warnings) validations.push({ code: "structure_review", label: "结构识别待确认", status: "warning", detail });
   const errors = validations.filter(item => item.status === "error");

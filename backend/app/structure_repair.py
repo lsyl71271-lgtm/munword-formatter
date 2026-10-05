@@ -7,26 +7,28 @@ from io import BytesIO
 
 from docx import Document
 from docx.text.paragraph import Paragraph
-from docx.oxml import OxmlElement
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
 
 from . import content_guard
-from .docx_view import active_num_id, all_paragraphs, body_paragraphs, invalidate as invalidate_paragraph_cache, visible_text
+from .docx_view import (
+    active_num_id, all_paragraphs, body_paragraphs, default_style_id, invalidate as invalidate_paragraph_cache, own_runs,
+    style_chain, style_index, visible_text,
+)
 from .fonts import rpr_child
-from .ooxml_edit import edit_visible_text, has_complex_content
-from .parser import MANUAL_NUMBER_RE
-from .semantic_policy import label_value
+from .ooxml_edit import SEMANTIC_MARKS, carries_semantic_marks, edit_visible_text, has_complex_content, run_has
+from .parser import MANUAL_NUMBER_RE, detect_language
+from .semantic_policy import EMBEDDED_SUBCLAUSE, META_LABELS, label_value, starts_body
 
 
-POSITION_LABELS = ("委员会", "议题", "国家", "代表")
+POSITION_KEYS = ("committee", "topic", "country", "delegate")
 POSITION_SECTION_RE = re.compile(r"^\s*[（(]([一二三四五六七八九十百]+)[）)]")
-EMBEDDED_RESOLUTION_MARKER_RE = re.compile(
-    r"(?<=[：:；;])\s*(?P<marker>[（(](?:[一二三四五六七八九十百]{1,3}|"
-    r"[子丑寅卯辰巳午未申酉戌亥]{1,4}|[甲乙丙丁戊己庚辛壬癸]{1,4})[）)])"
-)
-OPERATIVE_START_RE = re.compile(
-    r"^\s*(?:第[一二三四五六七八九十百]+条\s*)?(?:决定|呼吁|敦促|鼓励|建议|要求|支持|希望|推动|关于|申明|强调)"
-)
+# Shared policy ``embeddedSubclause``: the browser engine applies the same rule.
+_SUBCLAUSE_MARKER_RE = re.compile(EMBEDDED_SUBCLAUSE["marker"])
+_FIRST_LEVEL_RE = re.compile(EMBEDDED_SUBCLAUSE["firstLevel"])
+_ARTICLE_RE = re.compile(EMBEDDED_SUBCLAUSE["article"])
+_CLAUSE_RE = re.compile(EMBEDDED_SUBCLAUSE["clause"])
 REPAIR_THRESHOLD = 0.9
 _LIST_ITEM_END_RE = re.compile(r"[；;。.]$")
 
@@ -88,10 +90,9 @@ def repair_structure_with_report(content: bytes, document_type: str) -> Structur
     if document_type == "position-paper":
         actions.extend(_repair_position_header(document))
         actions.extend(_repair_first_position_section(document))
-    elif document_type == "draft-resolution":
-        actions.extend(_split_embedded_resolution_markers(document))
-        actions.extend(_restore_dropped_first_list_item(document))
-    elif document_type == "working-paper":
+    if document_type in EMBEDDED_SUBCLAUSE["documentTypes"]:
+        actions.extend(_split_embedded_subclauses(document))
+    if document_type in ("draft-resolution", "working-paper"):
         actions.extend(_restore_dropped_first_list_item(document))
     if not normalized and not any(action.applied for action in actions):
         return StructureRepairResult(content, tuple(actions))
@@ -114,11 +115,9 @@ def _materialize_style_emphasis(document) -> bool:
     Normal style would otherwise turn a whole document bold.
     """
 
-    styles = {style.get(qn("w:styleId")): style for style in document.styles.element.findall(qn("w:style"))}
-    defaults = {
-        style_id for style_id, style in styles.items()
-        if style.get(qn("w:type")) == "paragraph" and style.get(qn("w:default")) in ("1", "true")
-    } | {"Normal"}
+    styles = style_index(document)
+    default_paragraph = default_style_id(styles, "paragraph") or "Normal"
+    defaults = {default_paragraph, "Normal"}
 
     def inherited(style_id, tag):
         seen = set()
@@ -138,7 +137,8 @@ def _materialize_style_emphasis(document) -> bool:
         ppr = paragraph._p.pPr
         style = ppr.find(qn("w:pStyle")) if ppr is not None else None
         paragraph_style = style.get(qn("w:val")) if style is not None else None
-        for run in paragraph._p.iter(qn("w:r")):
+        # A text box's paragraphs inherit from their own styles.
+        for run in own_runs(paragraph._p):
             rpr = run.find(qn("w:rPr"))
             run_style = rpr.find(qn("w:rStyle")) if rpr is not None else None
             character_style = run_style.get(qn("w:val")) if run_style is not None else None
@@ -149,7 +149,7 @@ def _materialize_style_emphasis(document) -> bool:
                 if found is None and tag != "vertAlign":
                     found = inherited(paragraph_style, tag)
                 if found is None and tag in _SEMANTIC_STYLE_TAGS:
-                    found = inherited("Normal", tag)
+                    found = inherited(default_paragraph, tag)
                     if found is None:
                         found = document.styles.element.find(f"{qn('w:docDefaults')}/{qn('w:rPrDefault')}/{qn('w:rPr')}/{qn(f'w:{tag}')}")
                 if found is None:
@@ -173,15 +173,11 @@ def _materialize_style_list_format(document) -> bool:
     without this the automatic numbers vanished from the output.
     """
 
-    styles = {style.get(qn("w:styleId")): style for style in document.styles.element.findall(qn("w:style"))}
+    styles = style_index(document)
+    definitions = _numbering_definitions(document)
 
     def chain(style_id):
-        seen = set()
-        while style_id and style_id in styles and style_id not in seen:
-            seen.add(style_id)
-            yield styles[style_id]
-            based = styles[style_id].find(qn("w:basedOn"))
-            style_id = based.get(qn("w:val")) if based is not None else None
+        return [item for _, item in style_chain(styles, style_id)]
 
     changed = False
     for paragraph in body_paragraphs(document):
@@ -194,10 +190,17 @@ def _materialize_style_list_format(document) -> bool:
         if numbering is None or ppr.numPr is not None or numbering.find(qn("w:numId")) is None:
             continue
         num_pr = deepcopy(numbering)
-        if num_pr.find(qn("w:ilvl")) is None:
+        level = num_pr.find(qn("w:ilvl"))
+        if level is None:
             level = OxmlElement("w:ilvl")
             level.set(qn("w:val"), "0")
             num_pr.insert(0, level)
+        # ECMA-376 §17.9.23: a level that names the paragraph style is that
+        # style's level, whatever the style's own numPr says.
+        linked = _linked_level(definitions, numbering.find(qn("w:numId")).get(qn("w:val")),
+                               [style_id for style_id, _ in style_chain(styles, style.get(qn("w:val")))])
+        if linked is not None:
+            level.set(qn("w:val"), linked)
         ppr._insert_numPr(num_pr)
         if ppr.find(qn("w:ind")) is None:
             indent = next((item.find(f"{qn('w:pPr')}/{qn('w:ind')}") for item in chain(style.get(qn("w:val")))
@@ -206,6 +209,37 @@ def _materialize_style_list_format(document) -> bool:
                 ppr._insert_ind(deepcopy(indent))
         changed = True
     return changed
+
+
+def _numbering_definitions(document):
+    """The numbering part's root, or ``None``; never creates the part."""
+
+    try:
+        part = document.part.part_related_by(RT.NUMBERING)
+    except KeyError:
+        return None
+    return part.element if hasattr(part, "element") else parse_xml(part.blob)
+
+
+def _linked_level(definitions, num_id: str, style_ids: list[str]) -> str | None:
+    """The ``w:ilvl`` of the level whose ``w:pStyle`` names one of ``style_ids`` (nearest style first)."""
+
+    if definitions is None:
+        return None
+    num = next((item for item in definitions.findall(qn("w:num")) if item.get(qn("w:numId")) == num_id), None)
+    reference = num.find(qn("w:abstractNumId")) if num is not None else None
+    if reference is None:
+        return None
+    abstract = next((item for item in definitions.findall(qn("w:abstractNum"))
+                     if item.get(qn("w:abstractNumId")) == reference.get(qn("w:val"))), None)
+    if abstract is None:
+        return None
+    linked: dict = {}
+    for level in abstract.findall(qn("w:lvl")):
+        style = level.find(qn("w:pStyle"))
+        if style is not None:
+            linked.setdefault(style.get(qn("w:val")), level.get(qn("w:ilvl")) or "0")
+    return next((linked[style_id] for style_id in style_ids if style_id in linked), None)
 
 
 def _repair_position_header(document) -> list[RepairAction]:
@@ -229,7 +263,12 @@ def _repair_position_header(document) -> list[RepairAction]:
     if any(recognized):
         return []
     candidate_texts = [visible_text(paragraphs[index]).strip() for index in candidates]
+    # A numbered heading or a sentence is body text (shared headerBoundary):
+    # labeling it would turn "一、问题背景" into the delegate.
+    if any(starts_body(text) for text in candidate_texts):
+        return []
     has_body_punctuation = any(re.search(r"[。；;！？!?]", text) for text in candidate_texts)
+    language = detect_language("\n".join(visible_text(paragraph) for paragraph in paragraphs))
     lengths_ok = all(1 <= len(text) <= 80 for text in candidate_texts)
     confidence = 0.97 if lengths_ok and not has_body_punctuation else 0.58
     actions: list[RepairAction] = []
@@ -239,7 +278,8 @@ def _repair_position_header(document) -> list[RepairAction]:
         if key:
             continue
         value = visible_text(paragraph).strip().lstrip("：:").strip()
-        replacement = f"{POSITION_LABELS[slot]}：{value}"
+        label = META_LABELS[language][POSITION_KEYS[slot]]
+        replacement = f"{label}: {value}" if language == "en" else f"{label}：{value}"
         original = visible_text(paragraph)
         applied = confidence >= REPAIR_THRESHOLD and _rewrite_text(paragraph, replacement)
         actions.append(RepairAction("立场文件四行页首标签", index, confidence, original if not applied else value, replacement, applied))
@@ -287,62 +327,54 @@ def _repair_first_position_section(document) -> list[RepairAction]:
     return []
 
 
-def _split_embedded_resolution_markers(document) -> list[RepairAction]:
+def _split_embedded_subclauses(document) -> list[RepairAction]:
+    """Split subclauses flattened into one paragraph (shared policy ``embeddedSubclause``)."""
+
     actions: list[RepairAction] = []
-    # Work on a snapshot; newly inserted paragraphs are already split at the
-    # earliest marker, and the loop below handles any later marker recursively.
+    # Work on a snapshot so reports name the paragraph as numbered in the upload.
     for original_index, paragraph in enumerate(list(body_paragraphs(document))):
         current = paragraph
         position = 0
         while True:
             text = visible_text(current)
-            match = EMBEDDED_RESOLUTION_MARKER_RE.search(text, position)
-            if not match or match.start("marker") == 0:
+            match = _SUBCLAUSE_MARKER_RE.search(text, position)
+            if not match:
                 break
-            separator = text[match.start() : match.start("marker")]
+            marker_start = match.start(3)
             # Tabs and manual line breaks are deliberate visible structure in
             # several valid reference files.  They are not evidence that a
             # marker was accidentally flattened into prose; a later marker in
             # the same paragraph still can be.
-            if "\t" in separator or "\n" in separator:
+            if "\t" in match.group(2) or "\n" in match.group(2):
                 position = match.end()
                 continue
-            prefix = text[: match.start("marker")].rstrip()
-            suffix = text[match.start("marker") :].lstrip()
-            if not prefix or not suffix:
+            keep = len(text[:marker_start].rstrip())
+            before = text
+            # An automatically numbered clause is a clause even though its
+            # marker is not part of the text.
+            if not (_CLAUSE_RE.match(text) or active_num_id(current) is not None):
+                actions.append(RepairAction(CONTEXT_CODE, original_index, 0.62, before, before, False))
                 break
-            inner = re.sub(r"[（）()]", "", match.group("marker"))
-            structural_context = bool(
-                OPERATIVE_START_RE.match(prefix)
-                # An automatically numbered clause is a clause even though its
-                # marker is not part of the text.
-                or active_num_id(current) is not None
-                or re.match(r"^\s*(?:第[一二三四五六七八九十百]+条|[（(][一二三四五六七八九十百子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己庚辛壬癸]+[）)])", prefix)
-            )
-            confidence = 0.96 if structural_context else 0.62
-            applied = confidence >= REPAIR_THRESHOLD and _can_cut(current)
-            if not applied:
-                actions.append(RepairAction("决议案内嵌条款标记", original_index, confidence, text, text, False))
+            if not _can_cut(current):
+                actions.append(RepairAction(FIELD_CODE, original_index, 0.96, before, before, False))
                 break
-            if re.fullmatch(r"[一二三四五六七八九十百]{1,3}", inner):
-                # First-level subclauses in the reference convention begin on
-                # a new visual line inside the article paragraph.
-                replacement = f"{prefix}\n{suffix}"
-                try:
-                    _break_line_before(current, len(prefix), match.start("marker"))
-                except _Unsplittable:
-                    break
-                actions.append(RepairAction("决议案内嵌一级条款标记", original_index, confidence, text, replacement, True))
-                # Keep scanning after the new line: a deeper subclause can be
-                # flattened into the same article.
-                position = len(prefix) + 1 + len(match.group("marker"))
-                continue
+            marker = match.group(3)
+            after = f"{text[:keep]}\n{text[marker_start:]}"
             try:
-                current = _move_to_new_paragraph(current, len(prefix), match.start("marker"))
+                if _FIRST_LEVEL_RE.match(marker) and current is paragraph and _ARTICLE_RE.match(text):
+                    # First-level subclauses in the reference convention begin
+                    # on a new visual line inside the article paragraph.
+                    _break_line_before(current, keep, marker_start)
+                    position = keep + 1 + len(marker)
+                    code = "内嵌一级条款标记"
+                else:
+                    current = _move_to_new_paragraph(current, keep, marker_start)
+                    position = 0
+                    code = "内嵌深层条款标记"
             except _Unsplittable:
+                actions.append(RepairAction(UNSPLIT_CODE, original_index, 0.96, before, before, False))
                 break
-            position = 0
-            actions.append(RepairAction("决议案内嵌深层条款标记", original_index, confidence, text, f"{prefix}\n{suffix}", True))
+            actions.append(RepairAction(code, original_index, 0.96, before, after, True))
     return actions
 
 
@@ -383,14 +415,20 @@ def _restore_dropped_first_list_item(document) -> list[RepairAction]:
 
 # Run children that contribute visible text, as python-docx's Run.text reads them.
 _RUN_TEXT_TAGS = frozenset(qn(tag) for tag in ("w:t", "w:tab", "w:br", "w:cr", "w:noBreakHyphen", "w:ptab"))
-# Inline wrappers a split may cut through; the cut copies the wrapper.
-_SPLITTABLE = frozenset(qn(tag) for tag in ("w:hyperlink", "w:ins", "w:moveTo", "w:smartTag", "w:customXml"))
+# Inline wrappers a split may cut through; the cut copies the wrapper.  A link
+# or a tracked change is not cut: a copied hyperlink or revision is new
+# structure the repair check refuses, which withheld the whole document.  The
+# paragraph is kept as written and reported, as the browser engine does.
+_SPLITTABLE = frozenset(qn(tag) for tag in ("w:smartTag", "w:customXml"))
+UNSPLIT_CODE = "内嵌条款标记（位于链接或修订中，未拆分）"
+CONTEXT_CODE = "内嵌条款标记（所在段落不是条款，未拆分）"
+FIELD_CODE = "内嵌条款标记（段落含域或内容控件，未拆分）"
 # Wrappers whose content is not shown.
 _NOT_SHOWN = frozenset(qn(tag) for tag in ("w:del", "w:moveFrom"))
 
 
 class _Unsplittable(Exception):
-    """The split point falls inside a field or content control."""
+    """The split point falls inside a link, a tracked change or another wrapper that is not copied."""
 
 
 def _visible_length(element) -> int:
@@ -486,8 +524,8 @@ def _cut_at_resume(paragraph, keep: int, resume_at: int) -> int:
     """Cut at ``keep`` and at ``resume_at``, dropping plain whitespace between.
 
     Returns the child index where the text resumed at ``resume_at`` starts.
-    Only whitespace-only text runs are removed; anything else between the
-    cuts (a bookmark, a wrapper) stays in place.
+    Only whitespace-only text runs without hidden or struck marks are
+    removed; anything else between the cuts (a bookmark, a wrapper) stays.
     """
 
     p = paragraph._p
@@ -497,7 +535,9 @@ def _cut_at_resume(paragraph, keep: int, resume_at: int) -> int:
     children = list(p)
     resumed = children[resume] if resume < len(children) else None
     for child in children[middle:resume]:
-        if child.tag == qn("w:r") and all(item.tag in (qn("w:rPr"), qn("w:t")) for item in child) and not _run_plain_text(child).strip():
+        # Hidden or struck whitespace is the author's mark, not separator noise.
+        if (child.tag == qn("w:r") and all(item.tag in (qn("w:rPr"), qn("w:t")) for item in child)
+                and not _run_plain_text(child).strip() and not any(run_has(child, tag) for tag in SEMANTIC_MARKS)):
             p.remove(child)
     return p.index(resumed) if resumed is not None else len(p)
 
@@ -527,6 +567,11 @@ def _move_to_new_paragraph(paragraph, keep: int, resume_at: int):
         for tag in ("w:numPr", "w:ind"):
             for node in list(p.iter(qn(tag))):
                 node.getparent().remove(node)
+        # A section break belongs to the paragraph that ends the section, now
+        # the new one; a copy left behind would start an extra section.
+        section = paragraph._p.pPr.find(qn("w:sectPr"))
+        if section is not None:
+            paragraph._p.pPr.remove(section)
     for child in list(paragraph._p)[index:]:
         if child.tag == qn("w:pPr"):
             continue
@@ -550,8 +595,10 @@ def _rewrite_text(paragraph, text: str) -> bool:
     target = visible_text(paragraph)[:leading] + text + visible_text(paragraph)[leading + len(stripped):]
     backup = deepcopy(paragraph._p)
     before = content_guard.signature(paragraph._p)
+    marks = content_guard.paragraph_marks(paragraph._p)
     if edit_visible_text(paragraph, target):
-        if content_guard.rewrite_keeps_structure("repair", before, content_guard.signature(paragraph._p)):
+        if (content_guard.rewrite_keeps_structure("repair", before, content_guard.signature(paragraph._p))
+                and content_guard.marks_kept(marks, paragraph._p)):
             return True
         # The inserted label or marker landed inside a tracked revision (or
         # moved text across a link): restore in place and skip the repair.
@@ -561,7 +608,8 @@ def _rewrite_text(paragraph, text: str) -> bool:
             paragraph._p.append(child)
         invalidate_paragraph_cache()
         return False
-    if has_complex_content(paragraph):
+    if has_complex_content(paragraph) or carries_semantic_marks(paragraph):
+        # Rebuilding would show hidden text or drop strikethrough.
         return False
     _replace_paragraph_text(paragraph, text)
     return True

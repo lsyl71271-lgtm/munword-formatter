@@ -8,7 +8,8 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
+from lxml import etree
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -48,19 +49,35 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["127.0.0.1", "127.0.0.1:8000", "localhost", "localhost:8000", "[::1]", "[::1]:8000"],
 )
+CORS_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://pkunmun-2026-docx-formatter.lsyl71271.chatgpt.site",
+    "https://munword.lsyl71271.chatgpt.site",
+)
+# The local page itself; a browser sends Origin on every POST, same-origin too.
+LOCAL_ORIGINS = ("http://127.0.0.1:8000", "http://localhost:8000", "http://[::1]:8000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://pkunmun-2026-docx-formatter.lsyl71271.chatgpt.site",
-        "https://munword.lsyl71271.chatgpt.site",
-    ],
+    allow_origins=list(CORS_ORIGINS),
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition", "X-PKUNMUN-Validation"],
 )
+
+
+@app.middleware("http")
+async def refuse_foreign_origins(request, call_next):
+    """CORS only hides the response: any web page could still make this
+    always-on engine parse an upload.  A POST from a page that is neither the
+    local page nor a listed site is refused before it is read.  Requests
+    without an Origin header (the CLI, scripts) are not browser requests."""
+
+    origin = request.headers.get("origin")
+    if request.method == "POST" and request.url.path.startswith("/api/") and origin is not None and origin not in (*CORS_ORIGINS, *LOCAL_ORIGINS):
+        return JSONResponse({"detail": "来源网页不在允许列表中，已拒绝请求。"}, status_code=403)
+    return await call_next(request)
 
 
 def get_pipeline(document_type: str):
@@ -82,7 +99,11 @@ def failure_detail(prefix: str, exc: Exception) -> str:
 def processing_failure(prefix: str, exc: Exception) -> HTTPException:
     """Map an exception to one of the three failure classes (see ``errors.py``)."""
 
-    if isinstance(exc, (InvalidDocxError, zipfile.BadZipFile)):
+    if isinstance(exc, etree.XMLSyntaxError) and "Excessive depth" in str(exc):
+        # libxml2 refuses more than 256 nested elements; the browser engine
+        # applies the same limit (docx-safety.nestsTooDeep).
+        return HTTPException(status_code=422, detail="文件无法读取：XML 嵌套层级过深（超过 256 层）。")
+    if isinstance(exc, (InvalidDocxError, zipfile.BadZipFile, etree.XMLSyntaxError)):
         return HTTPException(status_code=422, detail=f"文件无法读取：{exc}")
     if isinstance(exc, InvalidRequestError):
         return HTTPException(status_code=422, detail=f"第 03 步提交的字段无效：{exc}")

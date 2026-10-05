@@ -98,7 +98,10 @@ try {
     Write-Host "使用 Python $($found.Version)：$($found.Executable)"
 
     Write-Step '停止正在运行的旧版本'
-    if ((Get-EngineState) -eq 'ours') { Stop-Engine | Out-Null }
+    if ((Get-EngineState) -eq 'ours') {
+        # Continuing would leave the old engine serving the old program.
+        if (-not (Stop-Engine)) { throw '无法停止正在运行的旧版排版引擎（它可能不是从安装目录启动的）。请先关闭它或重启电脑，再重新运行安装程序。' }
+    }
 
     Write-Step "复制程序到 $InstallRoot"
     New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null

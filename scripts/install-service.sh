@@ -37,7 +37,10 @@ launchctl bootout "$SERVICE_DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
 /usr/bin/plutil -insert RunAtLoad -bool true "$PLIST_TARGET"
 /usr/bin/plutil -insert KeepAlive -bool true "$PLIST_TARGET"
 /usr/bin/plutil -insert ProcessType -string Background "$PLIST_TARGET"
-/usr/bin/plutil -insert ThrottleInterval -integer 5 "$PLIST_TARGET"
+# A failing start (port 8000 held by another program) is retried once a
+# minute, not every 5 s: each attempt logs a traceback.  Opening the app
+# still restarts the service at once (launchctl kickstart -k).
+/usr/bin/plutil -insert ThrottleInterval -integer 60 "$PLIST_TARGET"
 /usr/bin/plutil -insert EnvironmentVariables -json '{"PYTHONUNBUFFERED":"1"}' "$PLIST_TARGET"
 /usr/bin/plutil -insert StandardOutPath -string "$INSTALL_ROOT/backend.log" "$PLIST_TARGET"
 /usr/bin/plutil -insert StandardErrorPath -string "$INSTALL_ROOT/backend.log" "$PLIST_TARGET"

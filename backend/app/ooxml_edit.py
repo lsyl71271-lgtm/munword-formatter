@@ -103,13 +103,63 @@ def _set_boolean_property(rpr, name: str, value) -> None:
     rpr_child(rpr, name).set(qn("w:val"), "1" if value else "0")
 
 
+def _typed_break(node) -> bool:
+    """A page or column break (or one that clears floats); ``add_run`` would write a plain line break."""
+
+    return node.tag == qn("w:br") and any(key != qn("w:type") or value != "textWrapping" for key, value in node.attrib.items())
+
+
 def has_complex_content(paragraph) -> bool:
     """True when flattening this paragraph would discard non-text OOXML."""
     return any(child.tag != qn("w:pPr") and (
         child.tag != qn("w:r") or any(node.tag not in {
             qn("w:rPr"), qn("w:t"), qn("w:tab"), qn("w:br"), qn("w:cr")
-        } for node in child)
+        } or _typed_break(node) for node in child)
     ) for child in paragraph._p)
+
+
+# Run properties that change what a reader sees or what the text means.
+SEMANTIC_MARKS = ("vanish", "webHidden", "specVanish", "strike", "dstrike")
+
+
+def run_has(run_element, tag: str) -> bool:
+    """A switched-on direct run property (style emphasis was made direct by structure repair)."""
+
+    node = run_element.find(f"{qn('w:rPr')}/{qn(f'w:{tag}')}")
+    return node is not None and node.get(qn("w:val")) not in ("0", "false", "off")
+
+
+def carries_semantic_marks(paragraph) -> bool:
+    """True when some of the paragraph's text is hidden or struck through.
+
+    Rebuilding such a paragraph as one new run would show hidden text and erase
+    deletion marks, so rewrites edit it in place or leave it alone.
+    """
+
+    return any(run.text and any(run_has(run._r, tag) for tag in SEMANTIC_MARKS) for run in visible_runs(paragraph))
+
+
+def removes_marked_text(paragraph, kept: str) -> bool:
+    """True when rewriting the paragraph to ``kept`` would delete hidden or struck characters.
+
+    ``kept`` is the trailing part of the visible text that the rewrite keeps
+    (a header value without its label); everything around it goes.
+    """
+
+    runs = [(run, run.text) for run in visible_runs(paragraph)]
+    full = "".join(text for _, text in runs)
+    start = full.rfind(kept)
+    if start < 0:
+        return carries_semantic_marks(paragraph)
+    end = start + len(kept)
+    offset = 0
+    for run, text in runs:
+        first, last = offset, offset + len(text)
+        offset = last
+        removed = min(last, start) > first or last > max(first, end)
+        if removed and any(run_has(run._r, tag) for tag in SEMANTIC_MARKS):
+            return True
+    return False
 
 
 def flattening_is_lossless(paragraph) -> bool:
@@ -121,7 +171,7 @@ def flattening_is_lossless(paragraph) -> bool:
     fields or the author's own bold/italic emphasis.
     """
 
-    if has_complex_content(paragraph):
+    if has_complex_content(paragraph) or carries_semantic_marks(paragraph):
         return False
     signatures = set()
     for run in paragraph._p.iter(qn("w:r")):

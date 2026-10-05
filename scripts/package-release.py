@@ -27,6 +27,13 @@ def package(output: Path, desktop: bool = False) -> dict:
     untracked = [name for name in subprocess.check_output(["git", "ls-files", "-z", "--others", "--exclude-standard"], cwd=ROOT).decode().split("\0") if name]
     if untracked:
         raise ValueError("Untracked files are neither source nor ignored; add or remove them before packaging: " + ", ".join(sorted(untracked)[:20]))
+    # An unstaged edit to a tracked file (a fixture replaced by a real document
+    # for a local test) must not ship as if it were reviewed source: contents
+    # come from the Git index, and a working copy that differs is refused.
+    modified = [name for name in subprocess.check_output(
+        ["git", "-c", "core.fileMode=false", "diff", "--name-only", "-z"], cwd=ROOT).decode().split("\0") if name]
+    if modified:
+        raise ValueError("Tracked files have unstaged changes; commit, stage or restore them before packaging: " + ", ".join(sorted(modified)[:20]))
     entries = subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=ROOT).decode().split("\0")
     modes = {}
     for entry in filter(None, entries):
@@ -44,7 +51,8 @@ def package(output: Path, desktop: bool = False) -> dict:
         path = ROOT / name
         if path.is_symlink() or not path.is_file():
             raise ValueError(f"Unexpected source entry: {name}")
-        files[name] = path.read_bytes()
+        # Tracked files from the index; generated desktop assets from disk.
+        files[name] = subprocess.check_output(["git", "show", f":{name}"], cwd=ROOT) if name in modes else path.read_bytes()
     manifest = {"version": (ROOT / "VERSION").read_text().strip(), "kind": "desktop-source" if desktop else "source", "requires_python": True,
                 "files": {name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())}}
     files["PACKAGE-MANIFEST.json"] = json.dumps(manifest, indent=2, ensure_ascii=False).encode()

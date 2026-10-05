@@ -230,6 +230,44 @@ def carries_hidden_structure(paragraph: Paragraph) -> bool:
     return False
 
 
+_ON = ("1", "true", "on")
+
+
+def style_index(document: DocumentObject) -> dict:
+    return {style.get(qn("w:styleId")): style for style in document.styles.element.findall(qn("w:style"))}
+
+
+def default_style_id(styles: dict, kind: str) -> str | None:
+    """The style Word applies when nothing names one (``w:default``); Chinese Word calls the paragraph one "a"."""
+
+    return next((style_id for style_id, style in styles.items()
+                 if style.get(qn("w:type")) == kind and style.get(qn("w:default")) in _ON), None)
+
+
+def style_chain(styles: dict, style_id):
+    """``(id, element)`` for a style and the styles it is based on, nearest first."""
+
+    seen = set()
+    while style_id and style_id in styles and style_id not in seen:
+        seen.add(style_id)
+        yield style_id, styles[style_id]
+        based = styles[style_id].find(qn("w:basedOn"))
+        style_id = based.get(qn("w:val")) if based is not None else None
+
+
+def own_runs(paragraph_element) -> list:
+    """The paragraph's runs, without those of text-box paragraphs nested in it."""
+
+    runs = []
+    for run in paragraph_element.iter(qn("w:r")):
+        parent = run.getparent()
+        while parent is not None and parent.tag != qn("w:p"):
+            parent = parent.getparent()
+        if parent is paragraph_element:
+            runs.append(run)
+    return runs
+
+
 def structure_signature(document: DocumentObject) -> dict[str, int]:
     """Count the non-text OOXML features that formatting must not remove."""
 

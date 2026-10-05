@@ -411,6 +411,84 @@ def _short_diff(old: str, new: str) -> str:
     return "文字以外的内容（域、链接、书签、修订或图片）发生变化"
 
 
+# ------------------------------------------------- visibility and deletion marks
+
+# Run properties that change what a reader sees or what the text means.  The
+# signatures above leave run properties out, so they are checked on their
+# own: a hidden note must not become visible, a struck deletion must not lose
+# its strike (content-guard.ts semanticMarks).
+_HIDDEN_MARKS = tuple(_W + tag for tag in ("vanish", "webHidden", "specVanish"))
+_STRUCK_MARKS = tuple(_W + tag for tag in ("strike", "dstrike"))
+
+
+def _mark_on(run, tags) -> bool:
+    rpr = run.find(_W + "rPr")
+    return rpr is not None and any(child.tag in tags and child.get(_W + "val") not in ("0", "false", "off") for child in rpr)
+
+
+def _marks_of(element) -> tuple:
+    hidden, struck = [], []
+    for run in element.iter(_RUN):
+        if _deleted(run, element):
+            continue
+        text = "".join(child.text or "" for child in run if child.tag == _TEXT)
+        if _mark_on(run, _HIDDEN_MARKS):
+            hidden.append(text)
+        if _mark_on(run, _STRUCK_MARKS):
+            struck.append(text)
+    return "".join(hidden), "".join(struck)
+
+
+def _deleted(run, root) -> bool:
+    node = run.getparent()
+    while node is not None and node is not root:
+        if node.tag in (_W + "del", _W + "moveFrom"):
+            return True
+        node = node.getparent()
+    return False
+
+
+def semantic_marks(document) -> dict:
+    return {el: _marks_of(el) for el in body_blocks(document)}
+
+
+def _keeps(before: str, after: str) -> bool:
+    remaining = iter(after)
+    return all(ch in remaining for ch in before)
+
+
+def paragraph_marks(element) -> tuple:
+    """``(hidden, struck)`` text of one block, for checking a single rewrite."""
+
+    return _marks_of(element)
+
+
+def marks_kept(before: tuple, element) -> bool:
+    """The hidden and struck characters of ``before`` survive, in order and still marked, in ``element``."""
+
+    hidden, struck = _marks_of(element)
+    return _keeps(before[0], hidden) and _keeps(before[1], struck)
+
+
+def verify_marks(before: dict, document) -> list:
+    """Hidden and struck characters survive, in order, in the same block."""
+
+    present = set(body_blocks(document))
+    problems = []
+    for number, (el, (hidden, struck)) in enumerate(before.items(), 1):
+        if not hidden and not struck:
+            continue
+        if el not in present:
+            problems.append(f"第 {number} 段含隐藏或删除线文字，但该段被删除")
+            continue
+        now_hidden, now_struck = _marks_of(el)
+        if not _keeps(hidden, now_hidden):
+            problems.append(f"第 {number} 段的隐藏文字会变为可见：{hidden[:20]}")
+        if not _keeps(struck, now_struck):
+            problems.append(f"第 {number} 段的删除线被移除：{struck[:20]}")
+    return problems
+
+
 # ------------------------------------------------------------------ package
 
 _PARSER = etree.XMLParser(resolve_entities=False, no_network=True)

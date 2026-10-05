@@ -25,7 +25,7 @@ from ..docx_view import flow_paragraph_elements, holds_inline_object, visible_ru
 from ..errors import ProtectedContentError
 from ..fonts import rpr_child
 from ..models import IntermediateDocument
-from ..ooxml_edit import has_complex_content, style_text_range
+from ..ooxml_edit import SEMANTIC_MARKS, carries_semantic_marks, has_complex_content, removes_marked_text, run_has, style_text_range
 from ..parser import (
     MANUAL_NUMBER_RE,
     PAREN_DIGIT_RE,
@@ -147,14 +147,18 @@ class HandbookPassMixin:
                     if "title" in self._changed_fields and target != text:
                         if not self._rewrite_logged(paragraph, target, model.language, "field", "title"):
                             raise ProtectedContentError(
-                                self._source_number(paragraph), "第 03 步修改了标题，但标题含链接、域或修订痕迹，不能安全改写"
+                                self._source_number(paragraph), "第 03 步修改了标题，但标题含链接、域、修订、隐藏或删除线文字，不能安全改写"
                             )
                     elif target != text:
                         self._rewrite_logged(paragraph, target, model.language, "title")
             elif block.role in ("committee", "topic") and spec.committee_topic_labels == "drop":
                 key, value = label_value(text)
                 if key in ("committee", "topic") and value:
-                    self._rewrite_logged(paragraph, value, model.language, "label-drop")
+                    if removes_marked_text(paragraph, value):
+                        # Dropping the label would delete hidden or struck words.
+                        self._protect(paragraph, "委员会/议题标签含隐藏或删除线文字，未按范例删除标签")
+                    else:
+                        self._rewrite_logged(paragraph, value, model.language, "label-drop")
 
     # -------------------------------------------------------- numbering check
 
@@ -309,21 +313,28 @@ class HandbookPassMixin:
 
         list_levels: dict[tuple[str, int], int] = {}
         parent_level: int | None = None
+        parent_key: tuple[str, int] | None = None
         for index in sorted(roles):
             block = roles[index]
             if block.role != "item":
-                parent_level = None
+                parent_level = parent_key = None
                 continue
             num_id = active_num_id(block.paragraph)
-            if num_id is not None and not MANUAL_NUMBER_RE.match(texts[index]):
+            key = None
+            if num_id is not None:
                 ilvl = block.paragraph._p.pPr.numPr.ilvl
                 key = (num_id, int(ilvl.val) if ilvl is not None and ilvl.val is not None else 0)
+            if key is not None and not MANUAL_NUMBER_RE.match(texts[index]):
                 if key in list_levels:
                     block.level = list_levels[key]
-                elif parent_level is not None:
+                elif parent_level is not None and key != parent_key:
+                    # The next item of the clause's own list and level is its
+                    # sibling: a colon alone does not prove subclauses exist.
                     block.level = parent_level + 1
                     list_levels[key] = block.level
-            parent_level = block.level if texts[index].endswith(("：", ":")) else None
+            opens = texts[index].endswith(("：", ":"))
+            parent_level = block.level if opens else None
+            parent_key = key if opens else None
 
     def _list_level(self, paragraph: Paragraph, text: str, level: int) -> int | None:
         """The list level of ``paragraph``, or ``None`` when it is not a list item."""
@@ -487,7 +498,7 @@ class HandbookPassMixin:
             written = "".join(visible_text(block.paragraph) for block in group)
             if re.sub(r"\s+", "", written) != re.sub(r"\s+", "", expected):
                 continue
-            if any(has_complex_content(block.paragraph) for block in group):
+            if any(has_complex_content(block.paragraph) or carries_semantic_marks(block.paragraph) for block in group):
                 continue
             lines = _break_country_list(expected[: len(expected) - len(handbook.COUNTRY_SEPARATOR[language].join(values))], values, language)
             if len(lines) == 1 and len(group) == 1:
@@ -563,18 +574,47 @@ class HandbookPassMixin:
         text = visible_text(paragraph)
         # Only the final punctuation is replaced: trailing spaces at the very
         # end go, but a space inside the sentence (before a field or a link)
-        # stays.  A closing quotation mark or bracket stays too.
-        stripped = text.rstrip(" \t").rstrip(_ENDING_PUNCTUATION)
+        # stays.  A closing quotation mark or bracket stays too.  Line breaks
+        # after the sentence stay after its new ending.
+        sentence = text.rstrip(" \t\n")
+        breaks = "\n" * text[len(sentence):].count("\n")
+        stripped = sentence.rstrip(_ENDING_PUNCTUATION)
         if not stripped.strip():
             return
-        if text == stripped + ending:
+        if text == stripped + ending + breaks:
             return
         if _ending_in_revision(paragraph._p):
             # Changing punctuation inside a tracked insertion or deletion
             # would rewrite what a reviewer did; leave it for a person.
             self._protect(paragraph, "句末标点位于修订痕迹中，未自动规范")
             return
-        self._rewrite_logged(paragraph, stripped + ending, language, "ending")
+        tail = _ending_tail(paragraph)
+        # Hidden or struck words are not what the reader sees end the sentence.
+        if any(run_has(node.getparent(), tag) for node in tail for tag in SEMANTIC_MARKS):
+            self._protect(paragraph, "句末文字为隐藏或删除线文字，未自动规范标点")
+            return
+        container = _ending_container(paragraph._p, tail[0]) if tail else None
+        if container is not None:
+            # A field result is regenerated by Word and a link's text is the
+            # link: punctuation goes after them, nothing inside is changed.
+            if text.rstrip("\n") != stripped:
+                self._protect(paragraph, "句末位于域结果或超链接中，未自动规范标点")
+                return
+            source = tail[0].getparent()
+            added = OxmlElement("w:r")
+            properties = source.find(qn("w:rPr"))
+            if properties is not None:
+                copy_ = copy.deepcopy(properties)
+                for node in copy_.findall(qn("w:rStyle")):
+                    copy_.remove(node)
+                added.append(copy_)
+            node = OxmlElement("w:t")
+            node.text = ending
+            added.append(node)
+            container.addnext(added)
+            self._log_edit(paragraph, "ending")
+            return
+        self._rewrite_logged(paragraph, stripped + ending + breaks, language, "ending")
 
     # ------------------------------------------------------------ numbering
 
@@ -715,6 +755,52 @@ class HandbookPassMixin:
 
 
 _REVISIONS = frozenset(qn(tag) for tag in ("w:ins", "w:del", "w:moveTo", "w:moveFrom"))
+
+
+def _ending_tail(paragraph: Paragraph) -> list:
+    """Text nodes from the end of the paragraph back to the last one with words in it."""
+
+    nodes = [child for run in visible_runs(paragraph) for child in run._r if child.tag == qn("w:t")]
+    tail = []
+    for node in reversed(nodes):
+        if not node.text:
+            continue
+        tail.append(node)
+        if node.text.rstrip("，,；;。.:：、 \t"):
+            break
+    return tail
+
+
+def _field_result_end(paragraph_element, run_element):
+    """The run closing the complex field whose result holds ``run_element``, or ``None``."""
+
+    stack: list[str] = []
+    inside = False
+    for candidate in paragraph_element.iter(qn("w:r")):
+        if candidate is run_element:
+            inside = "result" in stack
+        for mark in candidate.iter(qn("w:fldChar")):
+            kind = mark.get(qn("w:fldCharType"))
+            if kind == "begin":
+                stack.append("code")
+            elif kind == "separate" and stack:
+                stack[-1] = "result"
+            elif kind == "end" and stack:
+                stack.pop()
+                if inside and not stack:
+                    return candidate
+    return None
+
+
+def _ending_container(paragraph_element, node):
+    """A field result or link holding ``node``: the element after which new text must go."""
+
+    ancestor = node.getparent()
+    while ancestor is not None and ancestor is not paragraph_element:
+        if ancestor.tag in (qn("w:hyperlink"), qn("w:fldSimple")):
+            return ancestor
+        ancestor = ancestor.getparent()
+    return _field_result_end(paragraph_element, node.getparent())
 
 
 def _ending_in_revision(paragraph_element) -> bool:

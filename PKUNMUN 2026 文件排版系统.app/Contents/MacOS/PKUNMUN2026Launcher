@@ -57,6 +57,11 @@ else
 fi
 
 /bin/mkdir -p "$RUNTIME_DIR"
+# Keep one previous log instead of growing without bound (as windows/start.ps1).
+# The restarted service reopens the log path, so it writes to a fresh file.
+if [[ -f "$LOG_FILE" ]] && (( $(/usr/bin/wc -c < "$LOG_FILE") > 5242880 )); then
+  /bin/mv -f "$LOG_FILE" "$LOG_FILE.old"
+fi
 if /bin/launchctl print "$SERVICE_DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1; then
   /bin/launchctl kickstart -k "$SERVICE_DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
 else

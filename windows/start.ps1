@@ -13,10 +13,19 @@ function Open-Page {
 }
 
 try {
-    $state = Get-EngineState
+    $expected = Get-InstalledVersion
+    $state = Get-EngineState -ExpectedVersion $expected
     if ($state -eq 'ours') {
         Open-Page
         exit 0
+    }
+    if ($state -eq 'stale') {
+        # An older engine would serve the old program under the new version.
+        if (-not (Stop-Engine)) {
+            Show-Message "端口 $Port 上运行着其他版本的排版引擎，且无法自动停止。请关闭它（或重启电脑）后再打开本应用。" 'Warning'
+            exit 1
+        }
+        $state = Get-EngineState
     }
     if ($state -eq 'other') {
         Show-Message "端口 $Port 已被其他程序占用（常见于开发服务器）。请先退出该程序，再重新打开本应用。" 'Warning'
@@ -52,7 +61,7 @@ try {
     # A cold start imports lxml and FastAPI; allow up to 30 s.
     for ($i = 0; $i -lt 120; $i++) {
         Start-Sleep -Milliseconds 250
-        if ((Get-EngineState) -eq 'ours') {
+        if ((Get-EngineState -ExpectedVersion $expected) -eq 'ours') {
             Open-Page
             exit 0
         }
