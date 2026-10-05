@@ -354,11 +354,14 @@ function sameBytes(a: Uint8Array, b: Uint8Array | undefined) {
 function packageRelations(parts: Record<string, Uint8Array>) {
   const relations = new Map<string, Map<string, string>>();
   for (const [name, bytes] of Object.entries(parts)) {
-    if (!name.endsWith(".rels")) continue;
+    if (!/\.rels$/i.test(name)) continue;
     const xml = new DOMParser().parseFromString(decodeXml(bytes), "application/xml");
+    if (xml.getElementsByTagName("parsererror").length) throw new Error("关系部件 XML 损坏，不能验证链接目标");
     const map = new Map<string, string>();
-    for (const rel of Array.from(xml.getElementsByTagName("Relationship"))) {
-      const attrs = Array.from(rel.attributes).map(a => [a.name, a.value]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    for (const rel of Array.from(xml.getElementsByTagNameNS("http://schemas.openxmlformats.org/package/2006/relationships", "Relationship"))) {
+      const attrs = Array.from(rel.attributes).filter(a => a.namespaceURI !== "http://www.w3.org/2000/xmlns/")
+        .map(a => [`{${a.namespaceURI || ""}}${a.localName}`, a.value]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+      if (map.has(rel.getAttribute("Id") || "")) throw new Error("关系部件存在重复标识，不能验证链接目标");
       map.set(rel.getAttribute("Id") || "", JSON.stringify(attrs));
     }
     relations.set(name, map);

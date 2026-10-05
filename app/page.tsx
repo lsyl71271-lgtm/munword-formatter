@@ -8,6 +8,7 @@ import TemplatePanel from "./template-panel";
 import { buildDiagnosticReport } from "./diagnostics";
 import { COUNTRY_DATA_DATE, countryWarnings, planCountries, splitCountryNames } from "./countries";
 import release from "../package.json";
+import { MAX_UPLOAD } from "./docx-safety";
 
 const DOCUMENT_TYPES: Array<{ id: DocumentType; zh: string; en: string; badge: string }> = [
   { id: "position-paper", zh: "立场文件", en: "Position Paper", badge: "PP" },
@@ -20,7 +21,6 @@ const DOCUMENT_TYPES: Array<{ id: DocumentType; zh: string; en: string; badge: s
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const REQUEST_TIMEOUT_MS = 120_000;
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 function splitCountryInput(value: string) {
   return splitCountryNames(value);
@@ -130,7 +130,7 @@ export default function Home() {
       setError("请上传 .docx 文件。旧版 .doc、PDF 和纯文本将在后续版本支持。");
       return;
     }
-    if (nextFile.size > MAX_UPLOAD_BYTES) {
+    if (nextFile.size > MAX_UPLOAD) {
       setError("文件超过 20 MB，请精简图片后重试。");
       return;
     }
@@ -161,7 +161,9 @@ export default function Home() {
         if (!response.ok) throw new Error(await readError(response, "文件识别失败。"));
         body = await response.json() as Model;
       } else {
-        body = parseDocxInBrowser(await file.arrayBuffer(), documentType);
+        const content = await file.arrayBuffer();
+        if (operation !== operationRef.current) return;
+        body = parseDocxInBrowser(content, documentType);
       }
       if (operation !== operationRef.current) return;
       setModel(body);
@@ -201,7 +203,9 @@ export default function Home() {
     setError("");
     try {
       if (!API_URL) {
-        const result = formatDocxInBrowser(await file.arrayBuffer(), model, { sessionLabel, submittingCountry, version, normalizePunctuation, preserveCountryOrder: preserveOrder });
+        const content = await file.arrayBuffer();
+        if (operation !== operationRef.current) return;
+        const result = formatDocxInBrowser(content, model, { sessionLabel, submittingCountry, version, normalizePunctuation, preserveCountryOrder: preserveOrder });
         if (operation !== operationRef.current) return;
         setValidations(result.validations);
         setFormatted({ blob: result.blob, filename: result.filename });

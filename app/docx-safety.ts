@@ -1,7 +1,7 @@
 import { unzipSync } from "fflate";
+import limits from "../shared/package-policy.json" with { type: "json" };
 
-const MAX_UPLOAD = 20 * 1024 * 1024;
-const MAX_EXPANDED = 100 * 1024 * 1024;
+export const MAX_UPLOAD = limits.maxUploadBytes;
 const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
   let value = index;
   for (let bit = 0; bit < 8; bit++) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
@@ -20,7 +20,7 @@ function entryChecksums(data: Uint8Array): number[] {
   while (end >= Math.max(0, data.length - 65557) && view.getUint32(end, true) !== 0x06054b50) end--;
   if (end < 0 || view.getUint32(end, true) !== 0x06054b50 || end + 22 + view.getUint16(end + 20, true) !== data.length) throw new Error("ZIP 目录损坏");
   const count = view.getUint16(end + 10, true);
-  if (view.getUint32(end + 4, true) !== 0 || count !== view.getUint16(end + 8, true) || count > 5000) throw new Error("不支持分卷或 ZIP64 文件");
+  if (view.getUint32(end + 4, true) !== 0 || count !== view.getUint16(end + 8, true) || count > limits.maxParts) throw new Error("不支持分卷或 ZIP64 文件");
   let offset = view.getUint32(end + 16, true);
   const directoryEnd = offset + view.getUint32(end + 12, true);
   if (directoryEnd !== end) throw new Error("ZIP 目录边界异常");
@@ -28,6 +28,10 @@ function entryChecksums(data: Uint8Array): number[] {
   for (let index = 0; index < count; index++) {
     if (offset + 46 > directoryEnd || view.getUint32(offset, true) !== 0x02014b50) throw new Error("ZIP 部件目录损坏");
     if (view.getUint16(offset + 8, true) & 1) throw new Error("不支持加密的 DOCX 部件");
+    const local = view.getUint32(offset + 42, true);
+    if (local + 30 > view.getUint32(end + 16, true) || view.getUint32(local, true) !== 0x04034b50) throw new Error("ZIP 本地部件目录损坏");
+    if (view.getUint16(local + 6, true) !== view.getUint16(offset + 8, true)
+      || view.getUint16(local + 8, true) !== view.getUint16(offset + 10, true)) throw new Error("ZIP 本地与中央目录标记不一致");
     checksums.push(view.getUint32(offset + 16, true));
     offset += 46 + view.getUint16(offset + 28, true) + view.getUint16(offset + 30, true) + view.getUint16(offset + 32, true);
   }
@@ -43,7 +47,8 @@ export function decodeXml(bytes: Uint8Array): string {
   if ((a === 0 && b === 0 && c === 0xfe && d === 0xff) || (a === 0xff && b === 0xfe && c === 0 && d === 0)) throw new Error("XML 部件使用了不支持的编码");
   const big = (a === 0xfe && b === 0xff) || (a === 0 && b === 0x3c);
   const little = (a === 0xff && b === 0xfe) || (a === 0x3c && b === 0);
-  return new TextDecoder(big ? "utf-16be" : little ? "utf-16le" : "utf-8").decode(bytes);
+  try { return new TextDecoder(big ? "utf-16be" : little ? "utf-16le" : "utf-8", { fatal: true }).decode(bytes); }
+  catch { throw new Error("XML 部件包含无效编码，不能安全保留原文"); }
 }
 
 export function declaresDtd(bytes: Uint8Array): boolean {
@@ -56,7 +61,7 @@ export function declaresDtd(bytes: Uint8Array): boolean {
 /** True when elements nest deeper than libxml2 accepts (256 levels), found without building a tree.
  * The Python engine refuses such parts while parsing; here deep recursion
  * overflowed the stack and was reported as an internal error. */
-export function nestsTooDeep(text: string, limit = 256): boolean {
+export function nestsTooDeep(text: string, limit = limits.maxXmlDepth): boolean {
   let depth = 0;
   for (let at = text.indexOf("<"); at !== -1; at = text.indexOf("<", at + 1)) {
     const next = text[at + 1];
@@ -92,15 +97,16 @@ export function readPackage(content: ArrayBuffer): Record<string, Uint8Array> {
     unzipSync(data, { filter(entry) {
       const { name, size, originalSize, compression } = entry;
       total += originalSize;
-      if (names.has(name) || name === "__proto__" || name.includes("\\") || name.startsWith("/") || name.split("/").includes("..")) {
+      if (names.has(name) || name === "__proto__" || /[\x00-\x1f\\]/.test(name) || name.startsWith("/") || name.split("/").includes("..")) {
         throw new Error("内部路径重复或不安全");
       }
       names.add(name);
       sizes.set(name, originalSize);
       expectedCrc.set(name, checksums[names.size - 1]);
-      if (names.size > 5000 || total > MAX_EXPANDED || originalSize > Math.max(size, 1) * 250 || ![0, 8].includes(compression)) {
+      if (names.size > limits.maxParts || total > limits.maxExpandedBytes || originalSize > Math.max(size, 1) * limits.maxCompressionRatio || !limits.compressionMethods.includes(compression)) {
         throw new Error("解压体积、压缩比例或压缩方法异常");
       }
+      if (/\.(?:xml|rels)$/i.test(name) && originalSize > limits.maxXmlBytes) throw new Error("XML 部件过大，请拆分文档");
       return false;
     } });
     if (!names.has("[Content_Types].xml") || !names.has("word/document.xml")) throw new Error("缺少必要的 Word 部件");
@@ -110,7 +116,6 @@ export function readPackage(content: ArrayBuffer): Record<string, Uint8Array> {
       // Any case: Word reads "header1.XML" as XML too.
       if (/\.(?:xml|rels)$/i.test(name)) {
         // DOCX parts do not need DTDs. Disallow entity declarations in both engines.
-        if (bytes.length > 16 * 1024 * 1024) throw new Error("XML 部件过大，请拆分文档");
         if (declaresDtd(bytes)) throw new Error("不支持 XML 实体或 DTD");
         if (nestsTooDeep(decodeXml(bytes).replace(/\0/g, ""))) throw new Error("XML 嵌套层级过深（超过 256 层）");
       }

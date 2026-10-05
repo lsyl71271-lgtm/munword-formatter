@@ -13,16 +13,17 @@ from lxml import etree
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .docx_package import validate_docx_package
+from .docx_package import MAX_UPLOAD_BYTES
 from .errors import InvalidDocxError, InvalidRequestError, ProtectedContentError
 from .pipelines import PIPELINES
 from .diagnostics import build_diagnostic_report
+from .upload_limit import UploadLimitMiddleware
 
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = ROOT / "templates" / "pkunmun2026"
 LOCAL_WEB_DIR = ROOT / "local_web"
-MAX_UPLOAD = 20 * 1024 * 1024
+MAX_UPLOAD = MAX_UPLOAD_BYTES
 
 
 def _version() -> str:
@@ -42,6 +43,7 @@ app = FastAPI(
     version=APP_VERSION,
     description="六种文件类型的独立 DOCX 解析、排版、校验与输出服务。",
 )
+app.add_middleware(UploadLimitMiddleware)
 # The engine listens on 127.0.0.1 only, but a browser can still be pointed at
 # it from a page whose DNS was rebound to the loopback address.  Requiring a
 # loopback Host header makes that attempt fail before it reaches a handler.
@@ -75,7 +77,7 @@ async def refuse_foreign_origins(request, call_next):
     without an Origin header (the CLI, scripts) are not browser requests."""
 
     origin = request.headers.get("origin")
-    if request.method == "POST" and request.url.path.startswith("/api/") and origin is not None and origin not in (*CORS_ORIGINS, *LOCAL_ORIGINS):
+    if request.method == "POST" and request.scope["path"].startswith("/api/") and origin is not None and origin not in (*CORS_ORIGINS, *LOCAL_ORIGINS):
         return JSONResponse({"detail": "来源网页不在允许列表中，已拒绝请求。"}, status_code=403)
     return await call_next(request)
 
@@ -155,10 +157,6 @@ async def read_docx(file: UploadFile) -> bytes:
     content = await file.read(MAX_UPLOAD + 1)
     if len(content) > MAX_UPLOAD:
         raise HTTPException(status_code=413, detail="文件不能超过 20 MB。")
-    try:
-        await run_in_threadpool(validate_docx_package, content)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return content
 
 

@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import tempfile
 import zipfile
@@ -77,7 +78,7 @@ def package(output: Path, desktop: bool = False) -> dict:
                     raise ValueError("Package readback failed")
         if output.exists():
             raise ValueError("Output already exists; choose a new filename")
-        temporary.replace(output)
+        os.link(temporary, output)  # Atomic create-if-absent; never overwrite a concurrent output.
     finally:
         temporary.unlink(missing_ok=True)
     return {"version": manifest["version"], "files": len(files), "sha256": hashlib.sha256(output.read_bytes()).hexdigest(), "path": str(output)}

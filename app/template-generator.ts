@@ -4,6 +4,7 @@ import { zipSync } from "fflate";
 import policy from "../shared/document-policy.json" with { type: "json" };
 import { parseDocxInBrowser, formatDocxInBrowser } from "./docx-browser.ts";
 import type { BrowserDocumentType } from "./docx-browser.ts";
+import { validXmlText } from "./request-validation.ts";
 
 export type TemplateInput = {
   language: "zh" | "en"; committee: string; topic: string; country: string;
@@ -16,7 +17,7 @@ const paragraph = (value: string) => `<w:p><w:r><w:t xml:space="preserve">${esca
 /** New documents only. Uploaded originals never pass through this generator. */
 export function generateFromTemplate(type: BrowserDocumentType, input: TemplateInput) {
   if (!["zh", "en"].includes(input.language)) throw new Error("请选择有效语言。");
-  if (Object.values(input).some(value => typeof value !== "string" || value.length > 100_000 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value))) throw new Error("输入过长或包含无效字符。");
+  if (Object.values(input).some(value => typeof value !== "string" || value.length > 100_000 || !validXmlText(value))) throw new Error("输入过长或包含无效字符。");
   if (!input.body.trim()) throw new Error("请先填写正文；程序不会替你编写内容。");
   const labels = input.language === "zh"
     ? { committee: "委员会", topic: "议题", country: "国家/席位", delegate: "代表", sponsors: "起草国", signatories: "附议国" }

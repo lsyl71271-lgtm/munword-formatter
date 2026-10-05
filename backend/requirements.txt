@@ -1,6 +1,8 @@
 # python-multipart 0.0.21+ and current FastAPI/Starlette need Python 3.10; macOS
 # installs use /usr/bin/python3 (3.9), which keeps the newest releases it supports.
 # The engine refuses browser POSTs from unlisted origins before reading the body.
+# Python 3.9 is legacy compatibility ONLY: its available multipart/Starlette
+# versions have unpatched advisories. Use Python 3.12+ for new/current installs.
 fastapi==0.142.2; python_version >= "3.10"
 fastapi==0.128.8; python_version < "3.10"
 uvicorn[standard]==0.35.0
@@ -8,6 +10,4 @@ python-multipart==0.0.32; python_version >= "3.10"
 python-multipart==0.0.20; python_version < "3.10"
 python-docx==1.2.0
 lxml==6.1.3
-pypinyin==0.55.0
 httpx==0.28.1
-

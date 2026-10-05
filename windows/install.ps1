@@ -90,6 +90,17 @@ try {
     Write-Host '将安装到当前用户目录，DOCX 只在本机处理，不会上传。首次安装需要联网下载运行组件（约 30 MB）。'
 
     # Check before stopping or replacing a working installation.
+    if ([IO.Path]::GetFullPath($SourceRoot).TrimEnd('\') -eq [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')) {
+        throw '请从解压后的发布包运行安装入口，不要在安装目录内运行。'
+    }
+    foreach ($item in @('backend', 'local_web', 'app', 'public', 'templates', 'shared', 'windows')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot $item) -PathType Container)) {
+            throw "发布包不完整，缺少目录：$item。现有安装未改动。"
+        }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot 'VERSION') -PathType Leaf)) {
+        throw '发布包缺少 VERSION。现有安装未改动。'
+    }
     foreach ($asset in @('local-app.js', 'local-styles.css')) {
         $assetPath = Join-Path (Join-Path $SourceRoot 'public') $asset
         if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf) -or (Get-Item -LiteralPath $assetPath).Length -eq 0) {

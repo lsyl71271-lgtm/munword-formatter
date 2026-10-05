@@ -11,6 +11,20 @@ REQUIREMENTS_STAMP="$INSTALL_ROOT/.requirements.sha256"
 CURRENT_REQUIREMENTS_SHA="$(shasum -a 256 "$PROJECT_DIR/backend/requirements.txt" | awk '{print $1}')"
 
 # Fail before changing an installation, never fall back to the retired UI.
+if [[ "$PROJECT_DIR" -ef "$INSTALL_ROOT" ]]; then
+  echo "请从解压后的发布包运行安装入口，不要在安装目录内运行。" >&2
+  exit 1
+fi
+for item in app backend local_web templates public shared; do
+  if [[ ! -d "$PROJECT_DIR/$item" ]]; then
+    echo "发布包不完整，缺少目录：$item。现有安装未改动。" >&2
+    exit 1
+  fi
+done
+if [[ ! -s "$PROJECT_DIR/VERSION" ]]; then
+  echo "发布包缺少 VERSION。现有安装未改动。" >&2
+  exit 1
+fi
 for asset in public/local-app.js public/local-styles.css; do
   if [[ ! -s "$PROJECT_DIR/$asset" ]]; then
     echo "缺少共用离线界面：$asset。请使用本机发布包，或先运行 pnpm build:local-tools。" >&2

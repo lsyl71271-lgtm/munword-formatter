@@ -1,0 +1,10 @@
+{
+  "maxUploadBytes": 20971520,
+  "maxExpandedBytes": 104857600,
+  "maxXmlBytes": 16777216,
+  "maxParts": 5000,
+  "maxCompressionRatio": 250,
+  "compressionMethods": [0, 8],
+  "maxXmlDepth": 256,
+  "maxMultipartBytes": 22020096
+}

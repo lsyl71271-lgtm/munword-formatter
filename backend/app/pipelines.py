@@ -17,6 +17,7 @@ from .formatters import (
 )
 from . import content_guard
 from .errors import InvalidRequestError
+from .docx_package import validate_docx_package
 from .models import FormatResult, IntermediateDocument, ValidationItem
 from .parser import DocxParser
 from .structure_repair import repair_structure_with_report
@@ -50,6 +51,7 @@ class BasePipeline:
     def _analyze(self, content: bytes) -> tuple[bytes, IntermediateDocument]:
         """Repair high-confidence structural loss, then parse the repaired bytes."""
 
+        validate_docx_package(content)
         repair = repair_structure_with_report(content, self.document_type)
         model = self.parser.parse(repair.content, self.document_type)
         model.repair_actions = [action.to_dict() for action in repair.actions]
@@ -125,6 +127,8 @@ class BasePipeline:
                 raise InvalidRequestError(f"{key} 必须是不超过 5000 字符的文本。")
             if snake_key == "language" and value not in {"zh", "en"}:
                 raise InvalidRequestError("语言只能为 zh 或 en。")
+            if any(re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]", item) for item in (value if isinstance(value, list) else [value])):
+                raise InvalidRequestError(f"{key} 含有 XML 不支持的字符，请删除无效字符后重试。")
             setattr(model, snake_key, value)
 
     def filename(self, model: IntermediateDocument, session_label: str, submitting_country: str, version: str) -> str:

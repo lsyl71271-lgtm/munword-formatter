@@ -13,27 +13,8 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   page.on("request", request => { if (new URL(request.url()).origin !== url.origin && /^https?:/.test(request.url())) external.push(request.url()); });
   await page.goto(origin, { waitUntil: "networkidle" });
-  if (process.env.MUNWORD_SMOKE_LOCAL_API === "1") {
-    await page.locator('#fileInput').setInputFiles("examples/acceptance-inputs/08_English_Draft_Resolution.docx");
-    await page.locator('#parseButton').click();
-    await page.locator('#reviewSection:not(.hidden)').waitFor();
-    const download = page.waitForEvent("download");
-    await page.locator('#generateButton').click();
-    await (await download).saveAs(path.resolve("output/browser-smoke/local-generated.docx"));
-    await page.getByText("诊断报告与实际页面", { exact: true }).click();
-    await page.locator('#showActualPages').click();
-    for (const title of ["原稿页面", "成稿页面"]) await page.frameLocator(`iframe[title="${title}"]`).locator("section.docx").waitFor();
-    if (!await page.getByText(/视觉核验：尚未执行/).count()) throw new Error("Missing local diagnostic status");
-    await page.getByText("从规范模板新建文件", { exact: true }).click();
-    await page.locator('#new_body').fill("第一条 要求建立合作机制。\n第二条 决定继续协商。");
-    const template = page.waitForEvent("download");
-    await page.locator('#newDocumentGenerate').click();
-    await (await template).saveAs(path.resolve("output/browser-smoke/local-template.docx"));
-    await page.screenshot({ path: "output/browser-smoke/local-desktop.png", fullPage: true });
-    if (errors.length || external.length) throw new Error(JSON.stringify({ errors, external }));
-    console.log("PASS local API upload → download → previews; diagnostics; independent template; no external document requests");
-    process.exitCode = 0;
-  } else {
+  // The desktop now renders the same React page and engine as the website.
+  // Select a different local origin, not retired #fileInput/#parseButton paths.
   await page.getByRole("button", { name: /决议草案/ }).click();
   await page.locator('input[type="file"]').setInputFiles("examples/acceptance-inputs/08_English_Draft_Resolution.docx");
   await page.getByRole("button", { name: /识别文件结构/ }).click();
@@ -59,5 +40,4 @@ try {
   await (await newPromise).saveAs(path.resolve("output/browser-smoke/new-template.docx"));
   if (errors.length || external.length) throw new Error(JSON.stringify({ errors, external }));
   console.log("PASS upload → auto recognition → download → actual preview; new template; mobile; no external document requests");
-  }
 } finally { await browser.close(); }

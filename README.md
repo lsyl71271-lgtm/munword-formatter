@@ -1,6 +1,6 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.8.0**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
+当前版本 **v1.8.1**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
 
 ## 功能与运行模式
 
@@ -34,7 +34,7 @@ Windows PowerShell 复制配置的命令：
 Copy-Item .openai/hosting.example.json .openai/hosting.json
 ```
 
-`dev/build/start` 已通过 Node 启动器兼容 Windows。现有 `typecheck` 仍使用 POSIX 环境变量语法，可在 WSL 中执行，或分别运行 Wrangler 类型生成与 TypeScript 检查。直接使用 Windows Python 本机版不要求 WSL。
+`dev/build/start/typecheck` 均使用 Node 启动器，兼容 Windows；本机 Python 版不要求 WSL。
 
 Vite 启动地址以终端输出为准（通常端口 5173）。生产构建与本机预览：
 
@@ -98,7 +98,7 @@ python3 scripts/import-country-names.py --unterm-export /path/to/unterm-countrie
 
 ```sh
 pnpm build:local-tools
-.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.8.0-desktop-source.zip
+.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.8.1-desktop-source.zip
 ```
 
 包内包含校验清单及依赖许可证，不包含 `.env`、部署账号配置、缓存或用户文档。仍需 Python 和首次安装联网下载依赖，不是无需运行时的 EXE。
@@ -112,7 +112,7 @@ docker compose -f deploy/visual-qa.compose.yaml up -d
 
 无 Docker 时改用 `--renderer /path/to/render_docx.py`。可设置 `MUNWORD_PDF_RASTERIZER` 指向 `pdftocairo` 或 `pdftoppm`；macOS 的部分 Poppler 后端会丢失 CJK 字形，建议 Cairo。`--reference-pages` 只接受同正文、同字体、同渲染环境的基线，失败返回非零状态。报告记录字号、斜体与像素差异，不代表所有学标要求自动验收完成。此服务不部署到公网网站，不自动上传文件。
 
-第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明见 [v1.8.0](docs/release-1.8.0.md)，此前版本见 [v1.7.2](docs/release-1.7.2.md)、[v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
+第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明与完整核查记录见 [v1.8.1](docs/release-1.8.1.md)，此前版本见 [v1.8.0](docs/release-1.8.0.md)、[v1.7.2](docs/release-1.7.2.md)、[v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
 
 根目录的 macOS/Windows 一键安装入口仍保留。它们会安装依赖、复制程序并配置持续运行的本机服务，不应由云端审查 agent 当作普通测试运行。macOS `.app` 中的启动器是 Bash 源码，生成的代码签名已排除；重新分发签名安装包是独立工作，不属于本源码仓库的可复现性承诺。
 
@@ -152,7 +152,7 @@ app/                    React 网页、浏览器 DOCX 引擎、内容守卫和 C
 local_web/              离线 React 挂载入口；直接导入 app/page.tsx
 backend/app/            FastAPI、解析、中间模型、六类流水线、格式器与保护
 backend/tests/          Python 测试
-shared/                 共用 UNTERM 国家表、排版策略、国家拼音与地域数据
+shared/                 共用 UNTERM 国家表、排版/包安全策略、国家拼音与地域数据
 templates/pkunmun2026/  模板策略说明
 tests/                  Node 单元/HTML 测试与引擎对齐基线
 examples/               合成验收输入及原有 D1 示例
@@ -182,5 +182,7 @@ VERSION                 本机后端版本；网页/离线界面统一读 packag
 - Windows 与 macOS 安装器需在真实设备验证；现有历史安装元数据与脚本保留，未借本次导入重构。
 - 线上浏览器下载、不同 Safari 版本与外部渲染器依赖，不由普通单元测试完全覆盖。
 - 原站点 CORS 来源是公开兼容配置，不是秘密；公开部署后端前必须独立审查安全边界。
+- 包安全预算统一来自 `shared/package-policy.json`：上传 20 MiB、展开 100 MiB、单 XML 16 MiB、最多 5000 个部件、压缩比 250、XML 深度 256；兼容 API 在 multipart 解析前限制请求合计 21 MiB。不支持加密或非 STORE/DEFLATE 压缩部件。
+- 当前完整依赖审计仍有一项开发工具链 `braces` 公告，官方无已发布修复版；DOCX 原文不进入 glob 模式。详见版本核查记录，不将此风险伪称为已修复。建议 Python 3.12+；Python 3.9 仅保留旧环境兼容，其可用的 multipart/Starlette 等依赖和安装工具仍有无法升级消除的公告，不应作为新安装的安全默认。
 
 本仓库不新增开源许可证或改变授权范围，默认按 Private 仓库管理。不要提交真实用户文档、秘密、生成产物或账号专属部署配置。

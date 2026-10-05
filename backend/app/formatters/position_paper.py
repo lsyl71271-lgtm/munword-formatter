@@ -32,7 +32,7 @@ class PositionPaperFormatter(BaseFormatter):
 
     def _format_document(self, document, model, preserve_country_order, normalize_punctuation):
         self._apply_common_roles(document, model, preserve_country_order)
-        body_start = self._body_start(document)
+        body_start = max(model.header_paragraph_indices.values(), default=-1) + 1
         numbered_count = 0
         for paragraph in body_paragraphs(document)[body_start:]:
             text = visible_text(paragraph).strip()

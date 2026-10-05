@@ -1,6 +1,6 @@
 {
   "name": "pkunmun-2026-docx-formatter",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "engines": {
@@ -12,8 +12,8 @@
     "start": "node scripts/run-web.mjs start",
     "build:local-tools": "node scripts/build-local-tools.mjs",
     "test": "pnpm test:unit && pnpm build && node --test tests/rendered-html.test.mjs",
-    "test:unit": "node --test tests/docx-safety.test.mjs tests/engine-parity.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs tests/studio-tools.test.mjs tests/review-regressions.test.mjs tests/local-web-race.test.mjs tests/audit-regressions.test.mjs tests/countries.test.mjs",
-    "typecheck": "WRANGLER_LOG_PATH=.wrangler/wrangler.log wrangler types --config dist/server/wrangler.json worker-configuration.d.ts --include-env false && tsc --noEmit --incremental false",
+    "test:unit": "node --test tests/docx-safety.test.mjs tests/engine-parity.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs tests/studio-tools.test.mjs tests/review-regressions.test.mjs tests/local-web-race.test.mjs tests/audit-regressions.test.mjs tests/countries.test.mjs tests/final-audit.test.mjs tests/template-race.test.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
     "test:docx-browser": "node --test tests/docx-safety.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
@@ -23,10 +23,10 @@
     "docxtemplater": "3.71.0",
     "drizzle-orm": "0.45.2",
     "fflate": "0.7.5",
-    "next": "16.2.6",
+    "next": "16.3.6",
     "pizzip": "3.3.0",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -39,13 +39,13 @@
     "drizzle-kit": "0.31.10",
     "esbuild": "0.28.2",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.6",
     "jsdom": "26.1.0",
-    "react-server-dom-webpack": "19.2.6",
+    "react-server-dom-webpack": "19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
-    "vite": "8.0.13",
+    "vite": "8.0.16",
     "wrangler": "4.92.0"
   },
   "type": "module"

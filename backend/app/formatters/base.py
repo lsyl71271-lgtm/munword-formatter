@@ -471,15 +471,6 @@ class BaseFormatter(HandbookPassMixin):
     def _title_matches(self, text: str) -> bool:
         return looks_like_title(text, self.document_type)
 
-    def _body_start(self, document: DocumentObject) -> int:
-        """Index just past the last labeled metadata line."""
-
-        last = 0
-        for index, paragraph in enumerate(body_paragraphs(document)):
-            if ANY_LABEL_PATTERN.match(visible_text(paragraph).strip()):
-                last = index + 1
-        return last
-
     def _format_metadata(self, document: DocumentObject, model: IntermediateDocument, preserve_country_order: bool) -> None:
         data = {
             "committee": model.committee,
@@ -681,11 +672,11 @@ class BaseFormatter(HandbookPassMixin):
         self._format_run(label_run, language, bold=True)
 
     def _write_label_value(self, paragraph: Paragraph, key: str, value: str, language: str) -> bool:
-        if has_complex_content(paragraph) or any(token[0] != "t" for token in content_guard.signature(paragraph._p)):
-            self._protect(paragraph, "元数据段含图片或域，未重写标签")
-            return False
-        if carries_semantic_marks(paragraph):
-            self._protect(paragraph, "元数据段含隐藏或删除线文字，改写会改变其显示或删除含义，未重写")
+        if has_complex_content(paragraph) or carries_semantic_marks(paragraph) or any(token[0] != "t" for token in content_guard.signature(paragraph._p)):
+            reason = "元数据段含链接、图片、域、修订或隐藏/删除线文字，不能安全改写"
+            if key in self._changed_fields:
+                raise ProtectedContentError(self._source_number(paragraph), f"第 03 步修改了{META_LABELS[language][key]}，但{reason}")
+            self._protect(paragraph, reason)
             return False
         paragraph.clear()
         run = paragraph.add_run(self._label_value_text(key, value, language))

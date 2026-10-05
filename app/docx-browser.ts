@@ -5,6 +5,7 @@ import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
 import { COUNTRY_DATA_DATE, countryWarnings, planCountries, resolveCountry, splitCountryNames } from "./countries.ts";
+import { InvalidRequestError, validateReview } from "./request-validation.ts";
 
 export type BrowserDocumentType =
   | "position-paper"
@@ -1845,8 +1846,10 @@ export function formatDocxInBrowser(
   options: { sessionLabel: string; submittingCountry: string; version: string; preserveCountryOrder?: boolean; normalizePunctuation?: boolean },
 ) {
   try {
+    validateReview(model);
     return formatInner(content, model, options);
   } catch (reason) {
+    if (reason instanceof InvalidRequestError) throw reason;
     if (reason instanceof InvalidDocxError) throw new Error(`文件无法读取：${reason.message}`);
     if (reason instanceof ProtectedContentError) throw new Error(`为保护原有内容已中止输出：${reason.message}`);
     if (reason instanceof ContentCheckError) throw reason;

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 INSTALL_ROOT="$HOME/Library/Application Support/PKUNMUN2026Formatter"
 PYTHON_BIN="$INSTALL_ROOT/venv/bin/python"
 SERVER_SCRIPT="$INSTALL_ROOT/backend/run.py"
@@ -11,7 +10,12 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
-if curl -fsS --max-time 1 http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
+is_ours() {
+  curl -fsS --max-time 1 http://127.0.0.1:8000/api/health 2>/dev/null |
+    "$PYTHON_BIN" -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("service") == "pkunmun-2026-formatter" else 1)' 2>/dev/null
+}
+
+if is_ours; then
   echo "PKUNMUN 2026 排版系统已在运行：http://127.0.0.1:8000"
   open http://127.0.0.1:8000
   exit 0
@@ -27,7 +31,7 @@ cd "$INSTALL_ROOT/backend"
 BACKEND_PID=$!
 
 for _ in {1..60}; do
-  if curl -fsS --max-time 1 http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
+  if is_ours; then
     echo "PKUNMUN 2026 排版系统已启动：http://127.0.0.1:8000"
     open http://127.0.0.1:8000
     wait "$BACKEND_PID"

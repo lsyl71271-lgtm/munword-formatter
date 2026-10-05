@@ -32,6 +32,7 @@ import zipfile
 from collections import Counter
 from dataclasses import dataclass
 from io import BytesIO
+from .errors import InvalidDocxError
 
 from lxml import etree
 from docx.oxml.ns import qn
@@ -517,9 +518,15 @@ def _package(content: bytes):
     protected: dict = {}
     with zipfile.ZipFile(BytesIO(content)) as archive:
         for name in archive.namelist():
-            if name.endswith(".rels"):
+            if name.lower().endswith(".rels"):
                 root = etree.fromstring(archive.read(name), _PARSER)
-                relationships[name] = {child.get("Id"): tuple(sorted(child.attrib.items())) for child in root}
+                relations = {}
+                for child in root.findall("{http://schemas.openxmlformats.org/package/2006/relationships}Relationship"):
+                    identifier = child.get("Id")
+                    if identifier in relations:
+                        raise InvalidDocxError(f"关系部件 {name} 包含重复 ID。")
+                    relations[identifier] = tuple(sorted(child.attrib.items()))
+                relationships[name] = relations
             elif name.startswith(("word/media/", "word/embeddings/")):
                 resources[name] = hashlib.sha256(archive.read(name)).hexdigest()
             elif re.fullmatch(r"word/(?:numbering|footnotes|endnotes|comments|header\d+|footer\d+)\.xml", name):

@@ -3,22 +3,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import tempfile
 from pathlib import Path
 
 from app.diagnostics import build_diagnostic_report
-from app.docx_package import validate_docx_package
+from app.docx_package import MAX_UPLOAD_BYTES
 from app.pipelines import PIPELINES
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def write_atomic(path: Path, content: bytes) -> None:
+def write_atomic(path: Path, content: bytes, *, overwrite: bool = False) -> None:
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
         temporary = Path(stream.name)
         stream.write(content)
     try:
-        temporary.replace(path)
+        if overwrite:
+            temporary.replace(path)
+        else:
+            # Atomic create-if-absent, including files created after the CLI's
+            # preflight. Both names are on the same filesystem.
+            os.link(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -47,10 +53,9 @@ def run(argv: list[str] | None = None) -> int:
     failures = 0
     for file in files:
         try:
-            if file.stat().st_size > 20 * 1024 * 1024:
+            if file.stat().st_size > MAX_UPLOAD_BYTES:
                 raise ValueError("File exceeds 20 MB")
             content = file.read_bytes()
-            validate_docx_package(content)
             pipeline = PIPELINES[args.type](ROOT / "templates" / "pkunmun2026")
             result = None if args.diagnose_only else pipeline.run(content, preserve_country_order=args.preserve_country_order, normalize_punctuation=not args.keep_punctuation)
             report = build_diagnostic_report(result.model if result else pipeline.parse(content), result.validations if result else None)
@@ -64,11 +69,11 @@ def run(argv: list[str] | None = None) -> int:
                 raise ValueError("Another input in this run already writes this output name")
             planned.update(str(path.resolve()).casefold() for path in targets)
             if result and any(item.status == "error" for item in result.validations):
-                write_atomic(report_path, json.dumps(report, ensure_ascii=False, indent=2).encode())
+                write_atomic(report_path, json.dumps(report, ensure_ascii=False, indent=2).encode(), overwrite=args.overwrite)
                 raise ValueError("Content/format protection failed; no DOCX was written")
-            write_atomic(report_path, json.dumps(report, ensure_ascii=False, indent=2).encode())
+            write_atomic(report_path, json.dumps(report, ensure_ascii=False, indent=2).encode(), overwrite=args.overwrite)
             if result:
-                write_atomic(output, result.content)
+                write_atomic(output, result.content, overwrite=args.overwrite)
             print(f"OK {file.name}")
         except Exception as error:
             failures += 1

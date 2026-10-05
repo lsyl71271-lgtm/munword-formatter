@@ -67,7 +67,10 @@ export function planCountries(values: string[], language: CountryLanguage, prese
     if (seen.has(item.id)) return false;
     seen.add(item.id); return true;
   });
-  if (!preserveOrder) kept.sort((a, b) => compare(countrySortKey(a.sortName, language), countrySortKey(b.sortName, language)));
+  if (!preserveOrder) {
+    const keys = new Map(kept.map(item => [item, countrySortKey(item.sortName, language)]));
+    kept.sort((a, b) => compare(keys.get(a)!, keys.get(b)!));
+  }
   return { values: kept.map(item => item.display), resolutions, removedDuplicates: resolutions.length - kept.length };
 }
 
