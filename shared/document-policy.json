@@ -562,9 +562,13 @@
   "country": {
    "aliases": [
     "国家/席位",
+    "代表国家",
+    "代表国",
     "国家",
     "席位",
-    "Country"
+    "Country",
+    "Represented country",
+    "Delegation country"
    ],
    "output": {
     "zh": "国家",

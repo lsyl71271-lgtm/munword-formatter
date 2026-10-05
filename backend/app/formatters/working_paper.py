@@ -9,8 +9,8 @@ class WorkingPaperFormatter(BaseFormatter):
     title_en = "Working Paper"
 
     def _format_document(self, document, model, preserve_country_order, normalize_punctuation):
-        # Working papers never carry signatories.
-        model.signatories = []
+        # Never invent signatories, but retain an existing explicitly labeled
+        # list for safe normalization. The parser warns that WP normally has none.
         self._apply_common_roles(document, model, preserve_country_order)
         self._clear_formatting_noise(document, model.language, clear_emphasis=True)
         # The cleanup intentionally neutralizes all character emphasis; the

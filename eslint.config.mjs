@@ -18,6 +18,7 @@ const eslintConfig = defineConfig([
     "outputs/**",
     "qa/**",
     "public/studio-tools.js",
+    "public/local-app.js",
   ]),
 ]);
 

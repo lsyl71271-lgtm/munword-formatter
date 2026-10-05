@@ -111,6 +111,10 @@ class PositionPaperFormatter(BaseFormatter):
             if key in HEADER_FIELDS:
                 if key in self._changed_fields and model.header_paragraph_indices.get(key) == index:
                     value = str(getattr(model, key)).strip()
+                if key == "country" and index < len(self._source_paragraphs):
+                    edit = self._edit_log.get(self._source_paragraphs[index]._p)
+                    if edit and edit.kind in ("country-name", "field") and edit.expected:
+                        value = label_value(edit.expected)[1]
                 source_metadata.setdefault(key, []).append(value)
         output_metadata: dict[str, list[str]] = {}
         for paragraph in body_paragraphs(document):

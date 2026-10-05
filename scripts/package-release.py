@@ -45,7 +45,7 @@ def package(output: Path, desktop: bool = False) -> dict:
     names = sorted(modes)
     if desktop:
         # These exact generated assets are required for offline local tools.
-        names += ["public/studio-tools.js", "public/licenses/docx-preview.txt", "public/licenses/docxtemplater.txt", "public/licenses/pizzip.txt", "public/licenses/jszip.txt", "public/licenses/@xmldom-xmldom.txt", "public/licenses/fflate.txt"]
+        names += ["public/studio-tools.js", "public/local-app.js", "public/local-styles.css", "public/licenses/react.txt", "public/licenses/react-dom.txt", "public/licenses/docx-preview.txt", "public/licenses/docxtemplater.txt", "public/licenses/pizzip.txt", "public/licenses/jszip.txt", "public/licenses/@xmldom-xmldom.txt", "public/licenses/fflate.txt"]
     files = {}
     for name in names:
         path = ROOT / name

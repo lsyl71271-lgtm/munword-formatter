@@ -1,6 +1,6 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.7.2**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建和本机批处理。学标规则与现有界面保持不变，本次合并独立审查的通用修复。本源码仓库不是包含运行时的免安装程序。
+当前版本 **v1.8.0**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
 
 ## 功能与运行模式
 
@@ -9,7 +9,8 @@
 - 根据共享规则处理字体、字号、强调、缩进、页边距、名单与条款；保留编号起始值、跳号、重启、层级和交叉引用。
 - ZIP 安全检查、20 MB 上传限制、内容/编号/修订/关系/媒体等保护；无法安全处理时拒绝输出。
 - 浏览器版默认在客户端处理原稿，不依赖 Python、账号或 API Key；也可选用本机 FastAPI 引擎。
-- 本机 Python 版提供独立 HTML 界面，默认只监听 `127.0.0.1:8000`，不能作为无认证公网 API 部署。
+- 本机服务提供同一网页的离线构建，不再维护独立界面/排版流程；默认只监听 `127.0.0.1:8000`，不能作为无认证公网 API 部署。
+- 国家简称、标准短名和正式名按固定 M49 标识匹配、去重；只处理已识别的国家/席位、起草国、附议国字段，正文和代表姓名不替换。
 
 主要规则在 `shared/document-policy.json`。Word 二进制模板不是隐藏依赖；`templates/pkunmun2026/README.md` 解释模板策略。仓库保留 11 个合成 DOCX 输入和引擎对齐基线，不包含用户真实文档、学标 PDF 或本机部署凭据。
 
@@ -66,7 +67,21 @@ py -3.12 -m venv .venv
 
 打开 `http://127.0.0.1:8000/`；API 文档 `/docs`，健康检查使用 **GET** `/api/health`（HEAD 返回 405 不代表故障）。端口被占用时先识别已有服务，不要随意终止其他程序。
 
-从源码使用本机版新增工具前，运行 `pnpm build:local-tools`。分享安装包会包含已构建的工具脚本，不需要接收者安装 Node。文件排版继续由本机 Python 引擎完成；模板新建和预览在本机浏览器执行。
+从源码启动本机界面前，先安装 Node 依赖并运行 `pnpm build:local-tools`。本机发布包包含共用 React 界面、样式、浏览器引擎及许可，不需要接收者安装 Node；解析、排版、模板新建和预览均在本机浏览器执行。Python 服务仅提供网页资源和兼容 API/批处理。缺少离线构建时 `/app.js`、`/styles.css` 明确返回 503，不退回旧界面。
+
+## 国家名称规则
+
+唯一名称资料表为 `shared/country-names.json`，2026-10-05 下载并核对 [UNTERM 官方国家表](https://unterm.un.org/unterm2/en/country)，用 [联合国 UNGEGN](https://ungegn.un.org/dashboard/countries) 的 M49 号关联固定标识。193 个会员国、2 个观察员国家、2 个专门机构成员分别分类。中文正式名直接采用 UNTERM；英文展开省略词条首部的语法冠词 `the`，不改名称本身，已输入的正式冠词形式也保留。常用别名是显式、保守的项目输入兼容项，不声称是联合国正式名称。
+
+排序键与显示值分开：使用资料表 `sort_name` 正式名的中文拼音/英文字母顺序，英文排序不计开头的语法冠词。保持原顺序选项只关闭排序，不关闭全称展开和已识别国家的去重。歧义、历史、未知和组织/观察员名称原样保留，提示第 03 步确认；不将它们默认为会员国。复杂字段含链接、域、书签、修订、隐藏或删除线时不自动改写。全文/资源校验仍启用，自动转换必须能从原字段和该表独立证明，记录段落、原名、全称、国家 ID 和核对日期。
+
+更新名称资料时，下载表中 `sources` 指定的两个公开官方源，再运行：
+
+```sh
+python3 scripts/import-country-names.py --unterm-export /path/to/unterm-countries.xlsx --ungegn-json /path/to/ungegn-countries.json --checked-on YYYY-MM-DD
+```
+
+必须审查新旧差异和官方来源后提交，不能添加“共和国”等词语猜测；导入保留已经审查的别名/歧义策略，输入文件不提交。
 
 ## v1.7.0 新增工具
 
@@ -83,7 +98,7 @@ py -3.12 -m venv .venv
 
 ```sh
 pnpm build:local-tools
-.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.7.2-desktop-source.zip
+.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.8.0-desktop-source.zip
 ```
 
 包内包含校验清单及依赖许可证，不包含 `.env`、部署账号配置、缓存或用户文档。仍需 Python 和首次安装联网下载依赖，不是无需运行时的 EXE。
@@ -97,7 +112,7 @@ docker compose -f deploy/visual-qa.compose.yaml up -d
 
 无 Docker 时改用 `--renderer /path/to/render_docx.py`。可设置 `MUNWORD_PDF_RASTERIZER` 指向 `pdftocairo` 或 `pdftoppm`；macOS 的部分 Poppler 后端会丢失 CJK 字形，建议 Cairo。`--reference-pages` 只接受同正文、同字体、同渲染环境的基线，失败返回非零状态。报告记录字号、斜体与像素差异，不代表所有学标要求自动验收完成。此服务不部署到公网网站，不自动上传文件。
 
-第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明见 [v1.7.2](docs/release-1.7.2.md)，此前版本见 [v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
+第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明见 [v1.8.0](docs/release-1.8.0.md)，此前版本见 [v1.7.2](docs/release-1.7.2.md)、[v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
 
 根目录的 macOS/Windows 一键安装入口仍保留。它们会安装依赖、复制程序并配置持续运行的本机服务，不应由云端审查 agent 当作普通测试运行。macOS `.app` 中的启动器是 Bash 源码，生成的代码签名已排除；重新分发签名安装包是独立工作，不属于本源码仓库的可复现性承诺。
 
@@ -107,6 +122,7 @@ docker compose -f deploy/visual-qa.compose.yaml up -d
 
 ```sh
 pnpm test:unit
+pnpm build:local-tools
 .venv/bin/python -m unittest discover -s backend/tests -v
 pnpm build
 node --test tests/rendered-html.test.mjs
@@ -133,10 +149,10 @@ python3 scripts/audit-source.py
 
 ```text
 app/                    React 网页、浏览器 DOCX 引擎、内容守卫和 CSS
-local_web/              Python 本机版 HTML/JS（CSS 共用 app/globals.css）
+local_web/              离线 React 挂载入口；直接导入 app/page.tsx
 backend/app/            FastAPI、解析、中间模型、六类流水线、格式器与保护
 backend/tests/          Python 测试
-shared/                 共享排版策略、国家拼音与英文地域排序数据
+shared/                 共用 UNTERM 国家表、排版策略、国家拼音与地域数据
 templates/pkunmun2026/  模板策略说明
 tests/                  Node 单元/HTML 测试与引擎对齐基线
 examples/               合成验收输入及原有 D1 示例
@@ -146,16 +162,16 @@ db/, drizzle/           原有数据库脚手架与迁移
 .openai/                不含账户信息的构建配置示例
 windows/                Windows 启动与服务安装脚本
 docs/                   架构导航、学标对照、版本说明与导入记录
-VERSION                 本机后端版本来源（网页另有可见版本字符串）
+VERSION                 本机后端版本；网页/离线界面统一读 package.json，发布测试核对一致
 ```
 
 锁文件、TypeScript/Vite/ESLint 配置、macOS 源码启动器和 Windows 入口均保留。当前主流程未使用的认证/数据库脚手架也保留供全仓库审查，不能据此认定应用已实现云端鉴权或数据库存储。
 
 ## 核心排版流程
 
-原稿 ZIP/OOXML 安全验证 → 提取元数据与段落/列表结构 → 六类文书对应的中间模型 → 保守结构修复（不推测补齐原文）→ 用户可选确认 → 共享排版策略与各文种格式规则 → 内容、编号、修订与部件保护检查 → 打包 DOCX 与校验说明。
+原稿 ZIP/OOXML 安全验证 → 提取元数据与段落/列表结构 → 六类文书对应的中间模型 → 保守结构修复（不推测补齐原文）→ 用户可选确认 → 明确国家字段的全称/身份去重与排序 → 共享排版策略与各文种格式规则 → 内容、编号、修订与部件保护检查 → 打包 DOCX 与校验说明。
 
-两套引擎分别在 `app/docx-browser.ts` 与 `backend/app/`，共享 JSON 策略但并非同一实现。详见 [架构导航](docs/architecture.md)、[学标对照](docs/handbook-alignment.md) 和 [v1.6.3 说明](docs/release-1.6.3.md)。
+日常网页和本机界面均使用 `app/docx-browser.ts`；`backend/app/` 保留兼容 API/CLI。Python 与 TypeScript 共享数据和策略，但并非同一算法源文件。边界见 [统一界面决策](docs/adr-0001-shared-daily-interface.md)、[架构导航](docs/architecture.md) 和 [学标对照](docs/handbook-alignment.md)。
 
 ## 已知限制
 

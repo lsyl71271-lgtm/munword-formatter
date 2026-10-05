@@ -48,8 +48,8 @@ def detect_language(text: str) -> str:
 
 def split_countries(value: str) -> list[str]:
     value = re.sub(r"^[^:：]+[:：]\s*", "", value.strip())
-    parts = re.split(r"[,，、;；/|\n]+", value)
-    return [part.strip() for part in parts if part.strip()]
+    from .countries import split_country_names
+    return split_country_names(value)
 
 
 # Deeper than this, an indent is copy-paste damage rather than nesting.

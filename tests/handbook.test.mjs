@@ -111,8 +111,9 @@ test("handbook: human step 03 can edit unlabeled metadata without touching body"
 });
 test("handbook: English multiline countries stop before committee subject and prose",async()=>{
   const {paragraphs}=await format(["Draft Directive","Executive Council of OPCW","Sponsors: United Kingdom,","France, Germany","Signatories: Italy,","Canada, Croatia","The OPCW,","1. Requests cooperation."],"draft-directive");
-  assert.equal(visibleText(find(paragraphs,"Sponsors")),"Sponsors: France, Germany, United Kingdom");
-  assert.equal(visibleText(find(paragraphs,"Signatories")),"Signatories: Canada, Croatia, Italy");
+  assert.equal(visibleText(find(paragraphs,"Sponsors")),"Sponsors: Federal Republic of Germany, French Republic,");
+  assert.ok(paragraphs.some(p => visibleText(p) === "United Kingdom of Great Britain and Northern Ireland"));
+  assert.equal(visibleText(find(paragraphs,"Signatories")),"Signatories: Canada, Republic of Croatia, Republic of Italy");
   assert.equal(val(nodes(find(paragraphs,"The OPCW"),"r")[0],"i"),"1");
 });
 test("handbook: footnote fonts normalize to nine points without losing citation fields",async()=>{

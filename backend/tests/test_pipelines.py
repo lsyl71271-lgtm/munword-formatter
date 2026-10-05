@@ -370,12 +370,12 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(all(run.font.size and run.font.size.pt == 9 for run in paragraph.runs))
 
     def test_country_sorting(self):
-        self.assertEqual(sort_countries(["日本国", "中国", "巴西联邦共和国"], "zh"), ["巴西联邦共和国", "日本国", "中国"])
+        self.assertEqual(sort_countries(["日本国", "中国", "巴西联邦共和国"], "zh"), ["巴西联邦共和国", "日本国", "中华人民共和国"])
         self.assertEqual(
             sort_countries(["埃塞俄比亚联邦民主共和国", "厄立特里亚国", "阿拉伯埃及共和国"], "zh"),
             ["阿拉伯埃及共和国", "埃塞俄比亚联邦民主共和国", "厄立特里亚国"],
         )
-        self.assertEqual(sort_countries(["Japan", "Brazil", "Canada"], "en"), ["Brazil", "Canada", "Japan"])
+        self.assertEqual(sort_countries(["Japan", "Brazil", "Canada"], "en"), ["Canada", "Federative Republic of Brazil", "Japan"])
 
     def test_chinese_resolution_supports_four_numbering_levels(self):
         source = self.source(["决议草案 [编号]", "委员会：联合国大会", "起草国：日本国", "附议国：加拿大", "联合国大会，", "第一条 要求建立机制；", "（一）鼓励提交报告；", "（子）建议明确方法；", "（甲）要求提供说明。"])

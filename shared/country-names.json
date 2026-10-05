@@ -1,0 +1,4602 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-10-05",
+  "sources": [
+    {
+      "url": "https://conferences.unite.un.org/untermapi/api/term/downloadCountries",
+      "sha256": "18def51af396e856393cddc4bb6cb63c0bf1e4e5036a0ed20f04be62e73b1f8b"
+    },
+    {
+      "url": "https://ungegn-api.azurewebsites.net/API/GetAllCountries",
+      "sha256": "56d6d58223207b3769533b87afac0426749c8e3c9990d4a803cfc1a3d79f1be4"
+    }
+  ],
+  "policy": {
+    "match": "whole-name-nfkc-case-insensitive",
+    "english_article": "omit initial grammatical 'the' in expanded field names; preserve supplied official forms",
+    "sort": "formal sort_name, Chinese pinyin / English alphabetical; independent of displayed spelling",
+    "entities": "preserve and request manual confirmation, never silently treat as member states",
+    "ambiguous": [
+      "刚果",
+      "Congo",
+      "Congo (the)",
+      "Korea",
+      "America",
+      "美洲",
+      "Britain",
+      "Great Britain",
+      "朝鲜半岛",
+      "朝鲜半岛国家",
+      "高丽",
+      "科里亚"
+    ],
+    "historical": [
+      "苏联",
+      "苏维埃社会主义共和国联盟",
+      "USSR",
+      "Soviet Union",
+      "南斯拉夫",
+      "南斯拉夫社会主义联邦共和国",
+      "Yugoslavia",
+      "捷克斯洛伐克",
+      "Czechoslovakia",
+      "南非联邦",
+      "暹罗",
+      "暹罗王国",
+      "Siam",
+      "扎伊尔",
+      "Zaire"
+    ],
+    "organizations": [
+      "联合国",
+      "United Nations",
+      "UN",
+      "欧盟",
+      "欧洲联盟",
+      "European Union",
+      "EU",
+      "非盟",
+      "非洲联盟",
+      "African Union",
+      "AU",
+      "北约",
+      "NATO",
+      "红十字国际委员会",
+      "International Committee of the Red Cross",
+      "ICRC"
+    ]
+  },
+  "records": [
+    {
+      "id": "UN-M49-004",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿富汗伊斯兰共和国",
+        "en": "Islamic Republic of Afghanistan"
+      },
+      "source_formal": {
+        "zh": "阿富汗伊斯兰共和国",
+        "en": "the Islamic Republic of Afghanistan"
+      },
+      "short": {
+        "zh": "阿富汗",
+        "en": "Afghanistan"
+      },
+      "sort_name": {
+        "zh": "阿富汗伊斯兰共和国",
+        "en": "Islamic Republic of Afghanistan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-008",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿尔巴尼亚共和国",
+        "en": "Republic of Albania"
+      },
+      "source_formal": {
+        "zh": "阿尔巴尼亚共和国",
+        "en": "the Republic of Albania"
+      },
+      "short": {
+        "zh": "阿尔巴尼亚",
+        "en": "Albania"
+      },
+      "sort_name": {
+        "zh": "阿尔巴尼亚共和国",
+        "en": "Republic of Albania"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-012",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿尔及利亚民主人民共和国",
+        "en": "People's Democratic Republic of Algeria"
+      },
+      "source_formal": {
+        "zh": "阿尔及利亚民主人民共和国",
+        "en": "the People's Democratic Republic of Algeria"
+      },
+      "short": {
+        "zh": "阿尔及利亚",
+        "en": "Algeria"
+      },
+      "sort_name": {
+        "zh": "阿尔及利亚民主人民共和国",
+        "en": "People's Democratic Republic of Algeria"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-020",
+      "kind": "member-state",
+      "formal": {
+        "zh": "安道尔公国",
+        "en": "Principality of Andorra"
+      },
+      "source_formal": {
+        "zh": "安道尔公国",
+        "en": "the Principality of Andorra"
+      },
+      "short": {
+        "zh": "安道尔",
+        "en": "Andorra"
+      },
+      "sort_name": {
+        "zh": "安道尔公国",
+        "en": "Principality of Andorra"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-024",
+      "kind": "member-state",
+      "formal": {
+        "zh": "安哥拉共和国",
+        "en": "Republic of Angola"
+      },
+      "source_formal": {
+        "zh": "安哥拉共和国",
+        "en": "the Republic of Angola"
+      },
+      "short": {
+        "zh": "安哥拉",
+        "en": "Angola"
+      },
+      "sort_name": {
+        "zh": "安哥拉共和国",
+        "en": "Republic of Angola"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-028",
+      "kind": "member-state",
+      "formal": {
+        "zh": "安提瓜和巴布达",
+        "en": "Antigua and Barbuda"
+      },
+      "source_formal": {
+        "zh": "安提瓜和巴布达",
+        "en": "Antigua and Barbuda"
+      },
+      "short": {
+        "zh": "安提瓜和巴布达",
+        "en": "Antigua and Barbuda"
+      },
+      "sort_name": {
+        "zh": "安提瓜和巴布达",
+        "en": "Antigua and Barbuda"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-031",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿塞拜疆共和国",
+        "en": "Republic of Azerbaijan"
+      },
+      "source_formal": {
+        "zh": "阿塞拜疆共和国",
+        "en": "the Republic of Azerbaijan"
+      },
+      "short": {
+        "zh": "阿塞拜疆",
+        "en": "Azerbaijan"
+      },
+      "sort_name": {
+        "zh": "阿塞拜疆共和国",
+        "en": "Republic of Azerbaijan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-032",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿根廷共和国",
+        "en": "Argentine Republic"
+      },
+      "source_formal": {
+        "zh": "阿根廷共和国",
+        "en": "the Argentine Republic"
+      },
+      "short": {
+        "zh": "阿根廷",
+        "en": "Argentina"
+      },
+      "sort_name": {
+        "zh": "阿根廷共和国",
+        "en": "Argentine Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-036",
+      "kind": "member-state",
+      "formal": {
+        "zh": "澳大利亚",
+        "en": "Australia"
+      },
+      "source_formal": {
+        "zh": "澳大利亚",
+        "en": "Australia"
+      },
+      "short": {
+        "zh": "澳大利亚",
+        "en": "Australia"
+      },
+      "sort_name": {
+        "zh": "澳大利亚",
+        "en": "Australia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-040",
+      "kind": "member-state",
+      "formal": {
+        "zh": "奥地利共和国",
+        "en": "Republic of Austria"
+      },
+      "source_formal": {
+        "zh": "奥地利共和国",
+        "en": "the Republic of Austria"
+      },
+      "short": {
+        "zh": "奥地利",
+        "en": "Austria"
+      },
+      "sort_name": {
+        "zh": "奥地利共和国",
+        "en": "Republic of Austria"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-044",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴哈马国",
+        "en": "Commonwealth of The Bahamas"
+      },
+      "source_formal": {
+        "zh": "巴哈马国",
+        "en": "the Commonwealth of The Bahamas"
+      },
+      "short": {
+        "zh": "巴哈马",
+        "en": "Bahamas (The)"
+      },
+      "sort_name": {
+        "zh": "巴哈马国",
+        "en": "Commonwealth of The Bahamas"
+      },
+      "aliases": ["Bahamas","The Bahamas"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-048",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴林王国",
+        "en": "Kingdom of Bahrain"
+      },
+      "source_formal": {
+        "zh": "巴林王国",
+        "en": "the Kingdom of Bahrain"
+      },
+      "short": {
+        "zh": "巴林",
+        "en": "Bahrain"
+      },
+      "sort_name": {
+        "zh": "巴林王国",
+        "en": "Kingdom of Bahrain"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-050",
+      "kind": "member-state",
+      "formal": {
+        "zh": "孟加拉人民共和国",
+        "en": "People's Republic of Bangladesh"
+      },
+      "source_formal": {
+        "zh": "孟加拉人民共和国",
+        "en": "the People's Republic of Bangladesh"
+      },
+      "short": {
+        "zh": "孟加拉国",
+        "en": "Bangladesh"
+      },
+      "sort_name": {
+        "zh": "孟加拉人民共和国",
+        "en": "People's Republic of Bangladesh"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-051",
+      "kind": "member-state",
+      "formal": {
+        "zh": "亚美尼亚共和国",
+        "en": "Republic of Armenia"
+      },
+      "source_formal": {
+        "zh": "亚美尼亚共和国",
+        "en": "the Republic of Armenia"
+      },
+      "short": {
+        "zh": "亚美尼亚",
+        "en": "Armenia"
+      },
+      "sort_name": {
+        "zh": "亚美尼亚共和国",
+        "en": "Republic of Armenia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-052",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴巴多斯",
+        "en": "Barbados"
+      },
+      "source_formal": {
+        "zh": "巴巴多斯",
+        "en": "Barbados"
+      },
+      "short": {
+        "zh": "巴巴多斯",
+        "en": "Barbados"
+      },
+      "sort_name": {
+        "zh": "巴巴多斯",
+        "en": "Barbados"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-056",
+      "kind": "member-state",
+      "formal": {
+        "zh": "比利时王国",
+        "en": "Kingdom of Belgium"
+      },
+      "source_formal": {
+        "zh": "比利时王国",
+        "en": "the Kingdom of Belgium"
+      },
+      "short": {
+        "zh": "比利时",
+        "en": "Belgium"
+      },
+      "sort_name": {
+        "zh": "比利时王国",
+        "en": "Kingdom of Belgium"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-064",
+      "kind": "member-state",
+      "formal": {
+        "zh": "不丹王国",
+        "en": "Kingdom of Bhutan"
+      },
+      "source_formal": {
+        "zh": "不丹王国",
+        "en": "the Kingdom of Bhutan"
+      },
+      "short": {
+        "zh": "不丹",
+        "en": "Bhutan"
+      },
+      "sort_name": {
+        "zh": "不丹王国",
+        "en": "Kingdom of Bhutan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-068",
+      "kind": "member-state",
+      "formal": {
+        "zh": "多民族玻利维亚国",
+        "en": "Plurinational State of Bolivia"
+      },
+      "source_formal": {
+        "zh": "多民族玻利维亚国",
+        "en": "the Plurinational State of Bolivia"
+      },
+      "short": {
+        "zh": "多民族玻利维亚国",
+        "en": "Bolivia (Plurinational State of)"
+      },
+      "sort_name": {
+        "zh": "多民族玻利维亚国",
+        "en": "Plurinational State of Bolivia"
+      },
+      "aliases": ["玻利维亚","Bolivia"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-070",
+      "kind": "member-state",
+      "formal": {
+        "zh": "波斯尼亚和黑塞哥维那",
+        "en": "Bosnia and Herzegovina"
+      },
+      "source_formal": {
+        "zh": "波斯尼亚和黑塞哥维那",
+        "en": "Bosnia and Herzegovina"
+      },
+      "short": {
+        "zh": "波斯尼亚和黑塞哥维那",
+        "en": "Bosnia and Herzegovina"
+      },
+      "sort_name": {
+        "zh": "波斯尼亚和黑塞哥维那",
+        "en": "Bosnia and Herzegovina"
+      },
+      "aliases": ["波黑"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-072",
+      "kind": "member-state",
+      "formal": {
+        "zh": "博茨瓦纳共和国",
+        "en": "Republic of Botswana"
+      },
+      "source_formal": {
+        "zh": "博茨瓦纳共和国",
+        "en": "the Republic of Botswana"
+      },
+      "short": {
+        "zh": "博茨瓦纳",
+        "en": "Botswana"
+      },
+      "sort_name": {
+        "zh": "博茨瓦纳共和国",
+        "en": "Republic of Botswana"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-076",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴西联邦共和国",
+        "en": "Federative Republic of Brazil"
+      },
+      "source_formal": {
+        "zh": "巴西联邦共和国",
+        "en": "the Federative Republic of Brazil"
+      },
+      "short": {
+        "zh": "巴西",
+        "en": "Brazil"
+      },
+      "sort_name": {
+        "zh": "巴西联邦共和国",
+        "en": "Federative Republic of Brazil"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-084",
+      "kind": "member-state",
+      "formal": {
+        "zh": "伯利兹",
+        "en": "Belize"
+      },
+      "source_formal": {
+        "zh": "伯利兹",
+        "en": "Belize"
+      },
+      "short": {
+        "zh": "伯利兹",
+        "en": "Belize"
+      },
+      "sort_name": {
+        "zh": "伯利兹",
+        "en": "Belize"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-090",
+      "kind": "member-state",
+      "formal": {
+        "zh": "所罗门群岛",
+        "en": "Solomon Islands"
+      },
+      "source_formal": {
+        "zh": "所罗门群岛",
+        "en": "Solomon Islands"
+      },
+      "short": {
+        "zh": "所罗门群岛",
+        "en": "Solomon Islands"
+      },
+      "sort_name": {
+        "zh": "所罗门群岛",
+        "en": "Solomon Islands"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-096",
+      "kind": "member-state",
+      "formal": {
+        "zh": "文莱达鲁萨兰国",
+        "en": "Brunei Darussalam"
+      },
+      "source_formal": {
+        "zh": "文莱达鲁萨兰国",
+        "en": "Brunei Darussalam"
+      },
+      "short": {
+        "zh": "文莱达鲁萨兰国",
+        "en": "Brunei Darussalam"
+      },
+      "sort_name": {
+        "zh": "文莱达鲁萨兰国",
+        "en": "Brunei Darussalam"
+      },
+      "aliases": ["文莱","Brunei"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-100",
+      "kind": "member-state",
+      "formal": {
+        "zh": "保加利亚共和国",
+        "en": "Republic of Bulgaria"
+      },
+      "source_formal": {
+        "zh": "保加利亚共和国",
+        "en": "the Republic of Bulgaria"
+      },
+      "short": {
+        "zh": "保加利亚",
+        "en": "Bulgaria"
+      },
+      "sort_name": {
+        "zh": "保加利亚共和国",
+        "en": "Republic of Bulgaria"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-104",
+      "kind": "member-state",
+      "formal": {
+        "zh": "缅甸联邦共和国",
+        "en": "Republic of the Union of Myanmar"
+      },
+      "source_formal": {
+        "zh": "缅甸联邦共和国",
+        "en": "the Republic of the Union of Myanmar"
+      },
+      "short": {
+        "zh": "缅甸",
+        "en": "Myanmar"
+      },
+      "sort_name": {
+        "zh": "缅甸联邦共和国",
+        "en": "Republic of the Union of Myanmar"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-108",
+      "kind": "member-state",
+      "formal": {
+        "zh": "布隆迪共和国",
+        "en": "Republic of Burundi"
+      },
+      "source_formal": {
+        "zh": "布隆迪共和国",
+        "en": "the Republic of Burundi"
+      },
+      "short": {
+        "zh": "布隆迪",
+        "en": "Burundi"
+      },
+      "sort_name": {
+        "zh": "布隆迪共和国",
+        "en": "Republic of Burundi"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-112",
+      "kind": "member-state",
+      "formal": {
+        "zh": "白俄罗斯共和国",
+        "en": "Republic of Belarus"
+      },
+      "source_formal": {
+        "zh": "白俄罗斯共和国",
+        "en": "the Republic of Belarus"
+      },
+      "short": {
+        "zh": "白俄罗斯",
+        "en": "Belarus"
+      },
+      "sort_name": {
+        "zh": "白俄罗斯共和国",
+        "en": "Republic of Belarus"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-116",
+      "kind": "member-state",
+      "formal": {
+        "zh": "柬埔寨王国",
+        "en": "Kingdom of Cambodia"
+      },
+      "source_formal": {
+        "zh": "柬埔寨王国",
+        "en": "the Kingdom of Cambodia"
+      },
+      "short": {
+        "zh": "柬埔寨",
+        "en": "Cambodia"
+      },
+      "sort_name": {
+        "zh": "柬埔寨王国",
+        "en": "Kingdom of Cambodia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-120",
+      "kind": "member-state",
+      "formal": {
+        "zh": "喀麦隆共和国",
+        "en": "Republic of Cameroon"
+      },
+      "source_formal": {
+        "zh": "喀麦隆共和国",
+        "en": "the Republic of Cameroon"
+      },
+      "short": {
+        "zh": "喀麦隆",
+        "en": "Cameroon"
+      },
+      "sort_name": {
+        "zh": "喀麦隆共和国",
+        "en": "Republic of Cameroon"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-124",
+      "kind": "member-state",
+      "formal": {
+        "zh": "加拿大",
+        "en": "Canada"
+      },
+      "source_formal": {
+        "zh": "加拿大",
+        "en": "Canada"
+      },
+      "short": {
+        "zh": "加拿大",
+        "en": "Canada"
+      },
+      "sort_name": {
+        "zh": "加拿大",
+        "en": "Canada"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-132",
+      "kind": "member-state",
+      "formal": {
+        "zh": "佛得角共和国",
+        "en": "Republic of Cabo Verde"
+      },
+      "source_formal": {
+        "zh": "佛得角共和国",
+        "en": "the Republic of Cabo Verde"
+      },
+      "short": {
+        "zh": "佛得角",
+        "en": "Cabo Verde"
+      },
+      "sort_name": {
+        "zh": "佛得角共和国",
+        "en": "Republic of Cabo Verde"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-140",
+      "kind": "member-state",
+      "formal": {
+        "zh": "中非共和国",
+        "en": "Central African Republic"
+      },
+      "source_formal": {
+        "zh": "中非共和国",
+        "en": "the Central African Republic"
+      },
+      "short": {
+        "zh": "中非共和国",
+        "en": "Central African Republic"
+      },
+      "sort_name": {
+        "zh": "中非共和国",
+        "en": "Central African Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-144",
+      "kind": "member-state",
+      "formal": {
+        "zh": "斯里兰卡民主社会主义共和国",
+        "en": "Democratic Socialist Republic of Sri Lanka"
+      },
+      "source_formal": {
+        "zh": "斯里兰卡民主社会主义共和国",
+        "en": "the Democratic Socialist Republic of Sri Lanka"
+      },
+      "short": {
+        "zh": "斯里兰卡",
+        "en": "Sri Lanka"
+      },
+      "sort_name": {
+        "zh": "斯里兰卡民主社会主义共和国",
+        "en": "Democratic Socialist Republic of Sri Lanka"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-148",
+      "kind": "member-state",
+      "formal": {
+        "zh": "乍得共和国",
+        "en": "Republic of Chad"
+      },
+      "source_formal": {
+        "zh": "乍得共和国",
+        "en": "the Republic of Chad"
+      },
+      "short": {
+        "zh": "乍得",
+        "en": "Chad"
+      },
+      "sort_name": {
+        "zh": "乍得共和国",
+        "en": "Republic of Chad"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-152",
+      "kind": "member-state",
+      "formal": {
+        "zh": "智利共和国",
+        "en": "Republic of Chile"
+      },
+      "source_formal": {
+        "zh": "智利共和国",
+        "en": "the Republic of Chile"
+      },
+      "short": {
+        "zh": "智利",
+        "en": "Chile"
+      },
+      "sort_name": {
+        "zh": "智利共和国",
+        "en": "Republic of Chile"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-156",
+      "kind": "member-state",
+      "formal": {
+        "zh": "中华人民共和国",
+        "en": "People's Republic of China"
+      },
+      "source_formal": {
+        "zh": "中华人民共和国",
+        "en": "the People's Republic of China"
+      },
+      "short": {
+        "zh": "中国",
+        "en": "China"
+      },
+      "sort_name": {
+        "zh": "中华人民共和国",
+        "en": "People's Republic of China"
+      },
+      "aliases": ["PRC"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-170",
+      "kind": "member-state",
+      "formal": {
+        "zh": "哥伦比亚共和国",
+        "en": "Republic of Colombia"
+      },
+      "source_formal": {
+        "zh": "哥伦比亚共和国",
+        "en": "the Republic of Colombia"
+      },
+      "short": {
+        "zh": "哥伦比亚",
+        "en": "Colombia"
+      },
+      "sort_name": {
+        "zh": "哥伦比亚共和国",
+        "en": "Republic of Colombia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-174",
+      "kind": "member-state",
+      "formal": {
+        "zh": "科摩罗联盟",
+        "en": "Union of the Comoros"
+      },
+      "source_formal": {
+        "zh": "科摩罗联盟",
+        "en": "the Union of the Comoros"
+      },
+      "short": {
+        "zh": "科摩罗",
+        "en": "Comoros"
+      },
+      "sort_name": {
+        "zh": "科摩罗联盟",
+        "en": "Union of the Comoros"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-178",
+      "kind": "member-state",
+      "formal": {
+        "zh": "刚果共和国",
+        "en": "Republic of the Congo"
+      },
+      "source_formal": {
+        "zh": "刚果共和国",
+        "en": "the Republic of the Congo"
+      },
+      "short": {
+        "zh": "刚果",
+        "en": "Congo"
+      },
+      "sort_name": {
+        "zh": "刚果共和国",
+        "en": "Republic of the Congo"
+      },
+      "aliases": ["刚果（布）","刚果(布)","Congo-Brazzaville"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-180",
+      "kind": "member-state",
+      "formal": {
+        "zh": "刚果民主共和国",
+        "en": "Democratic Republic of the Congo"
+      },
+      "source_formal": {
+        "zh": "刚果民主共和国",
+        "en": "the Democratic Republic of the Congo"
+      },
+      "short": {
+        "zh": "刚果民主共和国",
+        "en": "Democratic Republic of the Congo"
+      },
+      "sort_name": {
+        "zh": "刚果民主共和国",
+        "en": "Democratic Republic of the Congo"
+      },
+      "aliases": ["刚果（金）","刚果(金)","DR Congo","Congo-Kinshasa"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-184",
+      "kind": "specialized-agency-member",
+      "formal": {
+        "zh": "库克群岛",
+        "en": "Cook Islands"
+      },
+      "source_formal": {
+        "zh": "库克群岛",
+        "en": "the Cook Islands"
+      },
+      "short": {
+        "zh": "库克群岛",
+        "en": "Cook Islands"
+      },
+      "sort_name": {
+        "zh": "库克群岛",
+        "en": "Cook Islands"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-188",
+      "kind": "member-state",
+      "formal": {
+        "zh": "哥斯达黎加共和国",
+        "en": "Republic of Costa Rica"
+      },
+      "source_formal": {
+        "zh": "哥斯达黎加共和国",
+        "en": "the Republic of Costa Rica"
+      },
+      "short": {
+        "zh": "哥斯达黎加",
+        "en": "Costa Rica"
+      },
+      "sort_name": {
+        "zh": "哥斯达黎加共和国",
+        "en": "Republic of Costa Rica"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-191",
+      "kind": "member-state",
+      "formal": {
+        "zh": "克罗地亚共和国",
+        "en": "Republic of Croatia"
+      },
+      "source_formal": {
+        "zh": "克罗地亚共和国",
+        "en": "the Republic of Croatia"
+      },
+      "short": {
+        "zh": "克罗地亚",
+        "en": "Croatia"
+      },
+      "sort_name": {
+        "zh": "克罗地亚共和国",
+        "en": "Republic of Croatia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-192",
+      "kind": "member-state",
+      "formal": {
+        "zh": "古巴共和国",
+        "en": "Republic of Cuba"
+      },
+      "source_formal": {
+        "zh": "古巴共和国",
+        "en": "the Republic of Cuba"
+      },
+      "short": {
+        "zh": "古巴",
+        "en": "Cuba"
+      },
+      "sort_name": {
+        "zh": "古巴共和国",
+        "en": "Republic of Cuba"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-196",
+      "kind": "member-state",
+      "formal": {
+        "zh": "塞浦路斯共和国",
+        "en": "Republic of Cyprus"
+      },
+      "source_formal": {
+        "zh": "塞浦路斯共和国",
+        "en": "the Republic of Cyprus"
+      },
+      "short": {
+        "zh": "塞浦路斯",
+        "en": "Cyprus"
+      },
+      "sort_name": {
+        "zh": "塞浦路斯共和国",
+        "en": "Republic of Cyprus"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-203",
+      "kind": "member-state",
+      "formal": {
+        "zh": "捷克共和国",
+        "en": "Czech Republic"
+      },
+      "source_formal": {
+        "zh": "捷克共和国",
+        "en": "the Czech Republic"
+      },
+      "short": {
+        "zh": "捷克",
+        "en": "Czechia"
+      },
+      "sort_name": {
+        "zh": "捷克共和国",
+        "en": "Czech Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-204",
+      "kind": "member-state",
+      "formal": {
+        "zh": "贝宁共和国",
+        "en": "Republic of Benin"
+      },
+      "source_formal": {
+        "zh": "贝宁共和国",
+        "en": "the Republic of Benin"
+      },
+      "short": {
+        "zh": "贝宁",
+        "en": "Benin"
+      },
+      "sort_name": {
+        "zh": "贝宁共和国",
+        "en": "Republic of Benin"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-208",
+      "kind": "member-state",
+      "formal": {
+        "zh": "丹麦王国",
+        "en": "Kingdom of Denmark"
+      },
+      "source_formal": {
+        "zh": "丹麦王国",
+        "en": "the Kingdom of Denmark"
+      },
+      "short": {
+        "zh": "丹麦",
+        "en": "Denmark"
+      },
+      "sort_name": {
+        "zh": "丹麦王国",
+        "en": "Kingdom of Denmark"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-212",
+      "kind": "member-state",
+      "formal": {
+        "zh": "多米尼克国",
+        "en": "Commonwealth of Dominica"
+      },
+      "source_formal": {
+        "zh": "多米尼克国",
+        "en": "the Commonwealth of Dominica"
+      },
+      "short": {
+        "zh": "多米尼克",
+        "en": "Dominica"
+      },
+      "sort_name": {
+        "zh": "多米尼克国",
+        "en": "Commonwealth of Dominica"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-214",
+      "kind": "member-state",
+      "formal": {
+        "zh": "多米尼加共和国",
+        "en": "Dominican Republic"
+      },
+      "source_formal": {
+        "zh": "多米尼加共和国",
+        "en": "the Dominican Republic"
+      },
+      "short": {
+        "zh": "多米尼加共和国",
+        "en": "Dominican Republic"
+      },
+      "sort_name": {
+        "zh": "多米尼加共和国",
+        "en": "Dominican Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-218",
+      "kind": "member-state",
+      "formal": {
+        "zh": "厄瓜多尔共和国",
+        "en": "Republic of Ecuador"
+      },
+      "source_formal": {
+        "zh": "厄瓜多尔共和国",
+        "en": "the Republic of Ecuador"
+      },
+      "short": {
+        "zh": "厄瓜多尔",
+        "en": "Ecuador"
+      },
+      "sort_name": {
+        "zh": "厄瓜多尔共和国",
+        "en": "Republic of Ecuador"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-222",
+      "kind": "member-state",
+      "formal": {
+        "zh": "萨尔瓦多共和国",
+        "en": "Republic of El Salvador"
+      },
+      "source_formal": {
+        "zh": "萨尔瓦多共和国",
+        "en": "the Republic of El Salvador"
+      },
+      "short": {
+        "zh": "萨尔瓦多",
+        "en": "El Salvador"
+      },
+      "sort_name": {
+        "zh": "萨尔瓦多共和国",
+        "en": "Republic of El Salvador"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-226",
+      "kind": "member-state",
+      "formal": {
+        "zh": "赤道几内亚共和国",
+        "en": "Republic of Equatorial Guinea"
+      },
+      "source_formal": {
+        "zh": "赤道几内亚共和国",
+        "en": "the Republic of Equatorial Guinea"
+      },
+      "short": {
+        "zh": "赤道几内亚",
+        "en": "Equatorial Guinea"
+      },
+      "sort_name": {
+        "zh": "赤道几内亚共和国",
+        "en": "Republic of Equatorial Guinea"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-231",
+      "kind": "member-state",
+      "formal": {
+        "zh": "埃塞俄比亚联邦民主共和国",
+        "en": "Federal Democratic Republic of Ethiopia"
+      },
+      "source_formal": {
+        "zh": "埃塞俄比亚联邦民主共和国",
+        "en": "the Federal Democratic Republic of Ethiopia"
+      },
+      "short": {
+        "zh": "埃塞俄比亚",
+        "en": "Ethiopia"
+      },
+      "sort_name": {
+        "zh": "埃塞俄比亚联邦民主共和国",
+        "en": "Federal Democratic Republic of Ethiopia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-232",
+      "kind": "member-state",
+      "formal": {
+        "zh": "厄立特里亚国",
+        "en": "State of Eritrea"
+      },
+      "source_formal": {
+        "zh": "厄立特里亚国",
+        "en": "the State of Eritrea"
+      },
+      "short": {
+        "zh": "厄立特里亚",
+        "en": "Eritrea"
+      },
+      "sort_name": {
+        "zh": "厄立特里亚国",
+        "en": "State of Eritrea"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-233",
+      "kind": "member-state",
+      "formal": {
+        "zh": "爱沙尼亚共和国",
+        "en": "Republic of Estonia"
+      },
+      "source_formal": {
+        "zh": "爱沙尼亚共和国",
+        "en": "the Republic of Estonia"
+      },
+      "short": {
+        "zh": "爱沙尼亚",
+        "en": "Estonia"
+      },
+      "sort_name": {
+        "zh": "爱沙尼亚共和国",
+        "en": "Republic of Estonia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-242",
+      "kind": "member-state",
+      "formal": {
+        "zh": "斐济共和国",
+        "en": "Republic of Fiji"
+      },
+      "source_formal": {
+        "zh": "斐济共和国",
+        "en": "the Republic of Fiji"
+      },
+      "short": {
+        "zh": "斐济",
+        "en": "Fiji"
+      },
+      "sort_name": {
+        "zh": "斐济共和国",
+        "en": "Republic of Fiji"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-246",
+      "kind": "member-state",
+      "formal": {
+        "zh": "芬兰共和国",
+        "en": "Republic of Finland"
+      },
+      "source_formal": {
+        "zh": "芬兰共和国",
+        "en": "the Republic of Finland"
+      },
+      "short": {
+        "zh": "芬兰",
+        "en": "Finland"
+      },
+      "sort_name": {
+        "zh": "芬兰共和国",
+        "en": "Republic of Finland"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-250",
+      "kind": "member-state",
+      "formal": {
+        "zh": "法兰西共和国",
+        "en": "French Republic"
+      },
+      "source_formal": {
+        "zh": "法兰西共和国",
+        "en": "the French Republic"
+      },
+      "short": {
+        "zh": "法国",
+        "en": "France"
+      },
+      "sort_name": {
+        "zh": "法兰西共和国",
+        "en": "French Republic"
+      },
+      "aliases": ["France"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-262",
+      "kind": "member-state",
+      "formal": {
+        "zh": "吉布提共和国",
+        "en": "Republic of Djibouti"
+      },
+      "source_formal": {
+        "zh": "吉布提共和国",
+        "en": "the Republic of Djibouti"
+      },
+      "short": {
+        "zh": "吉布提",
+        "en": "Djibouti"
+      },
+      "sort_name": {
+        "zh": "吉布提共和国",
+        "en": "Republic of Djibouti"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-266",
+      "kind": "member-state",
+      "formal": {
+        "zh": "加蓬共和国",
+        "en": "Gabonese Republic"
+      },
+      "source_formal": {
+        "zh": "加蓬共和国",
+        "en": "the Gabonese Republic"
+      },
+      "short": {
+        "zh": "加蓬",
+        "en": "Gabon"
+      },
+      "sort_name": {
+        "zh": "加蓬共和国",
+        "en": "Gabonese Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-268",
+      "kind": "member-state",
+      "formal": {
+        "zh": "格鲁吉亚",
+        "en": "Georgia"
+      },
+      "source_formal": {
+        "zh": "格鲁吉亚",
+        "en": "Georgia"
+      },
+      "short": {
+        "zh": "格鲁吉亚",
+        "en": "Georgia"
+      },
+      "sort_name": {
+        "zh": "格鲁吉亚",
+        "en": "Georgia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-270",
+      "kind": "member-state",
+      "formal": {
+        "zh": "冈比亚共和国",
+        "en": "Republic of the Gambia"
+      },
+      "source_formal": {
+        "zh": "冈比亚共和国",
+        "en": "the Republic of the Gambia"
+      },
+      "short": {
+        "zh": "冈比亚",
+        "en": "Gambia"
+      },
+      "sort_name": {
+        "zh": "冈比亚共和国",
+        "en": "Republic of the Gambia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-275",
+      "kind": "observer-state",
+      "formal": {
+        "zh": "巴勒斯坦国",
+        "en": "State of Palestine"
+      },
+      "source_formal": {
+        "zh": "巴勒斯坦国",
+        "en": "the State of Palestine"
+      },
+      "short": {
+        "zh": "巴勒斯坦国",
+        "en": "State of Palestine"
+      },
+      "sort_name": {
+        "zh": "巴勒斯坦国",
+        "en": "State of Palestine"
+      },
+      "aliases": ["巴勒斯坦","Palestine"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-276",
+      "kind": "member-state",
+      "formal": {
+        "zh": "德意志联邦共和国",
+        "en": "Federal Republic of Germany"
+      },
+      "source_formal": {
+        "zh": "德意志联邦共和国",
+        "en": "the Federal Republic of Germany"
+      },
+      "short": {
+        "zh": "德国",
+        "en": "Germany"
+      },
+      "sort_name": {
+        "zh": "德意志联邦共和国",
+        "en": "Federal Republic of Germany"
+      },
+      "aliases": ["Germany"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-288",
+      "kind": "member-state",
+      "formal": {
+        "zh": "加纳共和国",
+        "en": "Republic of Ghana"
+      },
+      "source_formal": {
+        "zh": "加纳共和国",
+        "en": "the Republic of Ghana"
+      },
+      "short": {
+        "zh": "加纳",
+        "en": "Ghana"
+      },
+      "sort_name": {
+        "zh": "加纳共和国",
+        "en": "Republic of Ghana"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-296",
+      "kind": "member-state",
+      "formal": {
+        "zh": "基里巴斯共和国",
+        "en": "Republic of Kiribati"
+      },
+      "source_formal": {
+        "zh": "基里巴斯共和国",
+        "en": "the Republic of Kiribati"
+      },
+      "short": {
+        "zh": "基里巴斯",
+        "en": "Kiribati"
+      },
+      "sort_name": {
+        "zh": "基里巴斯共和国",
+        "en": "Republic of Kiribati"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-300",
+      "kind": "member-state",
+      "formal": {
+        "zh": "希腊共和国",
+        "en": "Hellenic Republic"
+      },
+      "source_formal": {
+        "zh": "希腊共和国",
+        "en": "the Hellenic Republic"
+      },
+      "short": {
+        "zh": "希腊",
+        "en": "Greece"
+      },
+      "sort_name": {
+        "zh": "希腊共和国",
+        "en": "Hellenic Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-308",
+      "kind": "member-state",
+      "formal": {
+        "zh": "格林纳达",
+        "en": "Grenada"
+      },
+      "source_formal": {
+        "zh": "格林纳达",
+        "en": "Grenada"
+      },
+      "short": {
+        "zh": "格林纳达",
+        "en": "Grenada"
+      },
+      "sort_name": {
+        "zh": "格林纳达",
+        "en": "Grenada"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-320",
+      "kind": "member-state",
+      "formal": {
+        "zh": "危地马拉共和国",
+        "en": "Republic of Guatemala"
+      },
+      "source_formal": {
+        "zh": "危地马拉共和国",
+        "en": "the Republic of Guatemala"
+      },
+      "short": {
+        "zh": "危地马拉",
+        "en": "Guatemala"
+      },
+      "sort_name": {
+        "zh": "危地马拉共和国",
+        "en": "Republic of Guatemala"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-324",
+      "kind": "member-state",
+      "formal": {
+        "zh": "几内亚共和国",
+        "en": "Republic of Guinea"
+      },
+      "source_formal": {
+        "zh": "几内亚共和国",
+        "en": "the Republic of Guinea"
+      },
+      "short": {
+        "zh": "几内亚",
+        "en": "Guinea"
+      },
+      "sort_name": {
+        "zh": "几内亚共和国",
+        "en": "Republic of Guinea"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-328",
+      "kind": "member-state",
+      "formal": {
+        "zh": "圭亚那合作共和国",
+        "en": "Co-operative Republic of Guyana"
+      },
+      "source_formal": {
+        "zh": "圭亚那合作共和国",
+        "en": "the Co-operative Republic of Guyana"
+      },
+      "short": {
+        "zh": "圭亚那",
+        "en": "Guyana"
+      },
+      "sort_name": {
+        "zh": "圭亚那合作共和国",
+        "en": "Co-operative Republic of Guyana"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-332",
+      "kind": "member-state",
+      "formal": {
+        "zh": "海地共和国",
+        "en": "Republic of Haiti"
+      },
+      "source_formal": {
+        "zh": "海地共和国",
+        "en": "the Republic of Haiti"
+      },
+      "short": {
+        "zh": "海地",
+        "en": "Haiti"
+      },
+      "sort_name": {
+        "zh": "海地共和国",
+        "en": "Republic of Haiti"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-336",
+      "kind": "observer-state",
+      "formal": {
+        "zh": "罗马教廷",
+        "en": "Holy See"
+      },
+      "source_formal": {
+        "zh": "罗马教廷",
+        "en": "the Holy See"
+      },
+      "short": {
+        "zh": "罗马教廷",
+        "en": "Holy See"
+      },
+      "sort_name": {
+        "zh": "罗马教廷",
+        "en": "Holy See"
+      },
+      "aliases": ["教廷"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-340",
+      "kind": "member-state",
+      "formal": {
+        "zh": "洪都拉斯共和国",
+        "en": "Republic of Honduras"
+      },
+      "source_formal": {
+        "zh": "洪都拉斯共和国",
+        "en": "the Republic of Honduras"
+      },
+      "short": {
+        "zh": "洪都拉斯",
+        "en": "Honduras"
+      },
+      "sort_name": {
+        "zh": "洪都拉斯共和国",
+        "en": "Republic of Honduras"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-348",
+      "kind": "member-state",
+      "formal": {
+        "zh": "匈牙利",
+        "en": "Hungary"
+      },
+      "source_formal": {
+        "zh": "匈牙利",
+        "en": "Hungary"
+      },
+      "short": {
+        "zh": "匈牙利",
+        "en": "Hungary"
+      },
+      "sort_name": {
+        "zh": "匈牙利",
+        "en": "Hungary"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-352",
+      "kind": "member-state",
+      "formal": {
+        "zh": "冰岛",
+        "en": "Iceland"
+      },
+      "source_formal": {
+        "zh": "冰岛",
+        "en": "Iceland"
+      },
+      "short": {
+        "zh": "冰岛",
+        "en": "Iceland"
+      },
+      "sort_name": {
+        "zh": "冰岛",
+        "en": "Iceland"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-356",
+      "kind": "member-state",
+      "formal": {
+        "zh": "印度共和国",
+        "en": "Republic of India"
+      },
+      "source_formal": {
+        "zh": "印度共和国",
+        "en": "the Republic of India"
+      },
+      "short": {
+        "zh": "印度",
+        "en": "India"
+      },
+      "sort_name": {
+        "zh": "印度共和国",
+        "en": "Republic of India"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-360",
+      "kind": "member-state",
+      "formal": {
+        "zh": "印度尼西亚共和国",
+        "en": "Republic of Indonesia"
+      },
+      "source_formal": {
+        "zh": "印度尼西亚共和国",
+        "en": "the Republic of Indonesia"
+      },
+      "short": {
+        "zh": "印度尼西亚",
+        "en": "Indonesia"
+      },
+      "sort_name": {
+        "zh": "印度尼西亚共和国",
+        "en": "Republic of Indonesia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-364",
+      "kind": "member-state",
+      "formal": {
+        "zh": "伊朗伊斯兰共和国",
+        "en": "Islamic Republic of Iran"
+      },
+      "source_formal": {
+        "zh": "伊朗伊斯兰共和国",
+        "en": "the Islamic Republic of Iran"
+      },
+      "short": {
+        "zh": "伊朗伊斯兰共和国",
+        "en": "Iran (Islamic Republic of)"
+      },
+      "sort_name": {
+        "zh": "伊朗伊斯兰共和国",
+        "en": "Islamic Republic of Iran"
+      },
+      "aliases": ["伊朗","Iran"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-368",
+      "kind": "member-state",
+      "formal": {
+        "zh": "伊拉克共和国",
+        "en": "Republic of Iraq"
+      },
+      "source_formal": {
+        "zh": "伊拉克共和国",
+        "en": "the Republic of Iraq"
+      },
+      "short": {
+        "zh": "伊拉克",
+        "en": "Iraq"
+      },
+      "sort_name": {
+        "zh": "伊拉克共和国",
+        "en": "Republic of Iraq"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-372",
+      "kind": "member-state",
+      "formal": {
+        "zh": "爱尔兰",
+        "en": "Ireland"
+      },
+      "source_formal": {
+        "zh": "爱尔兰",
+        "en": "Ireland"
+      },
+      "short": {
+        "zh": "爱尔兰",
+        "en": "Ireland"
+      },
+      "sort_name": {
+        "zh": "爱尔兰",
+        "en": "Ireland"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-376",
+      "kind": "member-state",
+      "formal": {
+        "zh": "以色列国",
+        "en": "State of Israel"
+      },
+      "source_formal": {
+        "zh": "以色列国",
+        "en": "the State of Israel"
+      },
+      "short": {
+        "zh": "以色列",
+        "en": "Israel"
+      },
+      "sort_name": {
+        "zh": "以色列国",
+        "en": "State of Israel"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-380",
+      "kind": "member-state",
+      "formal": {
+        "zh": "意大利共和国",
+        "en": "Republic of Italy"
+      },
+      "source_formal": {
+        "zh": "意大利共和国",
+        "en": "the Republic of Italy"
+      },
+      "short": {
+        "zh": "意大利",
+        "en": "Italy"
+      },
+      "sort_name": {
+        "zh": "意大利共和国",
+        "en": "Republic of Italy"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-384",
+      "kind": "member-state",
+      "formal": {
+        "zh": "科特迪瓦共和国",
+        "en": "Republic of Côte d'Ivoire"
+      },
+      "source_formal": {
+        "zh": "科特迪瓦共和国",
+        "en": "the Republic of Côte d'Ivoire"
+      },
+      "short": {
+        "zh": "科特迪瓦",
+        "en": "Côte d'Ivoire"
+      },
+      "sort_name": {
+        "zh": "科特迪瓦共和国",
+        "en": "Republic of Côte d'Ivoire"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-388",
+      "kind": "member-state",
+      "formal": {
+        "zh": "牙买加",
+        "en": "Jamaica"
+      },
+      "source_formal": {
+        "zh": "牙买加",
+        "en": "Jamaica"
+      },
+      "short": {
+        "zh": "牙买加",
+        "en": "Jamaica"
+      },
+      "sort_name": {
+        "zh": "牙买加",
+        "en": "Jamaica"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-392",
+      "kind": "member-state",
+      "formal": {
+        "zh": "日本国",
+        "en": "Japan"
+      },
+      "source_formal": {
+        "zh": "日本国",
+        "en": "Japan"
+      },
+      "short": {
+        "zh": "日本",
+        "en": "Japan"
+      },
+      "sort_name": {
+        "zh": "日本国",
+        "en": "Japan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-398",
+      "kind": "member-state",
+      "formal": {
+        "zh": "哈萨克斯坦共和国",
+        "en": "Republic of Kazakhstan"
+      },
+      "source_formal": {
+        "zh": "哈萨克斯坦共和国",
+        "en": "the Republic of Kazakhstan"
+      },
+      "short": {
+        "zh": "哈萨克斯坦",
+        "en": "Kazakhstan"
+      },
+      "sort_name": {
+        "zh": "哈萨克斯坦共和国",
+        "en": "Republic of Kazakhstan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-400",
+      "kind": "member-state",
+      "formal": {
+        "zh": "约旦哈希姆王国",
+        "en": "Hashemite Kingdom of Jordan"
+      },
+      "source_formal": {
+        "zh": "约旦哈希姆王国",
+        "en": "the Hashemite Kingdom of Jordan"
+      },
+      "short": {
+        "zh": "约旦",
+        "en": "Jordan"
+      },
+      "sort_name": {
+        "zh": "约旦哈希姆王国",
+        "en": "Hashemite Kingdom of Jordan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-404",
+      "kind": "member-state",
+      "formal": {
+        "zh": "肯尼亚共和国",
+        "en": "Republic of Kenya"
+      },
+      "source_formal": {
+        "zh": "肯尼亚共和国",
+        "en": "the Republic of Kenya"
+      },
+      "short": {
+        "zh": "肯尼亚",
+        "en": "Kenya"
+      },
+      "sort_name": {
+        "zh": "肯尼亚共和国",
+        "en": "Republic of Kenya"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-408",
+      "kind": "member-state",
+      "formal": {
+        "zh": "朝鲜民主主义人民共和国",
+        "en": "Democratic People's Republic of Korea"
+      },
+      "source_formal": {
+        "zh": "朝鲜民主主义人民共和国",
+        "en": "the Democratic People's Republic of Korea"
+      },
+      "short": {
+        "zh": "朝鲜民主主义人民共和国",
+        "en": "Democratic People's Republic of Korea"
+      },
+      "sort_name": {
+        "zh": "朝鲜民主主义人民共和国",
+        "en": "Democratic People's Republic of Korea"
+      },
+      "aliases": ["朝鲜","North Korea","DPRK"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-410",
+      "kind": "member-state",
+      "formal": {
+        "zh": "大韩民国",
+        "en": "Republic of Korea"
+      },
+      "source_formal": {
+        "zh": "大韩民国",
+        "en": "the Republic of Korea"
+      },
+      "short": {
+        "zh": "大韩民国",
+        "en": "Republic of Korea"
+      },
+      "sort_name": {
+        "zh": "大韩民国",
+        "en": "Republic of Korea"
+      },
+      "aliases": ["韩国","South Korea","ROK"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-414",
+      "kind": "member-state",
+      "formal": {
+        "zh": "科威特国",
+        "en": "State of Kuwait"
+      },
+      "source_formal": {
+        "zh": "科威特国",
+        "en": "the State of Kuwait"
+      },
+      "short": {
+        "zh": "科威特",
+        "en": "Kuwait"
+      },
+      "sort_name": {
+        "zh": "科威特国",
+        "en": "State of Kuwait"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-417",
+      "kind": "member-state",
+      "formal": {
+        "zh": "吉尔吉斯共和国",
+        "en": "Kyrgyz Republic"
+      },
+      "source_formal": {
+        "zh": "吉尔吉斯共和国",
+        "en": "the Kyrgyz Republic"
+      },
+      "short": {
+        "zh": "吉尔吉斯斯坦",
+        "en": "Kyrgyzstan"
+      },
+      "sort_name": {
+        "zh": "吉尔吉斯共和国",
+        "en": "Kyrgyz Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-418",
+      "kind": "member-state",
+      "formal": {
+        "zh": "老挝人民民主共和国",
+        "en": "Lao People's Democratic Republic"
+      },
+      "source_formal": {
+        "zh": "老挝人民民主共和国",
+        "en": "the Lao People's Democratic Republic"
+      },
+      "short": {
+        "zh": "老挝人民民主共和国",
+        "en": "Lao People's Democratic Republic"
+      },
+      "sort_name": {
+        "zh": "老挝人民民主共和国",
+        "en": "Lao People's Democratic Republic"
+      },
+      "aliases": ["老挝","Laos"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-422",
+      "kind": "member-state",
+      "formal": {
+        "zh": "黎巴嫩共和国",
+        "en": "Lebanese Republic"
+      },
+      "source_formal": {
+        "zh": "黎巴嫩共和国",
+        "en": "the Lebanese Republic"
+      },
+      "short": {
+        "zh": "黎巴嫩",
+        "en": "Lebanon"
+      },
+      "sort_name": {
+        "zh": "黎巴嫩共和国",
+        "en": "Lebanese Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-426",
+      "kind": "member-state",
+      "formal": {
+        "zh": "莱索托王国",
+        "en": "Kingdom of Lesotho"
+      },
+      "source_formal": {
+        "zh": "莱索托王国",
+        "en": "the Kingdom of Lesotho"
+      },
+      "short": {
+        "zh": "莱索托",
+        "en": "Lesotho"
+      },
+      "sort_name": {
+        "zh": "莱索托王国",
+        "en": "Kingdom of Lesotho"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-428",
+      "kind": "member-state",
+      "formal": {
+        "zh": "拉脱维亚共和国",
+        "en": "Republic of Latvia"
+      },
+      "source_formal": {
+        "zh": "拉脱维亚共和国",
+        "en": "the Republic of Latvia"
+      },
+      "short": {
+        "zh": "拉脱维亚",
+        "en": "Latvia"
+      },
+      "sort_name": {
+        "zh": "拉脱维亚共和国",
+        "en": "Republic of Latvia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-430",
+      "kind": "member-state",
+      "formal": {
+        "zh": "利比里亚共和国",
+        "en": "Republic of Liberia"
+      },
+      "source_formal": {
+        "zh": "利比里亚共和国",
+        "en": "the Republic of Liberia"
+      },
+      "short": {
+        "zh": "利比里亚",
+        "en": "Liberia"
+      },
+      "sort_name": {
+        "zh": "利比里亚共和国",
+        "en": "Republic of Liberia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-434",
+      "kind": "member-state",
+      "formal": {
+        "zh": "利比亚国",
+        "en": "State of Libya"
+      },
+      "source_formal": {
+        "zh": "利比亚国",
+        "en": "the State of Libya"
+      },
+      "short": {
+        "zh": "利比亚",
+        "en": "Libya"
+      },
+      "sort_name": {
+        "zh": "利比亚国",
+        "en": "State of Libya"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-438",
+      "kind": "member-state",
+      "formal": {
+        "zh": "列支敦士登公国",
+        "en": "Principality of Liechtenstein"
+      },
+      "source_formal": {
+        "zh": "列支敦士登公国",
+        "en": "the Principality of Liechtenstein"
+      },
+      "short": {
+        "zh": "列支敦士登",
+        "en": "Liechtenstein"
+      },
+      "sort_name": {
+        "zh": "列支敦士登公国",
+        "en": "Principality of Liechtenstein"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-440",
+      "kind": "member-state",
+      "formal": {
+        "zh": "立陶宛共和国",
+        "en": "Republic of Lithuania"
+      },
+      "source_formal": {
+        "zh": "立陶宛共和国",
+        "en": "the Republic of Lithuania"
+      },
+      "short": {
+        "zh": "立陶宛",
+        "en": "Lithuania"
+      },
+      "sort_name": {
+        "zh": "立陶宛共和国",
+        "en": "Republic of Lithuania"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-442",
+      "kind": "member-state",
+      "formal": {
+        "zh": "卢森堡大公国",
+        "en": "Grand Duchy of Luxembourg"
+      },
+      "source_formal": {
+        "zh": "卢森堡大公国",
+        "en": "the Grand Duchy of Luxembourg"
+      },
+      "short": {
+        "zh": "卢森堡",
+        "en": "Luxembourg"
+      },
+      "sort_name": {
+        "zh": "卢森堡大公国",
+        "en": "Grand Duchy of Luxembourg"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-450",
+      "kind": "member-state",
+      "formal": {
+        "zh": "马达加斯加共和国",
+        "en": "Republic of Madagascar"
+      },
+      "source_formal": {
+        "zh": "马达加斯加共和国",
+        "en": "the Republic of Madagascar"
+      },
+      "short": {
+        "zh": "马达加斯加",
+        "en": "Madagascar"
+      },
+      "sort_name": {
+        "zh": "马达加斯加共和国",
+        "en": "Republic of Madagascar"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-454",
+      "kind": "member-state",
+      "formal": {
+        "zh": "马拉维共和国",
+        "en": "Republic of Malawi"
+      },
+      "source_formal": {
+        "zh": "马拉维共和国",
+        "en": "the Republic of Malawi"
+      },
+      "short": {
+        "zh": "马拉维",
+        "en": "Malawi"
+      },
+      "sort_name": {
+        "zh": "马拉维共和国",
+        "en": "Republic of Malawi"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-458",
+      "kind": "member-state",
+      "formal": {
+        "zh": "马来西亚",
+        "en": "Malaysia"
+      },
+      "source_formal": {
+        "zh": "马来西亚",
+        "en": "Malaysia"
+      },
+      "short": {
+        "zh": "马来西亚",
+        "en": "Malaysia"
+      },
+      "sort_name": {
+        "zh": "马来西亚",
+        "en": "Malaysia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-462",
+      "kind": "member-state",
+      "formal": {
+        "zh": "马尔代夫共和国",
+        "en": "Republic of Maldives"
+      },
+      "source_formal": {
+        "zh": "马尔代夫共和国",
+        "en": "the Republic of Maldives"
+      },
+      "short": {
+        "zh": "马尔代夫",
+        "en": "Maldives"
+      },
+      "sort_name": {
+        "zh": "马尔代夫共和国",
+        "en": "Republic of Maldives"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-466",
+      "kind": "member-state",
+      "formal": {
+        "zh": "马里共和国",
+        "en": "Republic of Mali"
+      },
+      "source_formal": {
+        "zh": "马里共和国",
+        "en": "the Republic of Mali"
+      },
+      "short": {
+        "zh": "马里",
+        "en": "Mali"
+      },
+      "sort_name": {
+        "zh": "马里共和国",
+        "en": "Republic of Mali"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-470",
+      "kind": "member-state",
+      "formal": {
+        "zh": "马耳他共和国",
+        "en": "Republic of Malta"
+      },
+      "source_formal": {
+        "zh": "马耳他共和国",
+        "en": "the Republic of Malta"
+      },
+      "short": {
+        "zh": "马耳他",
+        "en": "Malta"
+      },
+      "sort_name": {
+        "zh": "马耳他共和国",
+        "en": "Republic of Malta"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-478",
+      "kind": "member-state",
+      "formal": {
+        "zh": "毛里塔尼亚伊斯兰共和国",
+        "en": "Islamic Republic of Mauritania"
+      },
+      "source_formal": {
+        "zh": "毛里塔尼亚伊斯兰共和国",
+        "en": "the Islamic Republic of Mauritania"
+      },
+      "short": {
+        "zh": "毛里塔尼亚",
+        "en": "Mauritania"
+      },
+      "sort_name": {
+        "zh": "毛里塔尼亚伊斯兰共和国",
+        "en": "Islamic Republic of Mauritania"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-480",
+      "kind": "member-state",
+      "formal": {
+        "zh": "毛里求斯共和国",
+        "en": "Republic of Mauritius"
+      },
+      "source_formal": {
+        "zh": "毛里求斯共和国",
+        "en": "the Republic of Mauritius"
+      },
+      "short": {
+        "zh": "毛里求斯",
+        "en": "Mauritius"
+      },
+      "sort_name": {
+        "zh": "毛里求斯共和国",
+        "en": "Republic of Mauritius"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-484",
+      "kind": "member-state",
+      "formal": {
+        "zh": "墨西哥合众国",
+        "en": "United Mexican States"
+      },
+      "source_formal": {
+        "zh": "墨西哥合众国",
+        "en": "the United Mexican States"
+      },
+      "short": {
+        "zh": "墨西哥",
+        "en": "Mexico"
+      },
+      "sort_name": {
+        "zh": "墨西哥合众国",
+        "en": "United Mexican States"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-492",
+      "kind": "member-state",
+      "formal": {
+        "zh": "摩纳哥公国",
+        "en": "Principality of Monaco"
+      },
+      "source_formal": {
+        "zh": "摩纳哥公国",
+        "en": "the Principality of Monaco"
+      },
+      "short": {
+        "zh": "摩纳哥",
+        "en": "Monaco"
+      },
+      "sort_name": {
+        "zh": "摩纳哥公国",
+        "en": "Principality of Monaco"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-496",
+      "kind": "member-state",
+      "formal": {
+        "zh": "蒙古国",
+        "en": "Mongolia"
+      },
+      "source_formal": {
+        "zh": "蒙古国",
+        "en": "Mongolia"
+      },
+      "short": {
+        "zh": "蒙古",
+        "en": "Mongolia"
+      },
+      "sort_name": {
+        "zh": "蒙古国",
+        "en": "Mongolia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-498",
+      "kind": "member-state",
+      "formal": {
+        "zh": "摩尔多瓦共和国",
+        "en": "Republic of Moldova"
+      },
+      "source_formal": {
+        "zh": "摩尔多瓦共和国",
+        "en": "the Republic of Moldova"
+      },
+      "short": {
+        "zh": "摩尔多瓦共和国",
+        "en": "Republic of Moldova"
+      },
+      "sort_name": {
+        "zh": "摩尔多瓦共和国",
+        "en": "Republic of Moldova"
+      },
+      "aliases": ["摩尔多瓦","Moldova"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-499",
+      "kind": "member-state",
+      "formal": {
+        "zh": "黑山",
+        "en": "Montenegro"
+      },
+      "source_formal": {
+        "zh": "黑山",
+        "en": "Montenegro"
+      },
+      "short": {
+        "zh": "黑山",
+        "en": "Montenegro"
+      },
+      "sort_name": {
+        "zh": "黑山",
+        "en": "Montenegro"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-504",
+      "kind": "member-state",
+      "formal": {
+        "zh": "摩洛哥王国",
+        "en": "Kingdom of Morocco"
+      },
+      "source_formal": {
+        "zh": "摩洛哥王国",
+        "en": "the Kingdom of Morocco"
+      },
+      "short": {
+        "zh": "摩洛哥",
+        "en": "Morocco"
+      },
+      "sort_name": {
+        "zh": "摩洛哥王国",
+        "en": "Kingdom of Morocco"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-508",
+      "kind": "member-state",
+      "formal": {
+        "zh": "莫桑比克共和国",
+        "en": "Republic of Mozambique"
+      },
+      "source_formal": {
+        "zh": "莫桑比克共和国",
+        "en": "the Republic of Mozambique"
+      },
+      "short": {
+        "zh": "莫桑比克",
+        "en": "Mozambique"
+      },
+      "sort_name": {
+        "zh": "莫桑比克共和国",
+        "en": "Republic of Mozambique"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-512",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿曼苏丹国",
+        "en": "Sultanate of Oman"
+      },
+      "source_formal": {
+        "zh": "阿曼苏丹国",
+        "en": "the Sultanate of Oman"
+      },
+      "short": {
+        "zh": "阿曼",
+        "en": "Oman"
+      },
+      "sort_name": {
+        "zh": "阿曼苏丹国",
+        "en": "Sultanate of Oman"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-516",
+      "kind": "member-state",
+      "formal": {
+        "zh": "纳米比亚共和国",
+        "en": "Republic of Namibia"
+      },
+      "source_formal": {
+        "zh": "纳米比亚共和国",
+        "en": "the Republic of Namibia"
+      },
+      "short": {
+        "zh": "纳米比亚",
+        "en": "Namibia"
+      },
+      "sort_name": {
+        "zh": "纳米比亚共和国",
+        "en": "Republic of Namibia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-520",
+      "kind": "member-state",
+      "formal": {
+        "zh": "瑙鲁共和国",
+        "en": "Republic of Naoero"
+      },
+      "source_formal": {
+        "zh": "瑙鲁共和国",
+        "en": "the Republic of Naoero"
+      },
+      "short": {
+        "zh": "瑙鲁",
+        "en": "Naoero"
+      },
+      "sort_name": {
+        "zh": "瑙鲁共和国",
+        "en": "Republic of Naoero"
+      },
+      "aliases": ["Nauru"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-524",
+      "kind": "member-state",
+      "formal": {
+        "zh": "尼泊尔",
+        "en": "Nepal"
+      },
+      "source_formal": {
+        "zh": "尼泊尔",
+        "en": "Nepal"
+      },
+      "short": {
+        "zh": "尼泊尔",
+        "en": "Nepal"
+      },
+      "sort_name": {
+        "zh": "尼泊尔",
+        "en": "Nepal"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-528",
+      "kind": "member-state",
+      "formal": {
+        "zh": "荷兰王国",
+        "en": "Kingdom of the Netherlands"
+      },
+      "source_formal": {
+        "zh": "荷兰王国",
+        "en": "the Kingdom of the Netherlands"
+      },
+      "short": {
+        "zh": "荷兰王国",
+        "en": "Netherlands (Kingdom of the)"
+      },
+      "sort_name": {
+        "zh": "荷兰王国",
+        "en": "Kingdom of the Netherlands"
+      },
+      "aliases": ["荷兰","Netherlands","The Netherlands"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-548",
+      "kind": "member-state",
+      "formal": {
+        "zh": "瓦努阿图共和国",
+        "en": "Republic of Vanuatu"
+      },
+      "source_formal": {
+        "zh": "瓦努阿图共和国",
+        "en": "the Republic of Vanuatu"
+      },
+      "short": {
+        "zh": "瓦努阿图",
+        "en": "Vanuatu"
+      },
+      "sort_name": {
+        "zh": "瓦努阿图共和国",
+        "en": "Republic of Vanuatu"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-554",
+      "kind": "member-state",
+      "formal": {
+        "zh": "新西兰",
+        "en": "New Zealand"
+      },
+      "source_formal": {
+        "zh": "新西兰",
+        "en": "New Zealand"
+      },
+      "short": {
+        "zh": "新西兰",
+        "en": "New Zealand"
+      },
+      "sort_name": {
+        "zh": "新西兰",
+        "en": "New Zealand"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-558",
+      "kind": "member-state",
+      "formal": {
+        "zh": "尼加拉瓜共和国",
+        "en": "Republic of Nicaragua"
+      },
+      "source_formal": {
+        "zh": "尼加拉瓜共和国",
+        "en": "the Republic of Nicaragua"
+      },
+      "short": {
+        "zh": "尼加拉瓜",
+        "en": "Nicaragua"
+      },
+      "sort_name": {
+        "zh": "尼加拉瓜共和国",
+        "en": "Republic of Nicaragua"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-562",
+      "kind": "member-state",
+      "formal": {
+        "zh": "尼日尔共和国",
+        "en": "Republic of the Niger"
+      },
+      "source_formal": {
+        "zh": "尼日尔共和国",
+        "en": "the Republic of the Niger"
+      },
+      "short": {
+        "zh": "尼日尔",
+        "en": "Niger"
+      },
+      "sort_name": {
+        "zh": "尼日尔共和国",
+        "en": "Republic of the Niger"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-566",
+      "kind": "member-state",
+      "formal": {
+        "zh": "尼日利亚联邦共和国",
+        "en": "Federal Republic of Nigeria"
+      },
+      "source_formal": {
+        "zh": "尼日利亚联邦共和国",
+        "en": "the Federal Republic of Nigeria"
+      },
+      "short": {
+        "zh": "尼日利亚",
+        "en": "Nigeria"
+      },
+      "sort_name": {
+        "zh": "尼日利亚联邦共和国",
+        "en": "Federal Republic of Nigeria"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-570",
+      "kind": "specialized-agency-member",
+      "formal": {
+        "zh": "纽埃",
+        "en": "Niue"
+      },
+      "source_formal": {
+        "zh": "纽埃",
+        "en": "Niue"
+      },
+      "short": {
+        "zh": "纽埃",
+        "en": "Niue"
+      },
+      "sort_name": {
+        "zh": "纽埃",
+        "en": "Niue"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-578",
+      "kind": "member-state",
+      "formal": {
+        "zh": "挪威王国",
+        "en": "Kingdom of Norway"
+      },
+      "source_formal": {
+        "zh": "挪威王国",
+        "en": "the Kingdom of Norway"
+      },
+      "short": {
+        "zh": "挪威",
+        "en": "Norway"
+      },
+      "sort_name": {
+        "zh": "挪威王国",
+        "en": "Kingdom of Norway"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-583",
+      "kind": "member-state",
+      "formal": {
+        "zh": "密克罗尼西亚联邦",
+        "en": "Federated States of Micronesia"
+      },
+      "source_formal": {
+        "zh": "密克罗尼西亚联邦",
+        "en": "the Federated States of Micronesia"
+      },
+      "short": {
+        "zh": "密克罗尼西亚联邦",
+        "en": "Micronesia (Federated States of)"
+      },
+      "sort_name": {
+        "zh": "密克罗尼西亚联邦",
+        "en": "Federated States of Micronesia"
+      },
+      "aliases": ["密克罗尼西亚","Micronesia"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-584",
+      "kind": "member-state",
+      "formal": {
+        "zh": "马绍尔群岛共和国",
+        "en": "Republic of the Marshall Islands"
+      },
+      "source_formal": {
+        "zh": "马绍尔群岛共和国",
+        "en": "the Republic of the Marshall Islands"
+      },
+      "short": {
+        "zh": "马绍尔群岛",
+        "en": "Marshall Islands"
+      },
+      "sort_name": {
+        "zh": "马绍尔群岛共和国",
+        "en": "Republic of the Marshall Islands"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-585",
+      "kind": "member-state",
+      "formal": {
+        "zh": "帕劳共和国",
+        "en": "Republic of Palau"
+      },
+      "source_formal": {
+        "zh": "帕劳共和国",
+        "en": "the Republic of Palau"
+      },
+      "short": {
+        "zh": "帕劳",
+        "en": "Palau"
+      },
+      "sort_name": {
+        "zh": "帕劳共和国",
+        "en": "Republic of Palau"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-586",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴基斯坦伊斯兰共和国",
+        "en": "Islamic Republic of Pakistan"
+      },
+      "source_formal": {
+        "zh": "巴基斯坦伊斯兰共和国",
+        "en": "the Islamic Republic of Pakistan"
+      },
+      "short": {
+        "zh": "巴基斯坦",
+        "en": "Pakistan"
+      },
+      "sort_name": {
+        "zh": "巴基斯坦伊斯兰共和国",
+        "en": "Islamic Republic of Pakistan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-591",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴拿马共和国",
+        "en": "Republic of Panama"
+      },
+      "source_formal": {
+        "zh": "巴拿马共和国",
+        "en": "the Republic of Panama"
+      },
+      "short": {
+        "zh": "巴拿马",
+        "en": "Panama"
+      },
+      "sort_name": {
+        "zh": "巴拿马共和国",
+        "en": "Republic of Panama"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-598",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴布亚新几内亚独立国",
+        "en": "Independent State of Papua New Guinea"
+      },
+      "source_formal": {
+        "zh": "巴布亚新几内亚独立国",
+        "en": "the Independent State of Papua New Guinea"
+      },
+      "short": {
+        "zh": "巴布亚新几内亚",
+        "en": "Papua New Guinea"
+      },
+      "sort_name": {
+        "zh": "巴布亚新几内亚独立国",
+        "en": "Independent State of Papua New Guinea"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-600",
+      "kind": "member-state",
+      "formal": {
+        "zh": "巴拉圭共和国",
+        "en": "Republic of Paraguay"
+      },
+      "source_formal": {
+        "zh": "巴拉圭共和国",
+        "en": "the Republic of Paraguay"
+      },
+      "short": {
+        "zh": "巴拉圭",
+        "en": "Paraguay"
+      },
+      "sort_name": {
+        "zh": "巴拉圭共和国",
+        "en": "Republic of Paraguay"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-604",
+      "kind": "member-state",
+      "formal": {
+        "zh": "秘鲁共和国",
+        "en": "Republic of Peru"
+      },
+      "source_formal": {
+        "zh": "秘鲁共和国",
+        "en": "the Republic of Peru"
+      },
+      "short": {
+        "zh": "秘鲁",
+        "en": "Peru"
+      },
+      "sort_name": {
+        "zh": "秘鲁共和国",
+        "en": "Republic of Peru"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-608",
+      "kind": "member-state",
+      "formal": {
+        "zh": "菲律宾共和国",
+        "en": "Republic of the Philippines"
+      },
+      "source_formal": {
+        "zh": "菲律宾共和国",
+        "en": "the Republic of the Philippines"
+      },
+      "short": {
+        "zh": "菲律宾",
+        "en": "Philippines"
+      },
+      "sort_name": {
+        "zh": "菲律宾共和国",
+        "en": "Republic of the Philippines"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-616",
+      "kind": "member-state",
+      "formal": {
+        "zh": "波兰共和国",
+        "en": "Republic of Poland"
+      },
+      "source_formal": {
+        "zh": "波兰共和国",
+        "en": "the Republic of Poland"
+      },
+      "short": {
+        "zh": "波兰",
+        "en": "Poland"
+      },
+      "sort_name": {
+        "zh": "波兰共和国",
+        "en": "Republic of Poland"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-620",
+      "kind": "member-state",
+      "formal": {
+        "zh": "葡萄牙共和国",
+        "en": "Portuguese Republic"
+      },
+      "source_formal": {
+        "zh": "葡萄牙共和国",
+        "en": "the Portuguese Republic"
+      },
+      "short": {
+        "zh": "葡萄牙",
+        "en": "Portugal"
+      },
+      "sort_name": {
+        "zh": "葡萄牙共和国",
+        "en": "Portuguese Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-624",
+      "kind": "member-state",
+      "formal": {
+        "zh": "几内亚比绍共和国",
+        "en": "Republic of Guinea-Bissau"
+      },
+      "source_formal": {
+        "zh": "几内亚比绍共和国",
+        "en": "the Republic of Guinea-Bissau"
+      },
+      "short": {
+        "zh": "几内亚比绍",
+        "en": "Guinea-Bissau"
+      },
+      "sort_name": {
+        "zh": "几内亚比绍共和国",
+        "en": "Republic of Guinea-Bissau"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-626",
+      "kind": "member-state",
+      "formal": {
+        "zh": "东帝汶民主共和国",
+        "en": "Democratic Republic of Timor-Leste"
+      },
+      "source_formal": {
+        "zh": "东帝汶民主共和国",
+        "en": "the Democratic Republic of Timor-Leste"
+      },
+      "short": {
+        "zh": "东帝汶",
+        "en": "Timor-Leste"
+      },
+      "sort_name": {
+        "zh": "东帝汶民主共和国",
+        "en": "Democratic Republic of Timor-Leste"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-634",
+      "kind": "member-state",
+      "formal": {
+        "zh": "卡塔尔国",
+        "en": "State of Qatar"
+      },
+      "source_formal": {
+        "zh": "卡塔尔国",
+        "en": "the State of Qatar"
+      },
+      "short": {
+        "zh": "卡塔尔",
+        "en": "Qatar"
+      },
+      "sort_name": {
+        "zh": "卡塔尔国",
+        "en": "State of Qatar"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-642",
+      "kind": "member-state",
+      "formal": {
+        "zh": "罗马尼亚",
+        "en": "Romania"
+      },
+      "source_formal": {
+        "zh": "罗马尼亚",
+        "en": "Romania"
+      },
+      "short": {
+        "zh": "罗马尼亚",
+        "en": "Romania"
+      },
+      "sort_name": {
+        "zh": "罗马尼亚",
+        "en": "Romania"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-643",
+      "kind": "member-state",
+      "formal": {
+        "zh": "俄罗斯联邦",
+        "en": "Russian Federation"
+      },
+      "source_formal": {
+        "zh": "俄罗斯联邦",
+        "en": "the Russian Federation"
+      },
+      "short": {
+        "zh": "俄罗斯联邦",
+        "en": "Russian Federation"
+      },
+      "sort_name": {
+        "zh": "俄罗斯联邦",
+        "en": "Russian Federation"
+      },
+      "aliases": ["俄罗斯","Russia"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-646",
+      "kind": "member-state",
+      "formal": {
+        "zh": "卢旺达共和国",
+        "en": "Republic of Rwanda"
+      },
+      "source_formal": {
+        "zh": "卢旺达共和国",
+        "en": "the Republic of Rwanda"
+      },
+      "short": {
+        "zh": "卢旺达",
+        "en": "Rwanda"
+      },
+      "sort_name": {
+        "zh": "卢旺达共和国",
+        "en": "Republic of Rwanda"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-659",
+      "kind": "member-state",
+      "formal": {
+        "zh": "圣基茨和尼维斯",
+        "en": "Saint Kitts and Nevis"
+      },
+      "source_formal": {
+        "zh": "圣基茨和尼维斯",
+        "en": "Saint Kitts and Nevis"
+      },
+      "short": {
+        "zh": "圣基茨和尼维斯",
+        "en": "Saint Kitts and Nevis"
+      },
+      "sort_name": {
+        "zh": "圣基茨和尼维斯",
+        "en": "Saint Kitts and Nevis"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-662",
+      "kind": "member-state",
+      "formal": {
+        "zh": "圣卢西亚",
+        "en": "Saint Lucia"
+      },
+      "source_formal": {
+        "zh": "圣卢西亚",
+        "en": "Saint Lucia"
+      },
+      "short": {
+        "zh": "圣卢西亚",
+        "en": "Saint Lucia"
+      },
+      "sort_name": {
+        "zh": "圣卢西亚",
+        "en": "Saint Lucia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-670",
+      "kind": "member-state",
+      "formal": {
+        "zh": "圣文森特和格林纳丁斯",
+        "en": "Saint Vincent and the Grenadines"
+      },
+      "source_formal": {
+        "zh": "圣文森特和格林纳丁斯",
+        "en": "Saint Vincent and the Grenadines"
+      },
+      "short": {
+        "zh": "圣文森特和格林纳丁斯",
+        "en": "Saint Vincent and the Grenadines"
+      },
+      "sort_name": {
+        "zh": "圣文森特和格林纳丁斯",
+        "en": "Saint Vincent and the Grenadines"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-674",
+      "kind": "member-state",
+      "formal": {
+        "zh": "圣马力诺共和国",
+        "en": "Republic of San Marino"
+      },
+      "source_formal": {
+        "zh": "圣马力诺共和国",
+        "en": "the Republic of San Marino"
+      },
+      "short": {
+        "zh": "圣马力诺",
+        "en": "San Marino"
+      },
+      "sort_name": {
+        "zh": "圣马力诺共和国",
+        "en": "Republic of San Marino"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-678",
+      "kind": "member-state",
+      "formal": {
+        "zh": "圣多美和普林西比民主共和国",
+        "en": "Democratic Republic of Sao Tome and Principe"
+      },
+      "source_formal": {
+        "zh": "圣多美和普林西比民主共和国",
+        "en": "the Democratic Republic of Sao Tome and Principe"
+      },
+      "short": {
+        "zh": "圣多美和普林西比",
+        "en": "Sao Tome and Principe"
+      },
+      "sort_name": {
+        "zh": "圣多美和普林西比民主共和国",
+        "en": "Democratic Republic of Sao Tome and Principe"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-682",
+      "kind": "member-state",
+      "formal": {
+        "zh": "沙特阿拉伯王国",
+        "en": "Kingdom of Saudi Arabia"
+      },
+      "source_formal": {
+        "zh": "沙特阿拉伯王国",
+        "en": "the Kingdom of Saudi Arabia"
+      },
+      "short": {
+        "zh": "沙特阿拉伯",
+        "en": "Saudi Arabia"
+      },
+      "sort_name": {
+        "zh": "沙特阿拉伯王国",
+        "en": "Kingdom of Saudi Arabia"
+      },
+      "aliases": ["沙特"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-686",
+      "kind": "member-state",
+      "formal": {
+        "zh": "塞内加尔共和国",
+        "en": "Republic of Senegal"
+      },
+      "source_formal": {
+        "zh": "塞内加尔共和国",
+        "en": "the Republic of Senegal"
+      },
+      "short": {
+        "zh": "塞内加尔",
+        "en": "Senegal"
+      },
+      "sort_name": {
+        "zh": "塞内加尔共和国",
+        "en": "Republic of Senegal"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-688",
+      "kind": "member-state",
+      "formal": {
+        "zh": "塞尔维亚共和国",
+        "en": "Republic of Serbia"
+      },
+      "source_formal": {
+        "zh": "塞尔维亚共和国",
+        "en": "the Republic of Serbia"
+      },
+      "short": {
+        "zh": "塞尔维亚",
+        "en": "Serbia"
+      },
+      "sort_name": {
+        "zh": "塞尔维亚共和国",
+        "en": "Republic of Serbia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-690",
+      "kind": "member-state",
+      "formal": {
+        "zh": "塞舌尔共和国",
+        "en": "Republic of Seychelles"
+      },
+      "source_formal": {
+        "zh": "塞舌尔共和国",
+        "en": "the Republic of Seychelles"
+      },
+      "short": {
+        "zh": "塞舌尔",
+        "en": "Seychelles"
+      },
+      "sort_name": {
+        "zh": "塞舌尔共和国",
+        "en": "Republic of Seychelles"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-694",
+      "kind": "member-state",
+      "formal": {
+        "zh": "塞拉利昂共和国",
+        "en": "Republic of Sierra Leone"
+      },
+      "source_formal": {
+        "zh": "塞拉利昂共和国",
+        "en": "the Republic of Sierra Leone"
+      },
+      "short": {
+        "zh": "塞拉利昂",
+        "en": "Sierra Leone"
+      },
+      "sort_name": {
+        "zh": "塞拉利昂共和国",
+        "en": "Republic of Sierra Leone"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-702",
+      "kind": "member-state",
+      "formal": {
+        "zh": "新加坡共和国",
+        "en": "Republic of Singapore"
+      },
+      "source_formal": {
+        "zh": "新加坡共和国",
+        "en": "the Republic of Singapore"
+      },
+      "short": {
+        "zh": "新加坡",
+        "en": "Singapore"
+      },
+      "sort_name": {
+        "zh": "新加坡共和国",
+        "en": "Republic of Singapore"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-703",
+      "kind": "member-state",
+      "formal": {
+        "zh": "斯洛伐克共和国",
+        "en": "Slovak Republic"
+      },
+      "source_formal": {
+        "zh": "斯洛伐克共和国",
+        "en": "the Slovak Republic"
+      },
+      "short": {
+        "zh": "斯洛伐克",
+        "en": "Slovakia"
+      },
+      "sort_name": {
+        "zh": "斯洛伐克共和国",
+        "en": "Slovak Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-704",
+      "kind": "member-state",
+      "formal": {
+        "zh": "越南社会主义共和国",
+        "en": "Socialist Republic of Viet Nam"
+      },
+      "source_formal": {
+        "zh": "越南社会主义共和国",
+        "en": "the Socialist Republic of Viet Nam"
+      },
+      "short": {
+        "zh": "越南",
+        "en": "Viet Nam"
+      },
+      "sort_name": {
+        "zh": "越南社会主义共和国",
+        "en": "Socialist Republic of Viet Nam"
+      },
+      "aliases": ["Vietnam"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-705",
+      "kind": "member-state",
+      "formal": {
+        "zh": "斯洛文尼亚共和国",
+        "en": "Republic of Slovenia"
+      },
+      "source_formal": {
+        "zh": "斯洛文尼亚共和国",
+        "en": "the Republic of Slovenia"
+      },
+      "short": {
+        "zh": "斯洛文尼亚",
+        "en": "Slovenia"
+      },
+      "sort_name": {
+        "zh": "斯洛文尼亚共和国",
+        "en": "Republic of Slovenia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-706",
+      "kind": "member-state",
+      "formal": {
+        "zh": "索马里联邦共和国",
+        "en": "Federal Republic of Somalia"
+      },
+      "source_formal": {
+        "zh": "索马里联邦共和国",
+        "en": "the Federal Republic of Somalia"
+      },
+      "short": {
+        "zh": "索马里",
+        "en": "Somalia"
+      },
+      "sort_name": {
+        "zh": "索马里联邦共和国",
+        "en": "Federal Republic of Somalia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-710",
+      "kind": "member-state",
+      "formal": {
+        "zh": "南非共和国",
+        "en": "Republic of South Africa"
+      },
+      "source_formal": {
+        "zh": "南非共和国",
+        "en": "the Republic of South Africa"
+      },
+      "short": {
+        "zh": "南非",
+        "en": "South Africa"
+      },
+      "sort_name": {
+        "zh": "南非共和国",
+        "en": "Republic of South Africa"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-716",
+      "kind": "member-state",
+      "formal": {
+        "zh": "津巴布韦共和国",
+        "en": "Republic of Zimbabwe"
+      },
+      "source_formal": {
+        "zh": "津巴布韦共和国",
+        "en": "the Republic of Zimbabwe"
+      },
+      "short": {
+        "zh": "津巴布韦",
+        "en": "Zimbabwe"
+      },
+      "sort_name": {
+        "zh": "津巴布韦共和国",
+        "en": "Republic of Zimbabwe"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-724",
+      "kind": "member-state",
+      "formal": {
+        "zh": "西班牙王国",
+        "en": "Kingdom of Spain"
+      },
+      "source_formal": {
+        "zh": "西班牙王国",
+        "en": "the Kingdom of Spain"
+      },
+      "short": {
+        "zh": "西班牙",
+        "en": "Spain"
+      },
+      "sort_name": {
+        "zh": "西班牙王国",
+        "en": "Kingdom of Spain"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-728",
+      "kind": "member-state",
+      "formal": {
+        "zh": "南苏丹共和国",
+        "en": "Republic of South Sudan"
+      },
+      "source_formal": {
+        "zh": "南苏丹共和国",
+        "en": "the Republic of South Sudan"
+      },
+      "short": {
+        "zh": "南苏丹",
+        "en": "South Sudan"
+      },
+      "sort_name": {
+        "zh": "南苏丹共和国",
+        "en": "Republic of South Sudan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-729",
+      "kind": "member-state",
+      "formal": {
+        "zh": "苏丹共和国",
+        "en": "Republic of the Sudan"
+      },
+      "source_formal": {
+        "zh": "苏丹共和国",
+        "en": "the Republic of the Sudan"
+      },
+      "short": {
+        "zh": "苏丹",
+        "en": "Sudan"
+      },
+      "sort_name": {
+        "zh": "苏丹共和国",
+        "en": "Republic of the Sudan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-740",
+      "kind": "member-state",
+      "formal": {
+        "zh": "苏里南共和国",
+        "en": "Republic of Suriname"
+      },
+      "source_formal": {
+        "zh": "苏里南共和国",
+        "en": "the Republic of Suriname"
+      },
+      "short": {
+        "zh": "苏里南",
+        "en": "Suriname"
+      },
+      "sort_name": {
+        "zh": "苏里南共和国",
+        "en": "Republic of Suriname"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-748",
+      "kind": "member-state",
+      "formal": {
+        "zh": "斯威士兰王国",
+        "en": "Kingdom of Eswatini"
+      },
+      "source_formal": {
+        "zh": "斯威士兰王国",
+        "en": "the Kingdom of Eswatini"
+      },
+      "short": {
+        "zh": "斯威士兰",
+        "en": "Eswatini"
+      },
+      "sort_name": {
+        "zh": "斯威士兰王国",
+        "en": "Kingdom of Eswatini"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-752",
+      "kind": "member-state",
+      "formal": {
+        "zh": "瑞典王国",
+        "en": "Kingdom of Sweden"
+      },
+      "source_formal": {
+        "zh": "瑞典王国",
+        "en": "the Kingdom of Sweden"
+      },
+      "short": {
+        "zh": "瑞典",
+        "en": "Sweden"
+      },
+      "sort_name": {
+        "zh": "瑞典王国",
+        "en": "Kingdom of Sweden"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-756",
+      "kind": "member-state",
+      "formal": {
+        "zh": "瑞士联邦",
+        "en": "Swiss Confederation"
+      },
+      "source_formal": {
+        "zh": "瑞士联邦",
+        "en": "the Swiss Confederation"
+      },
+      "short": {
+        "zh": "瑞士",
+        "en": "Switzerland"
+      },
+      "sort_name": {
+        "zh": "瑞士联邦",
+        "en": "Swiss Confederation"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-760",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿拉伯叙利亚共和国",
+        "en": "Syrian Arab Republic"
+      },
+      "source_formal": {
+        "zh": "阿拉伯叙利亚共和国",
+        "en": "the Syrian Arab Republic"
+      },
+      "short": {
+        "zh": "阿拉伯叙利亚共和国",
+        "en": "Syrian Arab Republic"
+      },
+      "sort_name": {
+        "zh": "阿拉伯叙利亚共和国",
+        "en": "Syrian Arab Republic"
+      },
+      "aliases": ["叙利亚","Syria"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-762",
+      "kind": "member-state",
+      "formal": {
+        "zh": "塔吉克斯坦共和国",
+        "en": "Republic of Tajikistan"
+      },
+      "source_formal": {
+        "zh": "塔吉克斯坦共和国",
+        "en": "the Republic of Tajikistan"
+      },
+      "short": {
+        "zh": "塔吉克斯坦",
+        "en": "Tajikistan"
+      },
+      "sort_name": {
+        "zh": "塔吉克斯坦共和国",
+        "en": "Republic of Tajikistan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-764",
+      "kind": "member-state",
+      "formal": {
+        "zh": "泰王国",
+        "en": "Kingdom of Thailand"
+      },
+      "source_formal": {
+        "zh": "泰王国",
+        "en": "the Kingdom of Thailand"
+      },
+      "short": {
+        "zh": "泰国",
+        "en": "Thailand"
+      },
+      "sort_name": {
+        "zh": "泰王国",
+        "en": "Kingdom of Thailand"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-768",
+      "kind": "member-state",
+      "formal": {
+        "zh": "多哥共和国",
+        "en": "Togolese Republic"
+      },
+      "source_formal": {
+        "zh": "多哥共和国",
+        "en": "the Togolese Republic"
+      },
+      "short": {
+        "zh": "多哥",
+        "en": "Togo"
+      },
+      "sort_name": {
+        "zh": "多哥共和国",
+        "en": "Togolese Republic"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-776",
+      "kind": "member-state",
+      "formal": {
+        "zh": "汤加王国",
+        "en": "Kingdom of Tonga"
+      },
+      "source_formal": {
+        "zh": "汤加王国",
+        "en": "the Kingdom of Tonga"
+      },
+      "short": {
+        "zh": "汤加",
+        "en": "Tonga"
+      },
+      "sort_name": {
+        "zh": "汤加王国",
+        "en": "Kingdom of Tonga"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-780",
+      "kind": "member-state",
+      "formal": {
+        "zh": "特立尼达和多巴哥共和国",
+        "en": "Republic of Trinidad and Tobago"
+      },
+      "source_formal": {
+        "zh": "特立尼达和多巴哥共和国",
+        "en": "the Republic of Trinidad and Tobago"
+      },
+      "short": {
+        "zh": "特立尼达和多巴哥",
+        "en": "Trinidad and Tobago"
+      },
+      "sort_name": {
+        "zh": "特立尼达和多巴哥共和国",
+        "en": "Republic of Trinidad and Tobago"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-784",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿拉伯联合酋长国",
+        "en": "United Arab Emirates"
+      },
+      "source_formal": {
+        "zh": "阿拉伯联合酋长国",
+        "en": "the United Arab Emirates"
+      },
+      "short": {
+        "zh": "阿拉伯联合酋长国",
+        "en": "United Arab Emirates"
+      },
+      "sort_name": {
+        "zh": "阿拉伯联合酋长国",
+        "en": "United Arab Emirates"
+      },
+      "aliases": ["阿联酋","UAE"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-788",
+      "kind": "member-state",
+      "formal": {
+        "zh": "突尼斯共和国",
+        "en": "Republic of Tunisia"
+      },
+      "source_formal": {
+        "zh": "突尼斯共和国",
+        "en": "the Republic of Tunisia"
+      },
+      "short": {
+        "zh": "突尼斯",
+        "en": "Tunisia"
+      },
+      "sort_name": {
+        "zh": "突尼斯共和国",
+        "en": "Republic of Tunisia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-792",
+      "kind": "member-state",
+      "formal": {
+        "zh": "土耳其共和国",
+        "en": "Republic of Türkiye"
+      },
+      "source_formal": {
+        "zh": "土耳其共和国",
+        "en": "the Republic of Türkiye"
+      },
+      "short": {
+        "zh": "土耳其",
+        "en": "Türkiye"
+      },
+      "sort_name": {
+        "zh": "土耳其共和国",
+        "en": "Republic of Türkiye"
+      },
+      "aliases": ["Turkey"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-795",
+      "kind": "member-state",
+      "formal": {
+        "zh": "土库曼斯坦",
+        "en": "Turkmenistan"
+      },
+      "source_formal": {
+        "zh": "土库曼斯坦",
+        "en": "Turkmenistan"
+      },
+      "short": {
+        "zh": "土库曼斯坦",
+        "en": "Turkmenistan"
+      },
+      "sort_name": {
+        "zh": "土库曼斯坦",
+        "en": "Turkmenistan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-798",
+      "kind": "member-state",
+      "formal": {
+        "zh": "图瓦卢",
+        "en": "Tuvalu"
+      },
+      "source_formal": {
+        "zh": "图瓦卢",
+        "en": "Tuvalu"
+      },
+      "short": {
+        "zh": "图瓦卢",
+        "en": "Tuvalu"
+      },
+      "sort_name": {
+        "zh": "图瓦卢",
+        "en": "Tuvalu"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-800",
+      "kind": "member-state",
+      "formal": {
+        "zh": "乌干达共和国",
+        "en": "Republic of Uganda"
+      },
+      "source_formal": {
+        "zh": "乌干达共和国",
+        "en": "the Republic of Uganda"
+      },
+      "short": {
+        "zh": "乌干达",
+        "en": "Uganda"
+      },
+      "sort_name": {
+        "zh": "乌干达共和国",
+        "en": "Republic of Uganda"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-804",
+      "kind": "member-state",
+      "formal": {
+        "zh": "乌克兰",
+        "en": "Ukraine"
+      },
+      "source_formal": {
+        "zh": "乌克兰",
+        "en": "Ukraine"
+      },
+      "short": {
+        "zh": "乌克兰",
+        "en": "Ukraine"
+      },
+      "sort_name": {
+        "zh": "乌克兰",
+        "en": "Ukraine"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-807",
+      "kind": "member-state",
+      "formal": {
+        "zh": "北马其顿共和国",
+        "en": "Republic of North Macedonia"
+      },
+      "source_formal": {
+        "zh": "北马其顿共和国",
+        "en": "the Republic of North Macedonia"
+      },
+      "short": {
+        "zh": "北马其顿",
+        "en": "North Macedonia"
+      },
+      "sort_name": {
+        "zh": "北马其顿共和国",
+        "en": "Republic of North Macedonia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-818",
+      "kind": "member-state",
+      "formal": {
+        "zh": "阿拉伯埃及共和国",
+        "en": "Arab Republic of Egypt"
+      },
+      "source_formal": {
+        "zh": "阿拉伯埃及共和国",
+        "en": "the Arab Republic of Egypt"
+      },
+      "short": {
+        "zh": "埃及",
+        "en": "Egypt"
+      },
+      "sort_name": {
+        "zh": "阿拉伯埃及共和国",
+        "en": "Arab Republic of Egypt"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-826",
+      "kind": "member-state",
+      "formal": {
+        "zh": "大不列颠及北爱尔兰联合王国",
+        "en": "United Kingdom of Great Britain and Northern Ireland"
+      },
+      "source_formal": {
+        "zh": "大不列颠及北爱尔兰联合王国",
+        "en": "the United Kingdom of Great Britain and Northern Ireland"
+      },
+      "short": {
+        "zh": "大不列颠及北爱尔兰联合王国",
+        "en": "United Kingdom of Great Britain and Northern Ireland"
+      },
+      "sort_name": {
+        "zh": "大不列颠及北爱尔兰联合王国",
+        "en": "United Kingdom of Great Britain and Northern Ireland"
+      },
+      "aliases": ["英国","United Kingdom","UK","U.K."],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-834",
+      "kind": "member-state",
+      "formal": {
+        "zh": "坦桑尼亚联合共和国",
+        "en": "United Republic of Tanzania"
+      },
+      "source_formal": {
+        "zh": "坦桑尼亚联合共和国",
+        "en": "the United Republic of Tanzania"
+      },
+      "short": {
+        "zh": "坦桑尼亚联合共和国",
+        "en": "United Republic of Tanzania"
+      },
+      "sort_name": {
+        "zh": "坦桑尼亚联合共和国",
+        "en": "United Republic of Tanzania"
+      },
+      "aliases": ["坦桑尼亚","Tanzania"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-840",
+      "kind": "member-state",
+      "formal": {
+        "zh": "美利坚合众国",
+        "en": "United States of America"
+      },
+      "source_formal": {
+        "zh": "美利坚合众国",
+        "en": "the United States of America"
+      },
+      "short": {
+        "zh": "美利坚合众国",
+        "en": "United States of America"
+      },
+      "sort_name": {
+        "zh": "美利坚合众国",
+        "en": "United States of America"
+      },
+      "aliases": ["美国","USA","U.S.A.","US","U.S.","United States"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-854",
+      "kind": "member-state",
+      "formal": {
+        "zh": "布基纳法索",
+        "en": "Burkina Faso"
+      },
+      "source_formal": {
+        "zh": "布基纳法索",
+        "en": "Burkina Faso"
+      },
+      "short": {
+        "zh": "布基纳法索",
+        "en": "Burkina Faso"
+      },
+      "sort_name": {
+        "zh": "布基纳法索",
+        "en": "Burkina Faso"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-858",
+      "kind": "member-state",
+      "formal": {
+        "zh": "乌拉圭东岸共和国",
+        "en": "Oriental Republic of Uruguay"
+      },
+      "source_formal": {
+        "zh": "乌拉圭东岸共和国",
+        "en": "the Oriental Republic of Uruguay"
+      },
+      "short": {
+        "zh": "乌拉圭",
+        "en": "Uruguay"
+      },
+      "sort_name": {
+        "zh": "乌拉圭东岸共和国",
+        "en": "Oriental Republic of Uruguay"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-860",
+      "kind": "member-state",
+      "formal": {
+        "zh": "乌兹别克斯坦共和国",
+        "en": "Republic of Uzbekistan"
+      },
+      "source_formal": {
+        "zh": "乌兹别克斯坦共和国",
+        "en": "the Republic of Uzbekistan"
+      },
+      "short": {
+        "zh": "乌兹别克斯坦",
+        "en": "Uzbekistan"
+      },
+      "sort_name": {
+        "zh": "乌兹别克斯坦共和国",
+        "en": "Republic of Uzbekistan"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-862",
+      "kind": "member-state",
+      "formal": {
+        "zh": "委内瑞拉玻利瓦尔共和国",
+        "en": "Bolivarian Republic of Venezuela"
+      },
+      "source_formal": {
+        "zh": "委内瑞拉玻利瓦尔共和国",
+        "en": "the Bolivarian Republic of Venezuela"
+      },
+      "short": {
+        "zh": "委内瑞拉玻利瓦尔共和国",
+        "en": "Venezuela (Bolivarian Republic of)"
+      },
+      "sort_name": {
+        "zh": "委内瑞拉玻利瓦尔共和国",
+        "en": "Bolivarian Republic of Venezuela"
+      },
+      "aliases": ["委内瑞拉","Venezuela"],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-882",
+      "kind": "member-state",
+      "formal": {
+        "zh": "萨摩亚独立国",
+        "en": "Independent State of Samoa"
+      },
+      "source_formal": {
+        "zh": "萨摩亚独立国",
+        "en": "the Independent State of Samoa"
+      },
+      "short": {
+        "zh": "萨摩亚",
+        "en": "Samoa"
+      },
+      "sort_name": {
+        "zh": "萨摩亚独立国",
+        "en": "Independent State of Samoa"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-887",
+      "kind": "member-state",
+      "formal": {
+        "zh": "也门共和国",
+        "en": "Republic of Yemen"
+      },
+      "source_formal": {
+        "zh": "也门共和国",
+        "en": "the Republic of Yemen"
+      },
+      "short": {
+        "zh": "也门",
+        "en": "Yemen"
+      },
+      "sort_name": {
+        "zh": "也门共和国",
+        "en": "Republic of Yemen"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    },
+    {
+      "id": "UN-M49-894",
+      "kind": "member-state",
+      "formal": {
+        "zh": "赞比亚共和国",
+        "en": "Republic of Zambia"
+      },
+      "source_formal": {
+        "zh": "赞比亚共和国",
+        "en": "the Republic of Zambia"
+      },
+      "short": {
+        "zh": "赞比亚",
+        "en": "Zambia"
+      },
+      "sort_name": {
+        "zh": "赞比亚共和国",
+        "en": "Republic of Zambia"
+      },
+      "aliases": [],
+      "source": "https://unterm.un.org/unterm2/en/country",
+      "checked_on": "2026-10-05"
+    }
+  ]
+}

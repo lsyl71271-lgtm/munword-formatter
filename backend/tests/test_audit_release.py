@@ -20,9 +20,12 @@ class ReleaseTests(unittest.TestCase):
         info = plistlib.loads((ROOT / "PKUNMUN 2026 文件排版系统.app" / "Contents" / "Info.plist").read_bytes())
         self.assertEqual(info["CFBundleShortVersionString"], version)
         self.assertEqual(json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"], version)
-        for page in ("app/page.tsx", "local_web/index.html"):
-            with self.subTest(page=page):
-                self.assertIn(f"v{version}</span></div>", (ROOT / page).read_text(encoding="utf-8"))
+        page = (ROOT / "app/page.tsx").read_text(encoding="utf-8")
+        self.assertIn('import release from "../package.json"', page)
+        self.assertIn("v{release.version}", page)
+        local = (ROOT / "local_web/main.tsx").read_text(encoding="utf-8")
+        self.assertIn('import Home from "../app/page"', local)
+        self.assertFalse((ROOT / "local_web/app.js").exists(), "Do not restore a separately maintained local interface")
         self.assertIn(f"当前版本 **v{version}**", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertTrue((ROOT / "docs" / f"release-{version}.md").is_file())
 

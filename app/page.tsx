@@ -6,6 +6,8 @@ import type { BrowserDocumentType as DocumentType, BrowserModel as Model, Browse
 import DocxPreview from "./docx-preview";
 import TemplatePanel from "./template-panel";
 import { buildDiagnosticReport } from "./diagnostics";
+import { COUNTRY_DATA_DATE, countryWarnings, planCountries, splitCountryNames } from "./countries";
+import release from "../package.json";
 
 const DOCUMENT_TYPES: Array<{ id: DocumentType; zh: string; en: string; badge: string }> = [
   { id: "position-paper", zh: "立场文件", en: "Position Paper", badge: "PP" },
@@ -21,7 +23,7 @@ const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 function splitCountryInput(value: string) {
-  return value.split(/[,，、;；]/).map((item) => item.trim()).filter(Boolean);
+  return splitCountryNames(value);
 }
 
 function decodeHeader(value: string | null) {
@@ -90,6 +92,16 @@ export default function Home() {
   // dropped a separator or space typed at the end ("法国，" → "法国").
   const [countryDrafts, setCountryDrafts] = useState({ sponsors: "", signatories: "" });
   const diagnostic = useMemo(() => model ? buildDiagnosticReport(model, validations) : null, [model, validations]);
+  const countryReview = useMemo(() => {
+    if (!model) return null;
+    const fields = ["country", "sponsors", "signatories"] as const;
+    return { changes: fields.flatMap(key => {
+      const values = key === "country" ? [model.country] : model[key];
+      const plan = planCountries(values, model.language, preserveOrder);
+      return [...plan.resolutions.filter(item => item.changed).map(item => `${item.input} → ${item.display}`),
+        ...(plan.removedDuplicates ? [`${key === "sponsors" ? "起草国" : "附议国"}将按国家标识合并 ${plan.removedDuplicates} 个重复项`] : [])];
+    }), warnings: countryWarnings([model.country, ...model.sponsors, ...model.signatories], model.language) };
+  }, [model, preserveOrder]);
 
   const selectedType = DOCUMENT_TYPES.find((item) => item.id === documentType)!;
   const clauses = useMemo(
@@ -312,6 +324,11 @@ export default function Home() {
         {model && (
           <section className="reviewSection">
             <div className="sectionLabel"><span>03</span><div><h2>确认识别结果</h2><p>无法可靠判断的字段只提示，由你确认后再生成。</p></div></div>
+            {countryReview && (countryReview.changes.length > 0 || countryReview.warnings.length > 0) && <div className="countryReview" aria-live="polite">
+              <p>国家字段将在生成时自动使用正式全称，无需逐项填写（UNTERM 核对：{COUNTRY_DATA_DATE}）。正文不会替换；复杂字段保留原样。</p>
+              {countryReview.changes.map((detail, index) => <p key={`change-${index}`}>{detail}</p>)}
+              {countryReview.warnings.map((detail, index) => <p className="countryWarning" key={`warning-${index}`}>{detail}</p>)}
+            </div>}
             <div className="formGrid">
               <label>语言<select value={model.language} onChange={(e) => updateModel("language", e.target.value as "zh" | "en")}><option value="zh">中文</option><option value="en">English</option></select></label>
               <label>委员会<input value={model.committee} onChange={(e) => updateModel("committee", e.target.value)} /></label>
@@ -365,7 +382,7 @@ export default function Home() {
         )}
       </section>
 
-      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v1.7.2</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
+      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v{release.version}</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
     </main>
   );
 }

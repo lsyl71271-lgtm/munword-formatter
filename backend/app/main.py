@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from lxml import etree
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -122,7 +122,10 @@ def local_app():
 
 @app.get("/app.js", include_in_schema=False)
 def local_app_script():
-    return FileResponse(LOCAL_WEB_DIR / "app.js", media_type="text/javascript; charset=utf-8", headers={"Cache-Control": "no-store"})
+    path = ROOT / "public" / "local-app.js"
+    if not path.is_file():
+        raise HTTPException(status_code=503, detail="请先运行 pnpm build:local-tools，或使用包含离线界面的本机发布包。")
+    return FileResponse(path, media_type="text/javascript; charset=utf-8", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/favicon.svg", include_in_schema=False)
@@ -140,8 +143,10 @@ def local_studio_tools():
 
 @app.get("/styles.css", include_in_schema=False)
 def local_app_styles():
-    css = (ROOT / "app" / "globals.css").read_text(encoding="utf-8")
-    return PlainTextResponse(css.replace('@import "tailwindcss";', ""), media_type="text/css; charset=utf-8", headers={"Cache-Control": "no-store"})
+    path = ROOT / "public" / "local-styles.css"
+    if not path.is_file():
+        raise HTTPException(status_code=503, detail="请先运行 pnpm build:local-tools，或使用包含离线界面的本机发布包。")
+    return FileResponse(path, media_type="text/css; charset=utf-8", headers={"Cache-Control": "no-store"})
 
 
 async def read_docx(file: UploadFile) -> bytes:

@@ -1,82 +1,74 @@
-// The local page must not deliver a result built from values the user has
-// since changed (independent review, v1.7.0).  Runs local_web/app.js in jsdom
-// with a fetch whose response the test releases by hand.
+// Desktop renders app/page.tsx: exercise its race protection, not a duplicate UI.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { build } from "esbuild";
 import { JSDOM } from "jsdom";
+import { zipSync } from "fflate";
 
-const html = await readFile(new URL("../local_web/index.html", import.meta.url), "utf8");
-const script = await readFile(new URL("../local_web/app.js", import.meta.url), "utf8");
-const MODEL = { document_type: "draft-resolution", language: "zh", title: "决议草案1.0", committee: "联合国大会", topic: "旧议题", country: "", delegate: "", sponsors: ["日本国"], signatories: ["法国"], paragraphs: [], preambulatory_clauses: [], operative_clauses: [], body_clauses: [], warnings: [] };
-
-function page() {
-  const dom = new JSDOM(html.replace(/<script[\s\S]*?<\/script>/g, ""), { runScripts: "outside-only", url: "http://127.0.0.1:8000/" });
-  const { window } = dom;
-  const downloads = [], pending = [];
-  window.URL.createObjectURL = () => { downloads.push(Date.now()); return "blob:x"; };
-  window.URL.revokeObjectURL = () => {};
-  window.HTMLElement.prototype.scrollIntoView = () => {};
-  window.HTMLAnchorElement.prototype.click = () => {};
-  window.fetch = async (url) => {
-    if (String(url).includes("/api/health")) return new Response("{}", { status: 200 });
-    if (String(url).includes("/api/parse/")) return new Response(JSON.stringify(MODEL), { status: 200 });
-    // /api/format: resolved later by the test
-    return new Promise(resolve => pending.push(() => resolve(new Response(new Blob(["docx"]), {
-      status: 200, headers: { "Content-Disposition": "attachment; filename*=UTF-8''out.docx", "X-PKUNMUN-Validation": "" },
-    }))));
+const bundle = await build({entryPoints:["local_web/main.tsx"],bundle:true,write:false,format:"iife",platform:"browser",jsx:"automatic",define:{"process.env.NODE_ENV":'"production"',"process.env.NEXT_PUBLIC_API_URL":'""'}});
+const script = bundle.outputFiles[0].text;
+const html = await readFile(new URL("../local_web/index.html",import.meta.url),"utf8");
+const W="http://schemas.openxmlformats.org/wordprocessingml/2006/main", enc=new TextEncoder();
+const source=zipSync({"[Content_Types].xml":enc.encode('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'),"word/document.xml":enc.encode(`<w:document xmlns:w="${W}"><w:body>${["决议草案","委员会：联合国大会","议题：旧议题","起草国：中国","第一条 决定合作。"].map(t=>`<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`).join("")}<w:sectPr/></w:body></w:document>`) }).buffer;
+const settle=()=>new Promise(resolve=>setTimeout(resolve,50));
+async function waitFor(predicate, message) {
+  const deadline = Date.now() + 3000;
+  while (!predicate() && Date.now() < deadline) await settle();
+  assert.ok(predicate(), message);
+}
+const button=(window,text)=>text === "生成" ? window.document.querySelector("button.generate") : [...window.document.querySelectorAll("button")].find(el=>el.textContent.includes(text));
+function input(window,label) { return [...window.document.querySelectorAll(".reviewSection label")].find(el=>el.textContent.startsWith(label))?.querySelector("input"); }
+function change(window,element,value) {
+  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value").set.call(element,value);
+  element.dispatchEvent(new window.Event("input",{bubbles:true}));
+}
+async function page() {
+  const dom=new JSDOM(html,{runScripts:"outside-only",url:"http://127.0.0.1:8000/"});
+  const {window}=dom, downloads=[], requests=[];
+  window.TextEncoder=TextEncoder; window.TextDecoder=TextDecoder;
+  window.URL.createObjectURL=()=>{downloads.push(1);return "blob:example";}; window.URL.revokeObjectURL=()=>{};
+  window.HTMLElement.prototype.scrollIntoView=()=>{}; window.HTMLAnchorElement.prototype.click=()=>{};
+  window.fetch=async (...args)=>{ requests.push(args);throw new Error("No network required by the shared browser engine"); };
+  window.File.prototype.arrayBuffer=async()=>source.slice(0);
+  window.eval(script); await waitFor(()=>window.document.querySelector('input[type="file"]'),"shared UI mounted");
+  const choose=name=>{
+    const picker=window.document.querySelector('input[type="file"]');
+    Object.defineProperty(picker,"files",{configurable:true,value:[new window.File(["PK"],name)]});
+    picker.dispatchEvent(new window.Event("change",{bubbles:true}));
   };
-  // A strict script keeps its functions in its own scope; expose the three entry points.
-  window.eval(`${script}\n;window.acceptFile = acceptFile; window.parseDocument = parseDocument; window.formatAndDownload = formatAndDownload;`);
-  window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
-  return { window, downloads, pending };
-}
-const settle = () => new Promise(resolve => setTimeout(resolve, 20));
-
-for (const [label, change] of [
-  ["a recognized field", window => { const input = window.document.getElementById("modelTopic"); input.value = "新议题"; input.dispatchEvent(new window.Event("input")); }],
-  ["a generation option", window => { const box = window.document.getElementById("preserveOrder"); box.checked = !box.checked; box.dispatchEvent(new window.Event("change")); }],
-]) {
-  test(`changing ${label} while generating discards the stale result`, async () => {
-    const { window, downloads, pending } = page();
-    window.acceptFile(new window.File(["PK"], "a.docx"));
-    await window.parseDocument();
-    const generating = window.formatAndDownload();
-    await settle();
-    change(window);
-    pending.shift()();
-    await generating;
-    await settle();
-    assert.equal(downloads.length, 0, "the stale file was downloaded");
-    assert.ok(window.document.getElementById("validationSection").classList.contains("hidden"));
-    assert.equal(window.document.getElementById("generateButton").disabled, false);
-  });
+  choose("a.docx"); await waitFor(()=>!button(window,"识别文件结构")?.disabled,"file accepted");
+  button(window,"识别文件结构").click(); await waitFor(()=>input(window,"议题"),"recognized fields rendered");
+  assert.ok(input(window,"议题"),"step 03 remains editable");
+  return {window,downloads,requests,choose};
 }
 
-test("choosing a new file while generating resets the generate button", async () => {
-  const { window, pending } = page();
-  window.acceptFile(new window.File(["PK"], "a.docx"));
-  await window.parseDocument();
-  const generating = window.formatAndDownload();
-  await settle();
-  window.acceptFile(new window.File(["PK"], "b.docx"));
-  pending.shift()();
-  await generating;
-  assert.doesNotMatch(window.document.getElementById("generateButton").innerHTML, /正在生成/);
+for(const [label,edit] of [
+  ["recognized field",window=>change(window,input(window,"议题"),"新议题")],
+  ["generation option",window=>window.document.querySelector('input[type="checkbox"]').click()],
+]) test(`changing a ${label} during generation discards the stale result`,async()=>{
+  const {window,downloads}=await page();let release;
+  window.File.prototype.arrayBuffer=()=>new Promise(resolve=>{release=resolve;});
+  button(window,"生成").click();await settle();edit(window);await settle();
+  release(source.slice(0));await settle();
+  assert.equal(downloads.length,0);assert.equal(button(window,"生成").disabled,false);
+  window.close();
 });
 
-test("changing options after success clears obsolete validation and preview results", async () => {
-  const { window, pending } = page();
-  const events = [];
-  window.addEventListener("munword:model", event => events.push(event.detail));
-  window.acceptFile(new window.File(["PK"], "a.docx"));
-  await window.parseDocument();
-  const generating = window.formatAndDownload();
-  await settle(); pending.shift()(); await generating;
-  assert.ok(events.at(-1).output);
-  const input = window.document.getElementById("sessionLabel");
-  input.value = "第二会期"; input.dispatchEvent(new window.Event("input"));
-  assert.equal(events.at(-1).output, undefined);
-  assert.ok(window.document.getElementById("validationSection").classList.contains("hidden"));
-  assert.ok(window.document.getElementById("successBox").classList.contains("hidden"));
+test("choosing another file during generation resets the generate button",async()=>{
+  const {window,downloads,choose}=await page();let release;
+  window.File.prototype.arrayBuffer=()=>new Promise(resolve=>{release=resolve;});
+  button(window,"生成").click();await settle();choose("b.docx");await settle();release(source.slice(0));await settle();
+  assert.equal(downloads.length,0);assert.ok(button(window,"识别文件结构"));window.close();
+});
+
+test("desktop uses the same browser engine, expands names without requests, and invalidates old results",async()=>{
+  const {window,downloads,requests}=await page();
+  button(window,"生成").click();
+  await waitFor(()=>window.document.body.textContent.includes("UN-M49-156"),"conversion results rendered");
+  assert.equal(downloads.length,1);assert.equal(requests.length,0);
+  assert.ok(window.document.body.textContent.includes("UN-M49-156"),window.document.querySelector(".validationSection")?.textContent);
+  window.document.querySelector('input[type="checkbox"]').click();await settle();
+  assert.ok(!window.document.body.textContent.includes("DOCX 包结构"),"old validation results must clear");
+  window.close();
 });

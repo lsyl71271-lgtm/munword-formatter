@@ -35,6 +35,7 @@ from io import BytesIO
 
 from lxml import etree
 from docx.oxml.ns import qn
+from .countries import plan_countries, split_country_names, valid_country_field_change
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _W = f"{{{W_NS}}}"
@@ -45,7 +46,6 @@ _DELETED_TEXT = _W + "delText"
 _IGNORED_ATTRIBUTES = re.compile(r"(?:}|^)(?:rsid\w*|paraId|textId)$")
 _ENDING_CHARS = frozenset("，,；;。.:：、 \t")
 _LEADING_MARKER_RE = re.compile(r"^(\s*)(\d+)\s*[.、．)）]\s*\t?")
-_COUNTRY_SPLIT_RE = re.compile(r"[,，、;；/|\n]+")
 
 
 def _attributes(node) -> tuple:
@@ -226,6 +226,7 @@ class Edit:
     key: str = ""
     expected: str | None = None
     created: bool = False
+    country: dict | None = None
 
 
 def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles: tuple, labels: tuple) -> list:
@@ -241,7 +242,7 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
     country_groups: dict = {}
 
     def group_of(edit):
-        return country_groups.setdefault(edit.key, {"before": [], "after": [], "expected": edit.expected})
+        return country_groups.setdefault(edit.key, {"before": [], "after": [], "expected": edit.expected, "country": edit.country})
 
     for el in before.order:
         edit = edit_log.get(el)
@@ -291,6 +292,16 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
             if not _is_plain(signature(el)):
                 problems.append(f"{key} 名单段落含有文字以外的内容")
         new_text = "".join(element_text(el) for el in after_group)
+        country = group["country"]
+        if country and not country["manual"]:
+            originals = _country_name_list([before.texts[el] for el in group["before"]])
+            permitted = plan_countries(originals, country["language"], country["preserveOrder"])["values"]
+            if _country_name_list([new_text]) != permitted:
+                problems.append(f"{key} 名单包含无法由原字段和共用国家表证明的名称变更、删除或排序")
+            if any(not _is_plain(before.signatures[el]) for el in group["before"]):
+                problems.append(f"{key} 原名单含复杂结构，不能授权名称替换")
+        elif not country and _country_names([before.texts[el] for el in group["before"]]) != _country_names([new_text]):
+            problems.append(f"{key} 名单名称变化缺少国家表证明或第 03 步人工授权")
         if group["expected"] is not None:
             # A rewritten list must read exactly as authorized: the label and
             # the recognized (or step-03 confirmed) names, nothing else.
@@ -320,6 +331,8 @@ def _check_edit(edit: Edit, old, new, old_text, new_text, allowed_titles, labels
         return "" if _normalize_marker(old) == _normalize_marker(new) else "编号以外的内容发生变化"
     if kind == "countries":
         return ""  # checked per list in ``verify_format``
+    if kind == "country-name":
+        return "" if _is_plain(old) and _is_plain(new) and edit.country and not edit.country["manual"] and valid_country_field_change(old_text, new_text, edit.country["language"]) else "国家全称变更不能由共用名称表从原字段证明"
     if _structure_only(old) != _structure_only(new):
         return "图片、域、链接或修订等内容结构发生变化"
     if kind == "title":
@@ -396,10 +409,14 @@ def _squash(text: str) -> str:
 
 
 def _country_names(texts: list) -> Counter:
-    names: Counter = Counter()
+    return Counter(_country_name_list(texts))
+
+
+def _country_name_list(texts: list) -> list:
+    names = []
     for index, text in enumerate(texts):
         value = re.sub(r"^\s*[^:：]{1,20}[:：]\s*", "", text) if index == 0 or re.match(r"^\s*[^:：]{1,20}[:：]", text) else text
-        names.update(re.sub(r"\s+", " ", part).strip() for part in _COUNTRY_SPLIT_RE.split(value) if part.strip())
+        names.extend(split_country_names(value))
     return names
 
 

@@ -10,6 +10,14 @@ PYTHON_BIN="$INSTALL_ROOT/venv/bin/python"
 REQUIREMENTS_STAMP="$INSTALL_ROOT/.requirements.sha256"
 CURRENT_REQUIREMENTS_SHA="$(shasum -a 256 "$PROJECT_DIR/backend/requirements.txt" | awk '{print $1}')"
 
+# Fail before changing an installation, never fall back to the retired UI.
+for asset in public/local-app.js public/local-styles.css; do
+  if [[ ! -s "$PROJECT_DIR/$asset" ]]; then
+    echo "缺少共用离线界面：$asset。请使用本机发布包，或先运行 pnpm build:local-tools。" >&2
+    exit 1
+  fi
+done
+
 mkdir -p "$HOME/Library/LaunchAgents" "$INSTALL_ROOT"
 if [[ ! -x "$PYTHON_BIN" ]]; then
   /usr/bin/python3 -m venv "$INSTALL_ROOT/venv"

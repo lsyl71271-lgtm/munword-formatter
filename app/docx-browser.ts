@@ -4,7 +4,7 @@ import { documentTokens, marksKept, paragraphMarks, rewriteKeepsStructure, seman
 import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
-import pinyinData from "../shared/country-pinyin.json" with { type: "json" };
+import { COUNTRY_DATA_DATE, countryWarnings, planCountries, resolveCountry, splitCountryNames } from "./countries.ts";
 
 export type BrowserDocumentType =
   | "position-paper"
@@ -254,7 +254,7 @@ function flowParagraphs(document: Document): Element[] {
 }
 
 function splitCountries(value: string) {
-  return value.split(/[、,，;；/]/).map((item) => item.trim()).filter(Boolean);
+  return splitCountryNames(value);
 }
 
 function looksLikeCountryContinuation(text: string) {
@@ -970,7 +970,7 @@ type Ctx = {
   document: Document; parts: Record<string, Uint8Array>; model: BrowserModel; recognized: BrowserModel; original: BrowserModel;
   type: BrowserDocumentType; language: "zh" | "en"; spec: Spec; eastAsia: string;
   normalizePunctuation: boolean; preserveCountryOrder: boolean; changed: Set<string>;
-  editLog: Map<Element, Edit>; source: Element[]; warnings: string[]; protectedNotes: string[];
+  editLog: Map<Element, Edit>; source: Element[]; warnings: string[]; protectedNotes: string[]; countryChanges: string[];
   /** Flow-paragraph index of the first body paragraph (see headerEnd). */
   headerEnd: number;
 };
@@ -980,7 +980,9 @@ const sourceNumber = (ctx: Ctx, p: Element) => ctx.source.indexOf(p) + 1;
 
 function logEdit(ctx: Ctx, p: Element, kind: string, key = "", expected: string | null = null, created = false) {
   const previous = ctx.editLog.get(p);
-  ctx.editLog.set(p, { kind, key, expected, created: created || Boolean(previous?.created) });
+  if (kind === "label-restore" && previous?.kind === "country-name") kind = "country-name";
+  ctx.editLog.set(p, { kind, key, expected, created: created || Boolean(previous?.created),
+    country: kind === "countries" || kind === "country-name" ? { language: ctx.language, preserveOrder: ctx.preserveCountryOrder, manual: ctx.changed.has(key as MetadataKey) } : undefined });
 }
 
 function protect(ctx: Ctx, p: Element, reason: string) {
@@ -1073,45 +1075,42 @@ function labelValueText(key: MetadataKey, value: string, language: "zh" | "en") 
   return language === "en" ? `${label}: ${value}` : `${label}：${value}`;
 }
 
-const PHRASES = new Map(Object.entries(pinyinData.phrases as Record<string, string>).map(([phrase, reading]) => [phrase, reading.split(" ")]));
-const LONGEST_PHRASE = Math.max(...[...PHRASES.keys()].map(phrase => phrase.length));
-
-/** Same key as countries.country_sort_key (shared/country-pinyin.json). */
-function countryKey(value: string, language: "zh" | "en"): string[] {
-  if (language !== "zh") return [value.toLowerCase()];
-  const chars = [...value], syllables: string[] = [];
-  let index = 0;
-  while (index < chars.length) {
-    let matched = false;
-    for (let size = Math.min(LONGEST_PHRASE, chars.length - index); size > 0; size--) {
-      const reading = PHRASES.get(chars.slice(index, index + size).join(""));
-      if (reading) { syllables.push(...reading); index += size; matched = true; break; }
-    }
-    if (!matched) { syllables.push((pinyinData.chars as Record<string, string>)[chars[index]] ?? chars[index].toLowerCase()); index++; }
-  }
-  return syllables;
-}
-
-function compareKeys(a: string[], b: string[]) {
-  for (let index = 0; index < Math.min(a.length, b.length); index++) if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
-  return a.length - b.length;
-}
-
 function countryOrder(ctx: Ctx, values: string[]) {
-  if (ctx.preserveCountryOrder) return [...values];
-  return [...values].sort((a, b) => compareKeys(countryKey(a, ctx.language), countryKey(b, ctx.language)));
+  return planCountries(values, ctx.language, ctx.preserveCountryOrder).values;
+}
+
+function recordCountryNames(ctx: Ctx, p: Element, key: string, values: string[]) {
+  const plan = planCountries(values, ctx.language, true);
+  for (const item of plan.resolutions.filter(item => item.changed)) ctx.countryChanges.push(`第 ${sourceNumber(ctx, p)} 段 ${key}：国家名称“${item.input}” → “${item.display}”（${item.id}；UNTERM 核对 ${COUNTRY_DATA_DATE}）。`);
+  if (plan.removedDuplicates) ctx.countryChanges.push(`第 ${sourceNumber(ctx, p)} 段 ${key}：按国家标识去重 ${plan.removedDuplicates} 项（不合并未知或歧义名称）。`);
+}
+
+function scalarCountry(ctx: Ctx, p: Element, labeled: boolean) {
+  const resolution = resolveCountry(ctx.model.country, ctx.language);
+  if (!resolution.changed && !ctx.changed.has("country")) return;
+  if (hasComplexContent(p) || carriesSemanticMarks(p) || signature(p).some(token => token[0] !== "t")) {
+    if (ctx.changed.has("country")) throw new ProtectedContentError(sourceNumber(ctx, p), "第 03 步修改的国家字段含复杂结构，不能安全改写");
+    protect(ctx, p, "国家字段含链接、域、修订、书签或隐藏/删除线文字，未自动展开全称"); return;
+  }
+  const target = labeled ? labelValueText("country", resolution.display, ctx.language) : resolution.display;
+  if (setText(ctx, p, target)) {
+    logEdit(ctx, p, ctx.changed.has("country") ? "field" : "country-name", "country", target);
+    recordCountryNames(ctx, p, "country", [ctx.model.country]);
+  }
 }
 
 function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
   const texts = paragraphs.map(p => paragraphText(p).trim());
+  const repeated = new Set(["country", "sponsors", "signatories"].filter(key => texts.slice(0, ctx.headerEnd).filter(text => labeledField(text)?.key === key).length > 1));
   // Step-03 values for header lines printed without a label.
   for (const key of ["committee", "topic", "country", "delegate"] as const) {
-    if (!ctx.changed.has(key) || !ctx.original[key]) continue;
+    if ((key !== "country" && !ctx.changed.has(key)) || !ctx.original[key]) continue;
     // Only an unlabeled header line: a labeled one is rewritten below, and a
     // body paragraph that happens to repeat the old value is the author's text.
     if (texts.some((text, i) => i < ctx.headerEnd && labeledField(text)?.key === key)) continue;
     const index = texts.findIndex((text, i) => i < ctx.headerEnd && !labeledField(text) && text === ctx.original[key]);
     if (index < 0) continue;
+    if (key === "country") { scalarCountry(ctx, paragraphs[index], false); continue; }
     if (hasComplexContent(paragraphs[index])) throw new ProtectedContentError(index + 1, `第 03 步修改了${POLICY.metadata[key].output[ctx.language]}，但该段含图片、域或修订痕迹，不能安全改写`);
     if (setText(ctx, paragraphs[index], ctx.model[key])) logEdit(ctx, paragraphs[index], "field", key, ctx.model[key]);
   }
@@ -1121,6 +1120,10 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
     const labeled = labeledField(texts[index]);
     if (!labeled) continue;
     const p = paragraphs[index];
+    if (repeated.has(labeled.key)) {
+      if (ctx.changed.has(labeled.key)) throw new ProtectedContentError(index + 1, "页首存在多个同名国家字段，不能确定第 03 步修改的目标，请先在原稿中确认");
+      protect(ctx, p, "页首存在多个同名国家字段，未自动展开或合并，请人工确认"); continue;
+    }
     if (labeled.key === "sponsors" || labeled.key === "signatories") {
       const continuations: Element[] = [];
       for (let next = index + 1; next < paragraphs.length; next++) {
@@ -1129,6 +1132,8 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
         continuations.push(paragraphs[next]);
       }
       formatCountryField(ctx, p, continuations, labeled.key);
+    } else if (labeled.key === "country") {
+      scalarCountry(ctx, p, true);
     } else if (ctx.changed.has(labeled.key)) {
       if (hasComplexContent(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含图片或域，不能安全改写");
       if (carriesSemanticMarks(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含隐藏或删除线文字，改写会改变其显示或删除含义");
@@ -1149,8 +1154,8 @@ function restoreMissingLabels(ctx: Ctx, paragraphs: Element[], texts: string[]) 
   ((profile.unlabeledHeaderFields || []) as MetadataKey[]).forEach((key, position) => {
     const item = candidates[position];
     if (!item || key === "sponsors" || key === "signatories") return;
-    const value = ctx.recognized[key] as string;
-    if (!value || item.text.replace(/^\s*[:：]\s*/, "").trim() !== value) return;
+    const value = key === "country" ? resolveCountry(ctx.model.country, ctx.language).display : ctx.recognized[key] as string;
+    if (!value || paragraphText(paragraphs[item.index]).replace(/^\s*[:：]\s*/, "").trim() !== value) return;
     const target = labelValueText(key, value, ctx.language);
     rewriteLogged(ctx, paragraphs[item.index], target, "label-restore", key);
   });
@@ -1164,18 +1169,19 @@ function countryLineText(key: "sponsors" | "signatories", values: string[], lang
 function formatCountryField(ctx: Ctx, p: Element, continuations: Element[], key: "sponsors" | "signatories") {
   const source = ctx.changed.has(key) ? ctx.model[key] : ctx.recognized[key];
   const values = countryOrder(ctx, source);
-  const reordered = values.some((value, index) => value !== source[index]);
+  const reordered = values.length !== source.length || values.some((value, index) => value !== source[index]);
   const expected = countryLineText(key, values, ctx.language);
   const differs = values.length > 0 && (ctx.normalizePunctuation || reordered) && (
     reordered || continuations.some(c => paragraphText(c).trim()) || paragraphText(p).trim() !== expected.trim());
   if (ctx.changed.has(key) || differs) {
-    const complexPart = [p, ...continuations].find(part => hasComplexContent(part) || carriesSemanticMarks(part));
+    const complexPart = [p, ...continuations].find(part => hasComplexContent(part) || carriesSemanticMarks(part) || signature(part).some(token => token[0] !== "t"));
     if (!complexPart) {
       clearParagraph(p);
       appendRun(p, expected);
       logEdit(ctx, p, "countries", key, expected);
       for (const c of continuations) { clearParagraph(c); logEdit(ctx, c, "countries", key, expected); }
       styleCountryLine(ctx, p, true);
+      recordCountryNames(ctx, p, key, source);
       return;
     }
     if (ctx.changed.has(key)) throw new ProtectedContentError(sourceNumber(ctx, complexPart), "第 03 步修改了国家名单，但名单含图片、域、修订痕迹或隐藏/删除线文字，不能安全改写");
@@ -1816,6 +1822,7 @@ const EDIT_NOTES: Record<string, string> = {
   title: "按学标统一标题用词", "label-drop": "按范例删除委员会/议题标签", "label-restore": "补齐页首标签",
   countries: "国家名单按顺序排列并按国名断行留签字空行", ending: "按学标统一条款末尾标点", marker: "统一立场文件建议编号写法",
   blank: "按范例调整空行", "empty-line": "按范例调整空行",
+  "country-name": "按共用 UNTERM 名称表展开明确国家字段的全称",
 };
 
 /** User-facing record of every logged edit (same wording as the Python engine). */
@@ -1872,7 +1879,7 @@ function formatInner(
     document, parts, model, recognized, original, type: model.document_type, language: model.language,
     spec: specFor(model.document_type, model.language), eastAsia: eastAsianFont(model.document_type, model.language),
     normalizePunctuation: options.normalizePunctuation ?? true, preserveCountryOrder: options.preserveCountryOrder ?? false,
-    changed, editLog: new Map(), source: flowParagraphs(document), warnings: [...recognized.warnings], protectedNotes: [],
+    changed, editLog: new Map(), source: flowParagraphs(document), warnings: [...recognized.warnings], protectedNotes: [], countryChanges: [],
     headerEnd: headerLimit(flowParagraphs(document), model.document_type, recognized.language),
   };
   const snapshot = takeSnapshot(document);
@@ -1914,6 +1921,8 @@ function formatInner(
     { code: "browser_private", label: "本地处理", status: "pass", detail: "文件在当前浏览器中处理，未发送到外部排版服务。" },
   ];
   const edits = editSummary(ctx.editLog, repaired, split);
+  for (const detail of [...new Set(ctx.countryChanges)]) validations.push({ code: "country_names", label: "国家全称展开与身份去重记录", status: "pass", detail });
+  for (const detail of countryWarnings([model.country, ...model.sponsors, ...model.signatories], ctx.language)) validations.push({ code: "country-review", label: "国家或实体名称待人工确认", status: "warning", detail });
   validations.splice(1, 0, { code: "structural_edits", label: "结构与人工修改记录", status: edits.length ? "warning" : "pass", detail: edits.join("；") || "未改写正文文字。" });
   if (repairProblems.length) validations.push({ code: "repair-content", label: "结构修复严格内容校验", status: "error", detail: repairProblems.slice(0, 6).join("；") });
   for (const note of keptHidden) validations.push({ code: "hidden-text", label: "隐藏文字与删除线按原稿保留", status: "warning", detail: note });

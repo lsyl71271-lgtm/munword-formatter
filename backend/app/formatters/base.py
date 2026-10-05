@@ -28,7 +28,7 @@ from docx.text.paragraph import Paragraph
 
 from .. import content_guard
 from ..errors import ProtectedContentError
-from ..countries import country_sort_key, informal_country_warnings
+from ..countries import COUNTRY_DATA_DATE, country_warnings, plan_countries, resolve_country
 from ..docx_view import (
     all_paragraphs,
     body_paragraphs,
@@ -171,6 +171,8 @@ class BaseFormatter(HandbookPassMixin):
         self._changed_fields: set[str] = set()
         self._normalize_punctuation_requested = False
         self._protected_warnings: list[str] = []
+        self._country_changes: list[str] = []
+        self._language = "zh"
         self._source_paragraphs: list[Paragraph] = []
         self._east_asia = handbook.FONTS["zh"]
         self._preserve_country_order = False
@@ -194,9 +196,11 @@ class BaseFormatter(HandbookPassMixin):
         self._changed_fields = changed_fields or set()
         self._normalize_punctuation_requested = normalize_punctuation
         self._preserve_country_order = preserve_country_order
+        self._language = model.language
         self._edit_log = {}
         self._east_asia = handbook.east_asian_font(self.document_type, model.language)
         self._protected_warnings = []
+        self._country_changes = []
         # The model's paragraph indices refer to this list.  The final pass
         # adds and removes empty paragraphs, so later lookups go through it.
         self._source_paragraphs = list(body_paragraphs(document))
@@ -480,7 +484,7 @@ class BaseFormatter(HandbookPassMixin):
         data = {
             "committee": model.committee,
             "topic": model.topic,
-            "country": model.country,
+            "country": resolve_country(model.country, model.language)["display"],
             "delegate": model.delegate,
             "sponsors": self._country_order(model.sponsors, model.language),
             "signatories": self._country_order(model.signatories, model.language),
@@ -496,12 +500,20 @@ class BaseFormatter(HandbookPassMixin):
         recognized = set(model.header_paragraph_indices.values()) | {
             indices[0] for indices in model.metadata_paragraph_indices.values() if indices
         }
+        header_end = max(recognized, default=-1) + 1
+        repeated = {key for key in ("country", "sponsors", "signatories")
+                    if sum(label_value(visible_text(item).strip())[0] == key for item in paragraphs[:header_end]) > 1}
         for index, paragraph in enumerate(paragraphs):
             if index not in recognized:
                 continue
             text = visible_text(paragraph).strip()
             key = next((key for key, pattern in LABEL_PATTERNS.items() if pattern.match(text)), None)
             if key is None:
+                continue
+            if key in repeated:
+                if key in self._changed_fields:
+                    raise ProtectedContentError(index + 1, "页首存在多个同名国家字段，不能确定第 03 步修改的目标，请先在原稿中确认")
+                self._protect(paragraph, "页首存在多个同名国家字段，未自动展开或合并，请人工确认")
                 continue
             if key in ("sponsors", "signatories"):
                 continuations = [
@@ -510,6 +522,10 @@ class BaseFormatter(HandbookPassMixin):
                     if position < len(paragraphs)
                 ]
                 self._format_country_field(paragraph, continuations, key, data[key], model.language, getattr(model, key))
+            elif key == "country" and (data[key] != model.country or key in self._changed_fields):
+                if self._write_label_value(paragraph, key, str(data[key]), model.language):
+                    self._log_edit(paragraph, "field" if key in self._changed_fields else "country-name", key, expected=self._label_value_text(key, str(data[key]), model.language))
+                    self._record_country_names(paragraph, key, [model.country], model.language)
             elif key in self._changed_fields:
                 if self._write_label_value(paragraph, key, str(data[key]), model.language):
                     self._log_edit(paragraph, "field", key, expected=self._label_value_text(key, str(data[key]), model.language))
@@ -520,16 +536,22 @@ class BaseFormatter(HandbookPassMixin):
 
         for key in ("committee", "topic", "country", "delegate"):
             index = model.header_paragraph_indices.get(key)
-            if key not in self._changed_fields or index is None or index >= len(paragraphs):
+            automatic = key == "country" and data[key] != model.country
+            if (key not in self._changed_fields and not automatic) or index is None or index >= len(paragraphs):
                 continue
             paragraph = paragraphs[index]
             if label_value(visible_text(paragraph).strip())[0]:
                 continue  # labeled lines are rewritten with their label below
             value = str(data[key])
-            if has_complex_content(paragraph):
-                raise ProtectedContentError(index + 1, f"第 03 步修改了{META_LABELS[model.language][key]}，但该段含图片、域或修订痕迹，不能安全改写")
+            if has_complex_content(paragraph) or carries_semantic_marks(paragraph) or any(token[0] != "t" for token in content_guard.signature(paragraph._p)):
+                if key in self._changed_fields:
+                    raise ProtectedContentError(index + 1, f"第 03 步修改了{META_LABELS[model.language][key]}，但该段含图片、域或修订痕迹，不能安全改写")
+                self._protect(paragraph, "国家字段含链接、域、修订、书签或隐藏/删除线文字，未自动展开全称")
+                continue
             if self._set_text(paragraph, value, model.language):
-                self._log_edit(paragraph, "field", key, expected=value)
+                self._log_edit(paragraph, "field" if key in self._changed_fields else "country-name", key, expected=value)
+                if key == "country":
+                    self._record_country_names(paragraph, key, [model.country], model.language)
 
     def _restore_missing_header_labels(self, paragraphs: list[Paragraph], model: IntermediateDocument, data: dict) -> None:
         # Header repair is schema-driven: if a recognized document type uses
@@ -565,7 +587,7 @@ class BaseFormatter(HandbookPassMixin):
             # must be plain text.  Rewriting the first line while a complex
             # continuation stayed would duplicate names; clearing plain
             # continuations after a refused rewrite would delete them.
-            complex_part = next((item for item in [paragraph, *continuations] if has_complex_content(item) or carries_semantic_marks(item)), None)
+            complex_part = next((item for item in [paragraph, *continuations] if has_complex_content(item) or carries_semantic_marks(item) or any(token[0] != "t" for token in content_guard.signature(item._p))), None)
             if complex_part is None:
                 self._write_country_line(paragraph, key, list(values), language)
                 expected = self._country_line_text(key, list(values), language)
@@ -573,6 +595,7 @@ class BaseFormatter(HandbookPassMixin):
                 for continuation in continuations:
                     continuation.clear()
                     self._log_edit(continuation, "countries", key, expected=expected)
+                self._record_country_names(paragraph, key, source_values or [], language)
                 return
             if key in self._changed_fields:
                 raise ProtectedContentError(
@@ -586,10 +609,15 @@ class BaseFormatter(HandbookPassMixin):
     def _country_order(self, values: list[str], language: str) -> list[str]:
         """Pinyin / alphabetical order (页41, 页53) unless the user keeps the source order."""
 
-        # Every entry is kept: the order changes, the names never do.
-        if self._preserve_country_order:
-            return list(values)
-        return sorted(values, key=lambda value: country_sort_key(value, language))
+        return plan_countries(values, language, self._preserve_country_order)["values"]
+
+    def _record_country_names(self, paragraph, key, values, language):
+        plan = plan_countries(values, language, True)
+        for item in plan["resolutions"]:
+            if item["changed"]:
+                self._country_changes.append(f"第 {self._source_number(paragraph)} 段 {key}：国家名称“{item['input']}” → “{item['display']}”（{item['id']}；UNTERM 核对 {COUNTRY_DATA_DATE}）。")
+        if plan["removedDuplicates"]:
+            self._country_changes.append(f"第 {self._source_number(paragraph)} 段 {key}：按国家标识去重 {plan['removedDuplicates']} 项（不合并未知或歧义名称）。")
 
     def _country_line_differs(
         self, paragraph, continuations, key: str, values: list[str], language: str, reordered: bool = False
@@ -653,7 +681,7 @@ class BaseFormatter(HandbookPassMixin):
         self._format_run(label_run, language, bold=True)
 
     def _write_label_value(self, paragraph: Paragraph, key: str, value: str, language: str) -> bool:
-        if has_complex_content(paragraph):
+        if has_complex_content(paragraph) or any(token[0] != "t" for token in content_guard.signature(paragraph._p)):
             self._protect(paragraph, "元数据段含图片或域，未重写标签")
             return False
         if carries_semantic_marks(paragraph):
@@ -720,8 +748,11 @@ class BaseFormatter(HandbookPassMixin):
 
     def _log_edit_element(self, element, kind: str, key: str = "", *, expected: str | None = None, new: bool = False) -> None:
         previous = self._edit_log.get(element)
+        if kind == "label-restore" and previous and previous.kind == "country-name":
+            kind = "country-name"
         # A paragraph created by the pass stays "created" whatever is done to it later.
-        self._edit_log[element] = content_guard.Edit(kind, key, expected, new or bool(previous and previous.created))
+        country = {"language": self._language, "preserveOrder": self._preserve_country_order, "manual": key in self._changed_fields} if kind in ("countries", "country-name") else None
+        self._edit_log[element] = content_guard.Edit(kind, key, expected, new or bool(previous and previous.created), country)
 
     def _rewrite_logged(self, paragraph: Paragraph, text: str, language: str, kind: str, key: str = "") -> bool:
         """``_set_text`` for an allowed edit, recorded for the strict content check.
@@ -817,6 +848,8 @@ class BaseFormatter(HandbookPassMixin):
         items.insert(1, ValidationItem("structural_edits", "结构与人工修改记录", "warning" if edits else "pass", "；".join(edits) or "未改写正文文字。"))
         for warning in self._protected_warnings:
             items.append(ValidationItem("content-protected", "为保护原有内容，部分段落未自动改写", "warning", warning))
+        for detail in dict.fromkeys(self._country_changes):
+            items.append(ValidationItem("country_names", "国家全称展开与身份去重记录", "pass", detail))
         for note in getattr(self, "_kept_hidden", []):
             items.append(ValidationItem("hidden-text", "隐藏文字与删除线按原稿保留", "warning", note))
         if model.sponsors:
@@ -825,7 +858,7 @@ class BaseFormatter(HandbookPassMixin):
         if model.signatories:
             ok = self._metadata_value_emphasis_ok(document, "signatories")
             items.append(ValidationItem("signatories", "附议国顺序保留、值为粗斜体", "pass" if ok else "error"))
-        for warning in informal_country_warnings(model.sponsors + model.signatories):
+        for warning in country_warnings([model.country, *model.sponsors, *model.signatories], model.language):
             items.append(ValidationItem("country-formal-name", "国家正式名称待确认", "warning", warning))
         for warning in model.warnings:
             items.append(ValidationItem("parser", "结构识别待确认", "warning", warning))
@@ -887,6 +920,7 @@ _EDIT_NOTES = {
     "title": "按学标统一标题用词", "label-drop": "按范例删除委员会/议题标签", "label-restore": "补齐页首标签",
     "countries": "国家名单按顺序排列并按国名断行留签字空行", "ending": "按学标统一条款末尾标点", "marker": "统一立场文件建议编号写法",
     "blank": "按范例调整空行", "empty-line": "按范例调整空行",
+    "country-name": "按共用 UNTERM 名称表展开明确国家字段的全称",
 }
 
 

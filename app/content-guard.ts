@@ -13,16 +13,17 @@
  */
 import { unzipSync } from "fflate";
 import { decodeXml } from "./docx-safety.ts";
+import { planCountries, splitCountryNames, validCountryFieldChange } from "./countries.ts";
+import type { CountryLanguage } from "./countries.ts";
 
 export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const FORMATTING = new Set(["pPr", "rPr", "tblPr", "trPr", "tcPr", "tblGrid", "sectPr", "tblPrEx"]);
 const IGNORED_ATTRIBUTE = /^(?:rsid\w*|paraId|textId)$/;
 const ENDING_CHARS = new Set([..."，,；;。.:：、 \t"]);
 const LEADING_MARKER = /^(\s*)(\d+)\s*[.、．)）]\s*\t?/;
-const COUNTRY_SPLIT = /[,，、;；/|\n]+/;
 
 export type Token = [string, string] | [string, string, string];
-export type Edit = { kind: string; key?: string; expected?: string | null; created?: boolean };
+export type Edit = { kind: string; key?: string; expected?: string | null; created?: boolean; country?: { language: CountryLanguage; preserveOrder: boolean; manual: boolean } };
 
 const clark = (node: Element) => `{${node.namespaceURI || ""}}${node.localName}`;
 
@@ -174,15 +175,15 @@ export function rewriteKeepsStructure(kind: string, oldSig: Token[], newSig: Tok
 
 const squash = (text: string) => text.replace(/\s+/g, "");
 
+function countryNameList(texts: string[]): string[] {
+  return texts.flatMap((text, index) => {
+    const value = index === 0 || /^\s*[^:：]{1,20}[:：]/.test(text) ? text.replace(/^\s*[^:：]{1,20}[:：]\s*/, "") : text;
+    return splitCountryNames(value);
+  });
+}
 function countryNames(texts: string[]): Map<string, number> {
   const names = new Map<string, number>();
-  texts.forEach((text, index) => {
-    const value = index === 0 || /^\s*[^:：]{1,20}[:：]/.test(text) ? text.replace(/^\s*[^:：]{1,20}[:：]\s*/, "") : text;
-    for (const part of value.split(COUNTRY_SPLIT)) {
-      const name = part.replace(/\s+/g, " ").trim();
-      if (name) names.set(name, (names.get(name) || 0) + 1);
-    }
-  });
+  for (const name of countryNameList(texts)) names.set(name, (names.get(name) || 0) + 1);
   return names;
 }
 
@@ -197,6 +198,8 @@ function checkEdit(edit: Edit, oldSig: Token[], newSig: Token[], oldText: string
   if (kind === "ending") return key(withoutEnding(oldSig)) === key(withoutEnding(newSig)) ? "" : "句末以外的内容发生变化";
   if (kind === "marker") return key(normalizeMarker(oldSig)) === key(normalizeMarker(newSig)) ? "" : "编号以外的内容发生变化";
   if (kind === "countries") return "";
+  if (kind === "country-name") return isPlain(oldSig) && isPlain(newSig) && edit.country && !edit.country.manual
+    && validCountryFieldChange(oldText, newText, edit.country.language) ? "" : "国家全称变更不能由共用名称表从原字段证明";
   if (key(structureOnly(oldSig)) !== key(structureOnly(newSig))) return "图片、域、链接或修订等内容结构发生变化";
   if (kind === "title") {
     const oldWord = longestPrefix(oldText.trim(), titles), newWord = longestPrefix(newText.trim(), titles);
@@ -221,10 +224,10 @@ export function verifyFormat(before: Snapshot, document: Document, editLog: Map<
   const number = new Map(before.order.map((el, index) => [el, index + 1]));
   const problems: string[] = [];
   if (wrappers(document) !== before.wrappers) problems.push("内容控件或自定义 XML 容器发生变化");
-  const groups = new Map<string, { before: Element[]; after: Element[]; expected: string | null | undefined }>();
+  const groups = new Map<string, { before: Element[]; after: Element[]; expected: string | null | undefined; country?: Edit["country"] }>();
   const groupOf = (edit: Edit) => {
     const name = edit.key || "";
-    if (!groups.has(name)) groups.set(name, { before: [], after: [], expected: edit.expected });
+    if (!groups.has(name)) groups.set(name, { before: [], after: [], expected: edit.expected, country: edit.country });
     return groups.get(name)!;
   };
   for (const el of before.order) {
@@ -258,6 +261,15 @@ export function verifyFormat(before: Snapshot, document: Document, editLog: Map<
       if (changed && !isPlain(signature(el))) problems.push(`${name} 名单段落含有文字以外的内容`);
     }
     const newText = after.map(elementText).join("");
+    if (group.country && !group.country.manual) {
+      const originals = countryNameList(group.before.map(el => before.texts.get(el)!));
+      const actual = countryNameList([newText]);
+      const permitted = planCountries(originals, group.country.language, group.country.preserveOrder).values;
+      if (JSON.stringify(actual) !== JSON.stringify(permitted)) problems.push(`${name} 名单包含无法由原字段和共用国家表证明的名称变更、删除或排序`);
+      if (group.before.some(el => !isPlain(before.signatures.get(el)!))) problems.push(`${name} 原名单含复杂结构，不能授权名称替换`);
+    } else if (!group.country && !sameCounts(countryNames(group.before.map(el => before.texts.get(el)!)), countryNames([newText]))) {
+      problems.push(`${name} 名单名称变化缺少国家表证明或第 03 步人工授权`);
+    }
     if (group.expected != null) {
       if (squash(newText) !== squash(group.expected)) problems.push(`${name} 名单文字与预期不符：${newText.slice(0, 40)}`);
     } else if (!sameCounts(countryNames(group.before.map(el => before.texts.get(el)!)), countryNames(after.map(elementText)))) {

@@ -3,100 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
   <title>PKUNMUN 2026 文件自动排版系统</title>
-  <meta name="description" content="本机运行的 PKUNMUN 2026 DOCX 文件自动排版工具">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
-  <style>
-    .engineState { display:flex; align-items:center; gap:8px; color:#627083; font-size:13px; }
-    .engineState strong { color:#0f6a4d; font-weight:600; }
-    .engineState.offline strong { color:#a0333f; }
-    .hidden { display:none !important; }
-    .successBox { margin-top:14px; padding:14px 16px; color:#0f6a4d; background:#eef8f3; border:1px solid #cde5d8; border-radius:14px; font-size:14px; }
-    @media (max-width: 820px) { .engineState { display:none; } }
-  </style>
 </head>
 <body>
-  <main>
-    <header class="siteHeader">
-      <a class="brand" href="#top" aria-label="回到首页">
-        <span class="seal">P</span>
-        <span><b>PKUNMUN <span class="brandYear">2026</span></b><small>DOCUMENT STUDIO</small></span>
-      </a>
-      <div class="headerMeta engineState" id="engineState"><span class="statusDot"></span><strong>正在连接本机引擎</strong></div>
-    </header>
-
-    <section class="hero" id="top">
-      <div class="heroCopy"><div class="eyebrow">ACADEMIC DOCUMENTS / 学术文件</div><h1>让表达，<em>井然有序。</em></h1><p>把内容交给你，把格式交给系统。选择文件类型，上传原稿，开启排版。</p></div>
-      <div class="principles"><span>本机单机版</span><span>保留原文内容</span><span>可编辑 DOCX</span><span>生成前后校验</span></div>
-    </section>
-
-    <section class="workspace" aria-label="排版工作区">
-      <div class="stepper" aria-label="处理进度">
-        <div class="step active" id="step1"><span>01</span>选择类型</div>
-        <div class="step" id="step2"><span>02</span>上传原稿</div>
-        <div class="step" id="step3"><span>03</span>确认识别</div>
-        <div class="step" id="step4"><span>04</span>生成下载</div>
-      </div>
-
-      <div class="intakeGrid">
-      <section class="typePanel" aria-label="选择文件类型">
-      <div class="sectionLabel"><span>01</span><div><h2>选择文件类型</h2><p>每种类型进入独立格式化 Pipeline，不会只替换标题。</p></div></div>
-      <div class="typeGrid" id="typeGrid"></div>
-      </section>
-
-      <section class="uploadPanel" aria-label="上传文件">
-      <div class="sectionLabel uploadLabel"><span>02</span><div><h2>上传原始 DOCX</h2><p>只调整格式与结构标记，不擅自增删正文。</p></div></div>
-      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="选择 DOCX 文件">
-        <input id="fileInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-        <div class="fileGlyph"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M9 4h10l6 6v17H9a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z"/><path d="M19 4v7h6M12 17h7M12 22h7"/></svg></div>
-        <h3 id="fileTitle">拖入文件，或点击选择</h3>
-        <p id="fileMeta">支持 .docx · 最大 20 MB</p>
-      </div>
-      <div class="errorBox hidden" id="errorBox" role="alert"></div>
-      <div class="successBox hidden" id="successBox" role="status"></div>
-      <div class="actionRow">
-        <span>当前入口：<b id="currentZh">决议草案</b> / <span id="currentEn">Draft Resolution</span></span>
-        <button class="primaryButton" id="parseButton" type="button" disabled>识别文件结构 <span>→</span></button>
-      </div>
-      </section>
-      </div>
-
-      <details class="studioTool"><summary>从规范模板新建文件</summary><p>独立于原稿修复，使用上方所选文种和现有学标规则。每段一行，条款编号请自行填写；不调用 AI。</p><div class="formGrid">
-        <label>语言<select id="new_language"><option value="zh">中文</option><option value="en">English</option></select></label>
-        <label>委员会<input id="new_committee"></label><label>议题<input id="new_topic"></label><label>国家 / 席位<input id="new_country"></label><label>代表<input id="new_delegate"></label><label>起草国<input id="new_sponsors"></label><label>附议国<input id="new_signatories"></label><label class="wide">正文<textarea id="new_body" rows="8"></textarea></label>
-      </div><button type="button" class="primaryButton" id="newDocumentGenerate">生成规范 DOCX</button><p id="newDocumentStatus" role="status"></p></details>
-      <section class="reviewSection hidden" id="reviewSection">
-        <div class="sectionLabel"><span>03</span><div><h2>确认识别结果</h2><p>无法可靠判断的字段只提示，由你确认后再生成。</p></div></div>
-        <div class="formGrid" id="formGrid"></div>
-        <div class="warningList hidden" id="warningList"></div>
-        <details class="studioTool"><summary>诊断报告与实际页面</summary><p id="diagnosticSummary"></p><button id="diagnosticDownload" type="button" class="secondaryButton">下载诊断报告</button> <button id="showActualPages" type="button" class="secondaryButton">查看实际 DOCX 页面</button><p>报告包含原稿文字，仅保存到本机；HTML 预览不能代替 Word / WPS 验收。</p><div id="actualPages" class="docxPreviewGrid"></div></details>
-
-        <div class="previewHeader"><div><span>原稿 / 成稿</span><h3>结构预览</h3></div><small>实际字体、编号和签名空间写入下载的 DOCX</small></div>
-        <div class="previewGrid"><article class="paper original" id="originalPreview"></article><article class="paper formatted" id="formattedPreview"></article></div>
-
-        <div class="generationPanel">
-          <div class="options">
-            <label>提交会期<input id="sessionLabel" placeholder="例如：第三会期 / S3"></label>
-            <label>提交国家<input id="submittingCountry" placeholder="用于文件名"></label>
-            <label>版本号<input id="version" value="v1"></label>
-            <label class="check"><input id="normalizePunctuation" type="checkbox" checked><span>按规则规范条款末尾标点</span></label>
-            <label class="check"><input id="preserveOrder" type="checkbox"><span>高级：保持国家原顺序</span></label>
-          </div>
-          <button class="primaryButton generate" id="generateButton" type="button">生成并下载 DOCX <span>↓</span></button>
-        </div>
-      </section>
-
-      <section class="validationSection hidden" id="validationSection">
-        <div class="sectionLabel"><span>04</span><div><h2 id="validationTitle">格式校验结果</h2><p>语义不确定项只给出提示，不自动改写。</p></div></div>
-        <div class="validationGrid" id="validationGrid"></div>
-      </section>
-    </section>
-
-    <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · 本机版 v1.7.2</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
-  </main>
+  <div id="root"><p>正在加载 Munword 共用界面…</p></div>
+  <noscript>请启用 JavaScript。本机单机版与网页版使用同一界面，文件在浏览器内处理。</noscript>
   <script src="/app.js" defer></script>
-  <script src="/studio-tools.js" defer></script>
 </body>
 </html>

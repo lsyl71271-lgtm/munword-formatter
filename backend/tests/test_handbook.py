@@ -146,8 +146,10 @@ class EnglishAmendmentTests(unittest.TestCase):
             "Amendment 1.1.1", "",
             "The European Commission", "",
             "European Energy Security under the Russia-Ukraine Crisis", "",
-            "Sponsors: Croatia, Cyprus, Italy, Malta, Slovenia", "",
-            "Signatories: France, Germany, Spain", "",
+            "Sponsors: Republic of Croatia, Republic of Cyprus, Republic of Italy,", "",
+            "Republic of Malta, Republic of Slovenia", "",
+            "Signatories: Federal Republic of Germany, French Republic,", "",
+            "Kingdom of Spain", "",
             "1. Add as the operative clause 3 (b): “Encourages Energy Cooperation”",
         ])
         operation = document.paragraphs[-1]
@@ -179,7 +181,7 @@ class EnglishPositionPaperTests(unittest.TestCase):
             "Position Paper",
             "Committee: General Assembly",
             "Topic: Soft Drugs",
-            "Country: Afghanistan",
+            "Country: Islamic Republic of Afghanistan",
             "Delegate: Li Ying",
             "",
             "Soft drug, defined as non-addictive, is discussed here.",

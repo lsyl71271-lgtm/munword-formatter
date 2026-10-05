@@ -89,6 +89,14 @@ try {
     Write-Host "$AppName · Windows 安装" -ForegroundColor Green
     Write-Host '将安装到当前用户目录，DOCX 只在本机处理，不会上传。首次安装需要联网下载运行组件（约 30 MB）。'
 
+    # Check before stopping or replacing a working installation.
+    foreach ($asset in @('local-app.js', 'local-styles.css')) {
+        $assetPath = Join-Path (Join-Path $SourceRoot 'public') $asset
+        if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf) -or (Get-Item -LiteralPath $assetPath).Length -eq 0) {
+            throw "发布包缺少共用离线界面：$asset。请使用完整本机发布包，或在源码目录运行 pnpm build:local-tools。"
+        }
+    }
+
     Write-Step '检查 Python'
     $found = Find-Python
     if (-not $found) {
