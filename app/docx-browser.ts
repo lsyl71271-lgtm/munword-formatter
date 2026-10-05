@@ -816,6 +816,19 @@ function runHas(run: Element, tag: string) {
 function carriesSemanticMarks(paragraph: Element) {
   return visibleRuns(paragraph).some(run => paragraphText(run).length > 0 && UNIFORM_DAMAGE.some(tag => runHas(run, tag)));
 }
+/** True when rewriting the paragraph to ``kept`` (its trailing visible part) would delete hidden or struck characters (ooxml_edit.removes_marked_text). */
+function removesMarkedText(paragraph: Element, kept: string): boolean {
+  const runs = visibleRuns(paragraph).map(run => [run, paragraphText(run)] as const);
+  const full = runs.map(([, text]) => text).join(""), start = full.lastIndexOf(kept);
+  if (start < 0) return carriesSemanticMarks(paragraph);
+  const end = start + kept.length;
+  let offset = 0;
+  return runs.some(([run, text]) => {
+    const first = offset, last = offset + text.length;
+    offset = last;
+    return (Math.min(last, start) > first || last > Math.max(first, end)) && UNIFORM_DAMAGE.some(tag => runHas(run, tag));
+  });
+}
 function stripUniformDamage(document: Document, parts: Record<string, Uint8Array>): string[] {
   const on = runHas;
   const every = elements(document, "p").flatMap(p => visibleRuns(p)), runs = every.filter(run => paragraphText(run).trim());
@@ -1442,7 +1455,11 @@ function headerText(ctx: Ctx, blocks: Block[]) {
         throw new ProtectedContentError(sourceNumber(ctx, block.p), "第 03 步修改了标题，但标题含链接、域或修订痕迹，不能安全改写");
     } else if ((block.role === "committee" || block.role === "topic") && ctx.spec.committeeTopicLabels === "drop") {
       const labeled = labeledField(text);
-      if (labeled && (labeled.key === "committee" || labeled.key === "topic") && labeled.value) rewriteLogged(ctx, block.p, labeled.value, "label-drop");
+      if (labeled && (labeled.key === "committee" || labeled.key === "topic") && labeled.value) {
+        // Dropping the label would delete hidden or struck words.
+        if (removesMarkedText(block.p, labeled.value)) protect(ctx, block.p, "委员会/议题标签含隐藏或删除线文字，未按范例删除标签");
+        else rewriteLogged(ctx, block.p, labeled.value, "label-drop");
+      }
     }
   }
 }

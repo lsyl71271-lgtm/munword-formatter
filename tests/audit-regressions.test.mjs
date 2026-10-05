@@ -400,3 +400,40 @@ test("a clause with hidden and struck characters outside the BMP formats with it
   assert.equal(marked(xml, "vanish"), NON_BMP_HIDDEN);
   assert.equal(marked(xml, "strike"), NON_BMP_STRUCK);
 });
+
+// ---------------------------------------------------------------- hidden / struck header labels and split whitespace
+
+const withCommittee = committee => ["决议草案", null, "议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，", "认识到网络安全的重要性，", "第一条 决定继续审议此问题。"]
+  .map(t => t === null ? committee : line(t)).join("");
+
+test("a committee label that is hidden or struck is kept with a warning, not deleted", async () => {
+  for (const [name, committee, hidden, struck] of [
+    ["whole line hidden", `<w:p>${run("委员会：安全理事会", "<w:vanish/>")}</w:p>`, "委员会：安全理事会", ""],
+    ["label hidden", `<w:p>${run("委员会：", "<w:vanish/>")}${run("安全理事会")}</w:p>`, "委员会：", ""],
+    ["label struck", `<w:p>${run("委员会：", "<w:strike/>")}${run("安全理事会")}</w:p>`, "", "委员会："],
+  ]) {
+    const result = format(archive(withCommittee(committee)), "draft-resolution");
+    assert.deepEqual(errors(result), [], name);
+    const xml = await documentOf(result);
+    assert.ok(paragraph(xml, "委员会："), name);
+    assert.equal(marked(xml, "vanish"), hidden, name);
+    assert.equal(marked(xml, "strike"), struck, name);
+    assert.ok(warningsOf(result).some(w => w.includes("第 2 段") && w.includes("隐藏或删除线")), name);
+  }
+  // Only the value hidden: the visible label still goes, the value stays hidden.
+  const result = format(archive(withCommittee(`<w:p>${run("委员会：")}${run("安全理事会", "<w:vanish/>")}</w:p>`)), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const xml = await documentOf(result);
+  assert.equal(paragraph(xml, "委员会："), undefined);
+  assert.equal(marked(xml, "vanish"), "安全理事会");
+});
+
+test("struck whitespace before a split marker is kept", async () => {
+  const clause = "<w:p>" + run("第一条 决定") + run("删去", "<w:strike/>") + run("设立工作组：") + run(" ", "<w:strike/>") + run("（子）收集证据") + run("（备注）", "<w:vanish/>") + run("；（丑）提交报告。") + "</w:p>";
+  const result = format(archive(ZH_DR + clause + line("第二条 决定继续审议此问题。")), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const xml = await documentOf(result);
+  assert.ok(paragraph(xml, "（子）收集证据") && paragraph(xml, "（丑）提交报告"));
+  assert.equal(marked(xml, "strike"), "删去 ");
+  assert.equal(marked(xml, "vanish"), "（备注）");
+});

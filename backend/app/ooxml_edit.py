@@ -139,6 +139,29 @@ def carries_semantic_marks(paragraph) -> bool:
     return any(run.text and any(run_has(run._r, tag) for tag in SEMANTIC_MARKS) for run in visible_runs(paragraph))
 
 
+def removes_marked_text(paragraph, kept: str) -> bool:
+    """True when rewriting the paragraph to ``kept`` would delete hidden or struck characters.
+
+    ``kept`` is the trailing part of the visible text that the rewrite keeps
+    (a header value without its label); everything around it goes.
+    """
+
+    runs = [(run, run.text) for run in visible_runs(paragraph)]
+    full = "".join(text for _, text in runs)
+    start = full.rfind(kept)
+    if start < 0:
+        return carries_semantic_marks(paragraph)
+    end = start + len(kept)
+    offset = 0
+    for run, text in runs:
+        first, last = offset, offset + len(text)
+        offset = last
+        removed = min(last, start) > first or last > max(first, end)
+        if removed and any(run_has(run._r, tag) for tag in SEMANTIC_MARKS):
+            return True
+    return False
+
+
 def flattening_is_lossless(paragraph) -> bool:
     """True when rebuilding this paragraph as a single run loses nothing.
 

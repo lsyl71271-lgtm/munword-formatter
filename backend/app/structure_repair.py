@@ -17,7 +17,7 @@ from .docx_view import (
     style_chain, style_index, visible_text,
 )
 from .fonts import rpr_child
-from .ooxml_edit import edit_visible_text, has_complex_content
+from .ooxml_edit import SEMANTIC_MARKS, edit_visible_text, has_complex_content, run_has
 from .parser import MANUAL_NUMBER_RE, detect_language
 from .semantic_policy import EMBEDDED_SUBCLAUSE, META_LABELS, label_value, starts_body
 
@@ -524,8 +524,8 @@ def _cut_at_resume(paragraph, keep: int, resume_at: int) -> int:
     """Cut at ``keep`` and at ``resume_at``, dropping plain whitespace between.
 
     Returns the child index where the text resumed at ``resume_at`` starts.
-    Only whitespace-only text runs are removed; anything else between the
-    cuts (a bookmark, a wrapper) stays in place.
+    Only whitespace-only text runs without hidden or struck marks are
+    removed; anything else between the cuts (a bookmark, a wrapper) stays.
     """
 
     p = paragraph._p
@@ -535,7 +535,9 @@ def _cut_at_resume(paragraph, keep: int, resume_at: int) -> int:
     children = list(p)
     resumed = children[resume] if resume < len(children) else None
     for child in children[middle:resume]:
-        if child.tag == qn("w:r") and all(item.tag in (qn("w:rPr"), qn("w:t")) for item in child) and not _run_plain_text(child).strip():
+        # Hidden or struck whitespace is the author's mark, not separator noise.
+        if (child.tag == qn("w:r") and all(item.tag in (qn("w:rPr"), qn("w:t")) for item in child)
+                and not _run_plain_text(child).strip() and not any(run_has(child, tag) for tag in SEMANTIC_MARKS)):
             p.remove(child)
     return p.index(resumed) if resumed is not None else len(p)
 

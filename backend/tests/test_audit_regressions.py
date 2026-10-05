@@ -494,5 +494,44 @@ class NonBmpMarkTests(unittest.TestCase):
         self.assertEqual(marked(root, "vanish"), NON_BMP_HIDDEN)
         self.assertEqual(marked(root, "strike"), NON_BMP_STRUCK)
 
+
+def with_committee(committee: str) -> bytes:
+    texts = ["决议草案", None, "议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，", "认识到网络安全的重要性，", "第一条 决定继续审议此问题。"]
+    return package("".join(committee if text is None else line(text) for text in texts))
+
+
+class MarkedLabelTests(unittest.TestCase):
+    def test_a_committee_label_that_is_hidden_or_struck_is_kept_with_a_warning_not_deleted(self):
+        for name, committee, hidden, struck in (
+            ("whole line hidden", f"<w:p>{run('委员会：安全理事会', '<w:vanish/>')}</w:p>", "委员会：安全理事会", ""),
+            ("label hidden", f"<w:p>{run('委员会：', '<w:vanish/>')}{run('安全理事会')}</w:p>", "委员会：", ""),
+            ("label struck", f"<w:p>{run('委员会：', '<w:strike/>')}{run('安全理事会')}</w:p>", "", "委员会："),
+        ):
+            with self.subTest(name=name):
+                result = format_("draft-resolution", with_committee(committee))
+                self.assertEqual(errors(result), [])
+                root = body(result.content)
+                self.assertTrue(any(text_of(p).startswith("委员会：") for p in root.iter(q("p"))))
+                self.assertEqual(marked(root, "vanish"), hidden)
+                self.assertEqual(marked(root, "strike"), struck)
+                self.assertTrue(any("第 2 段" in w and "隐藏或删除线" in w for w in warnings(result)), warnings(result))
+        # Only the value hidden: the visible label still goes, the value stays hidden.
+        result = format_("draft-resolution", with_committee(f"<w:p>{run('委员会：')}{run('安全理事会', '<w:vanish/>')}</w:p>"))
+        self.assertEqual(errors(result), [])
+        root = body(result.content)
+        self.assertFalse(any(text_of(p).startswith("委员会：") for p in root.iter(q("p"))))
+        self.assertEqual(marked(root, "vanish"), "安全理事会")
+
+    def test_struck_whitespace_before_a_split_marker_is_kept(self):
+        clause = ("<w:p>" + run("第一条 决定") + run("删去", "<w:strike/>") + run("设立工作组：") + run(" ", "<w:strike/>")
+                  + run("（子）收集证据") + run("（备注）", "<w:vanish/>") + run("；（丑）提交报告。") + "</w:p>")
+        result = format_("draft-resolution", package(lines(ZH_DR) + clause + line("第二条 决定继续审议此问题。")))
+        self.assertEqual(errors(result), [])
+        texts = shown_from(result.content, "第一条")
+        self.assertTrue(texts[1].startswith("（子）收集证据") and texts[2].startswith("（丑）提交报告"), texts)
+        root = body(result.content)
+        self.assertEqual(marked(root, "strike"), "删去 ")
+        self.assertEqual(marked(root, "vanish"), "（备注）")
+
 if __name__ == "__main__":
     unittest.main()

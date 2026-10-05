@@ -227,7 +227,15 @@ function splitAt(parent: Element, offset: number): Element | null {
   return null;
 }
 
-/** Cut at ``keep`` and at ``resumeAt``, dropping plain whitespace runs between; return where ``resumeAt`` starts. */
+const SEMANTIC_MARKS = ["vanish", "webHidden", "specVanish", "strike", "dstrike"];
+/** A switched-on hidden or strikethrough property directly on the run. */
+function carriesMark(run: Element): boolean {
+  const properties = Array.from(run.children).find(child => isWord(child, "rPr"));
+  return Boolean(properties) && Array.from(properties!.children).some(node => node.namespaceURI === W && SEMANTIC_MARKS.includes(node.localName)
+    && !["0", "false", "off"].includes(node.getAttributeNS(W, "val") || node.getAttribute("w:val") || ""));
+}
+
+/** Cut at ``keep`` and at ``resumeAt``, dropping plain unmarked whitespace runs between; return where ``resumeAt`` starts. */
 function cutAtResume(paragraph: Element, keep: number, resumeAt: number): Element | null {
   splitAt(paragraph, resumeAt);
   let middle = splitAt(paragraph, keep);
@@ -235,7 +243,8 @@ function cutAtResume(paragraph: Element, keep: number, resumeAt: number): Elemen
   while (middle && middle !== resumed) {
     const next = middle.nextElementSibling;
     const plain = isWord(middle, "r") && Array.from(middle.children).every(item => isWord(item, "rPr") || isWord(item, "t"));
-    if (plain && !visibleText(middle).trim()) middle.remove();
+    // Hidden or struck whitespace is the author's mark, not separator noise.
+    if (plain && !visibleText(middle).trim() && !carriesMark(middle)) middle.remove();
     middle = next;
   }
   return resumed;

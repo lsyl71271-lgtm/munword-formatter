@@ -25,7 +25,7 @@ from ..docx_view import flow_paragraph_elements, holds_inline_object, visible_ru
 from ..errors import ProtectedContentError
 from ..fonts import rpr_child
 from ..models import IntermediateDocument
-from ..ooxml_edit import SEMANTIC_MARKS, carries_semantic_marks, has_complex_content, run_has, style_text_range
+from ..ooxml_edit import SEMANTIC_MARKS, carries_semantic_marks, has_complex_content, removes_marked_text, run_has, style_text_range
 from ..parser import (
     MANUAL_NUMBER_RE,
     PAREN_DIGIT_RE,
@@ -154,7 +154,11 @@ class HandbookPassMixin:
             elif block.role in ("committee", "topic") and spec.committee_topic_labels == "drop":
                 key, value = label_value(text)
                 if key in ("committee", "topic") and value:
-                    self._rewrite_logged(paragraph, value, model.language, "label-drop")
+                    if removes_marked_text(paragraph, value):
+                        # Dropping the label would delete hidden or struck words.
+                        self._protect(paragraph, "委员会/议题标签含隐藏或删除线文字，未按范例删除标签")
+                    else:
+                        self._rewrite_logged(paragraph, value, model.language, "label-drop")
 
     # -------------------------------------------------------- numbering check
 
