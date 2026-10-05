@@ -457,6 +457,19 @@ def _keeps(before: str, after: str) -> bool:
     return all(ch in remaining for ch in before)
 
 
+def paragraph_marks(element) -> tuple:
+    """``(hidden, struck)`` text of one block, for checking a single rewrite."""
+
+    return _marks_of(element)
+
+
+def marks_kept(before: tuple, element) -> bool:
+    """The hidden and struck characters of ``before`` survive, in order and still marked, in ``element``."""
+
+    hidden, struck = _marks_of(element)
+    return _keeps(before[0], hidden) and _keeps(before[1], struck)
+
+
 def verify_marks(before: dict, document) -> list:
     """Hidden and struck characters survive, in order, in the same block."""
 

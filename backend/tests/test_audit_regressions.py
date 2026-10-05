@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app import content_guard  # noqa: E402
 from app.docx_package import validate_docx_package  # noqa: E402
-from app.errors import InvalidDocxError  # noqa: E402
+from app.errors import InvalidDocxError, ProtectedContentError  # noqa: E402
 from app.pipelines import PIPELINES  # noqa: E402
 
 TEMPLATES = ROOT / "templates" / "pkunmun2026"
@@ -493,6 +493,8 @@ class NonBmpMarkTests(unittest.TestCase):
         root = body(result.content)
         self.assertEqual(marked(root, "vanish"), NON_BMP_HIDDEN)
         self.assertEqual(marked(root, "strike"), NON_BMP_STRUCK)
+        # The ending was normalized: the per-rewrite check did not mistake the characters for lost ones.
+        self.assertTrue(text_of(paragraph(root, "第一条")).endswith("请秘书长提交报告；"))
 
 
 def with_committee(committee: str) -> bytes:
@@ -532,6 +534,61 @@ class MarkedLabelTests(unittest.TestCase):
         root = body(result.content)
         self.assertEqual(marked(root, "strike"), "删去 ")
         self.assertEqual(marked(root, "vanish"), "（备注）")
+
+
+def para(*runs) -> str:
+    return "<w:p>" + "".join(run(text, props) for text, props in runs) + "</w:p>"
+
+
+UA_BODY = lines(["委员会：安全理事会", "议题：网络安全", "提交国：法国", "修正条款：第一条", "修改为：决定继续审议此问题。"])
+DR_AFTER_COMMITTEE = lines(["议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，", "认识到网络安全的重要性，", "第一条 决定继续审议此问题。"])
+
+
+def kept_first(result) -> bool:
+    return any("第 1 段" in w and "隐藏或删除线" in w for w in warnings(result))
+
+
+class MarkedRewriteTests(unittest.TestCase):
+    """Automatic rewrites roll back the one paragraph instead of deleting marked characters."""
+
+    def test_a_title_word_partly_hidden_is_kept_with_a_warning(self):
+        result = format_("unfriendly-amendment", package(para(("非友好修", "<w:vanish/>"), ("正案1.", ""), ("3.2", "")) + UA_BODY))
+        self.assertEqual(errors(result), [])
+        root = body(result.content)
+        self.assertTrue(any(text_of(p) == "非友好修正案1.3.2" for p in root.iter(q("p"))))
+        self.assertEqual(marked(root, "vanish"), "非友好修")
+        self.assertTrue(kept_first(result), warnings(result))
+        result = format_("working-paper", package(para(("工作文件", ""), ("1.", "<w:vanish/>"), ("8", ""))
+                                                  + lines(["委员会：安全理事会", "议题：网络安全", "起草国：法国", "1. 呼吁各国加强合作。"])))
+        self.assertEqual(errors(result), [])
+        self.assertEqual(marked(body(result.content), "vanish"), "1.")
+
+    def test_a_label_with_a_hidden_middle_or_a_struck_blank_is_kept_with_a_warning(self):
+        for name, committee, mark, text in (
+            ("hidden middle", para(("委", ""), ("员会", "<w:vanish/>"), ("：安全理事会", "")), "vanish", "员会"),
+            ("struck blank", para(("委员会：", ""), (" ", "<w:strike/>"), ("安全理事会", "")), "strike", " "),
+        ):
+            with self.subTest(name=name):
+                result = format_("draft-resolution", package(line("决议草案") + committee + DR_AFTER_COMMITTEE))
+                self.assertEqual(errors(result), [])
+                root = body(result.content)
+                self.assertTrue(any(text_of(p).startswith("委员会：") for p in root.iter(q("p"))))
+                self.assertEqual(marked(root, mark), text)
+                self.assertTrue(any("第 2 段" in w and "隐藏或删除线" in w for w in warnings(result)), warnings(result))
+        # Hidden characters outside the BMP in the value that stays do not stop the label drop.
+        result = format_("draft-resolution", package(line("决议草案") + para(("委员会：安全", ""), ("😀𠀀", "<w:vanish/>"), ("理事会", "")) + DR_AFTER_COMMITTEE))
+        self.assertEqual(errors(result), [])
+        root = body(result.content)
+        texts = [text_of(p) for p in root.iter(q("p"))]
+        self.assertIn("安全😀𠀀理事会", texts)
+        self.assertFalse(any(text.startswith("委员会：") for text in texts))
+        self.assertEqual(marked(root, "vanish"), "😀𠀀")
+        self.assertFalse(any("第 2 段" in w and "隐藏或删除线" in w for w in warnings(result)))
+
+    def test_a_step_03_title_change_on_a_partly_hidden_title_is_still_refused(self):
+        content = package(para(("非友好修", "<w:vanish/>"), ("正案1.", ""), ("3.2", "")) + UA_BODY)
+        with self.assertRaisesRegex(ProtectedContentError, "隐藏或删除线"):
+            format_("unfriendly-amendment", content, {"title": "非友好修正案2.0"})
 
 if __name__ == "__main__":
     unittest.main()

@@ -306,6 +306,13 @@ const keeps = (before: string, after: string) => {
   return i === wanted.length;
 };
 const excerpt = (text: string) => [...text].slice(0, 20).join("");
+/** [hidden, struck] text of one block, for checking a single rewrite (content_guard.paragraph_marks). */
+export const paragraphMarks = (element: Element) => marksOf(element);
+/** The hidden and struck characters of ``before`` survive, in order and still marked, in ``element``. */
+export function marksKept(before: [string, string], element: Element): boolean {
+  const [hidden, struck] = marksOf(element);
+  return keeps(before[0], hidden) && keeps(before[1], struck);
+}
 /** Hidden and struck characters survive, in order, in the same block. */
 export function verifyMarks(before: Marks, document: Document): string[] {
   const present = new Set(bodyBlocks(document)), problems: string[] = [];

@@ -1,6 +1,6 @@
 import { zipSync } from "fflate";
 import { readPackage, visibleText, contentSignature, decodeXml, canCut, breakLineBefore, moveToNewParagraph, Unsplittable } from "./docx-safety.ts";
-import { documentTokens, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
+import { documentTokens, marksKept, paragraphMarks, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
 import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
@@ -1005,16 +1005,21 @@ function rewriteLogged(ctx: Ctx, p: Element, text: string, kind: string, key = "
   if (paragraphText(p) === text) return true;
   const previous = ctx.editLog.get(p);
   const backup = Array.from(p.childNodes).map(node => node.cloneNode(true));
-  const before = signature(p);
-  const written = setText(ctx, p, text);
-  const exact = paragraphText(p) === text;
-  if (written && (!exact || !rewriteKeepsStructure(kind, before, signature(p)))) {
+  const before = signature(p), marks = paragraphMarks(p);
+  const restore = (reason: string) => {
     // Restore in place (the element keeps its identity for the content check).
     for (const child of Array.from(p.childNodes)) p.removeChild(child);
     for (const child of backup) p.appendChild(child);
-    protect(ctx, p, "改写会改变该段中的链接、域、书签或修订结构，已保留原样");
+    protect(ctx, p, reason);
     return false;
-  }
+  };
+  const written = setText(ctx, p, text);
+  const exact = paragraphText(p) === text;
+  if (written && (!exact || !rewriteKeepsStructure(kind, before, signature(p)))) return restore("改写会改变该段中的链接、域、书签或修订结构，已保留原样");
+  // Any automatic rewrite (title word, label, marker, ending) that would delete
+  // hidden or struck characters, or drop their mark, is undone here, for this
+  // paragraph only; the final guard stays strict.
+  if (written && !marksKept(marks, p)) return restore("改写会删除隐藏或删除线文字或去掉其标记，已保留原样");
   if (!exact) return false;
   let expected: string | null = ["label-restore", "field"].includes(kind) ? text : null;
   if (previous?.kind === "field" && ["label-drop", "title"].includes(kind)) { kind = "field"; key = previous.key || ""; expected = text; }
@@ -1452,7 +1457,7 @@ function headerText(ctx: Ctx, blocks: Block[]) {
       if (target === text) continue;
       if (!ctx.changed.has("title")) rewriteLogged(ctx, block.p, target, "title");
       else if (!rewriteLogged(ctx, block.p, target, "field", "title"))
-        throw new ProtectedContentError(sourceNumber(ctx, block.p), "第 03 步修改了标题，但标题含链接、域或修订痕迹，不能安全改写");
+        throw new ProtectedContentError(sourceNumber(ctx, block.p), "第 03 步修改了标题，但标题含链接、域、修订、隐藏或删除线文字，不能安全改写");
     } else if ((block.role === "committee" || block.role === "topic") && ctx.spec.committeeTopicLabels === "drop") {
       const labeled = labeledField(text);
       if (labeled && (labeled.key === "committee" || labeled.key === "topic") && labeled.value) {

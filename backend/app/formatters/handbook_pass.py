@@ -147,7 +147,7 @@ class HandbookPassMixin:
                     if "title" in self._changed_fields and target != text:
                         if not self._rewrite_logged(paragraph, target, model.language, "field", "title"):
                             raise ProtectedContentError(
-                                self._source_number(paragraph), "第 03 步修改了标题，但标题含链接、域或修订痕迹，不能安全改写"
+                                self._source_number(paragraph), "第 03 步修改了标题，但标题含链接、域、修订、隐藏或删除线文字，不能安全改写"
                             )
                     elif target != text:
                         self._rewrite_logged(paragraph, target, model.language, "title")

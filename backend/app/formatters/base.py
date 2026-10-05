@@ -738,16 +738,25 @@ class BaseFormatter(HandbookPassMixin):
         # title inside a field), the paragraph is restored and left as is.
         backup = copy.deepcopy(paragraph._p)
         old_signature = content_guard.signature(paragraph._p)
-        if self._set_text(paragraph, text, language) and not content_guard.rewrite_keeps_structure(
-            kind, old_signature, content_guard.signature(paragraph._p)
-        ):
+        old_marks = content_guard.paragraph_marks(paragraph._p)
+
+        def restore(reason: str) -> bool:
             # Restore in place: the element keeps its identity for the check.
             for child in list(paragraph._p):
                 paragraph._p.remove(child)
             for child in list(backup):
                 paragraph._p.append(child)
-            self._protect(paragraph, "改写会改变该段中的链接、域、书签或修订结构，已保留原样")
+            self._protect(paragraph, reason)
             return False
+
+        written = self._set_text(paragraph, text, language)
+        if written and not content_guard.rewrite_keeps_structure(kind, old_signature, content_guard.signature(paragraph._p)):
+            return restore("改写会改变该段中的链接、域、书签或修订结构，已保留原样")
+        if written and not content_guard.marks_kept(old_marks, paragraph._p):
+            # Any automatic rewrite (title word, label, marker, ending) that
+            # would delete hidden or struck characters, or drop their mark,
+            # is undone here, for this paragraph only; the final guard stays strict.
+            return restore("改写会删除隐藏或删除线文字或去掉其标记，已保留原样")
         if visible_text(paragraph) == text:
             expected = text if kind in ("label-restore", "field") else None
             if previous is not None and previous.kind == "field" and kind in ("label-drop", "title"):

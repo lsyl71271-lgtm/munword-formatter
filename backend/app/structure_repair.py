@@ -17,7 +17,7 @@ from .docx_view import (
     style_chain, style_index, visible_text,
 )
 from .fonts import rpr_child
-from .ooxml_edit import SEMANTIC_MARKS, edit_visible_text, has_complex_content, run_has
+from .ooxml_edit import SEMANTIC_MARKS, carries_semantic_marks, edit_visible_text, has_complex_content, run_has
 from .parser import MANUAL_NUMBER_RE, detect_language
 from .semantic_policy import EMBEDDED_SUBCLAUSE, META_LABELS, label_value, starts_body
 
@@ -595,8 +595,10 @@ def _rewrite_text(paragraph, text: str) -> bool:
     target = visible_text(paragraph)[:leading] + text + visible_text(paragraph)[leading + len(stripped):]
     backup = deepcopy(paragraph._p)
     before = content_guard.signature(paragraph._p)
+    marks = content_guard.paragraph_marks(paragraph._p)
     if edit_visible_text(paragraph, target):
-        if content_guard.rewrite_keeps_structure("repair", before, content_guard.signature(paragraph._p)):
+        if (content_guard.rewrite_keeps_structure("repair", before, content_guard.signature(paragraph._p))
+                and content_guard.marks_kept(marks, paragraph._p)):
             return True
         # The inserted label or marker landed inside a tracked revision (or
         # moved text across a link): restore in place and skip the repair.
@@ -606,7 +608,8 @@ def _rewrite_text(paragraph, text: str) -> bool:
             paragraph._p.append(child)
         invalidate_paragraph_cache()
         return False
-    if has_complex_content(paragraph):
+    if has_complex_content(paragraph) or carries_semantic_marks(paragraph):
+        # Rebuilding would show hidden text or drop strikethrough.
         return False
     _replace_paragraph_text(paragraph, text)
     return True

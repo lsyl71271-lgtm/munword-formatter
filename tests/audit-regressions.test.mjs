@@ -399,6 +399,8 @@ test("a clause with hidden and struck characters outside the BMP formats with it
   const xml = await documentOf(result);
   assert.equal(marked(xml, "vanish"), NON_BMP_HIDDEN);
   assert.equal(marked(xml, "strike"), NON_BMP_STRUCK);
+  // The ending was normalized: the per-rewrite check did not mistake the characters for lost ones.
+  assert.ok(textOf(paragraph(xml, "第一条")).endsWith("请秘书长提交报告；"));
 });
 
 // ---------------------------------------------------------------- hidden / struck header labels and split whitespace
@@ -436,4 +438,49 @@ test("struck whitespace before a split marker is kept", async () => {
   assert.ok(paragraph(xml, "（子）收集证据") && paragraph(xml, "（丑）提交报告"));
   assert.equal(marked(xml, "strike"), "删去 ");
   assert.equal(marked(xml, "vanish"), "（备注）");
+});
+
+// ---------------------------------------------------------------- automatic rewrites never delete marked characters
+
+const para = (...runs) => `<w:p>${runs.map(([text, props]) => run(text, props)).join("")}</w:p>`;
+const UA_BODY = ["委员会：安全理事会", "议题：网络安全", "提交国：法国", "修正条款：第一条", "修改为：决定继续审议此问题。"].map(t => line(t)).join("");
+const DR_AFTER_COMMITTEE = ["议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，", "认识到网络安全的重要性，", "第一条 决定继续审议此问题。"].map(t => line(t)).join("");
+const kept = result => warningsOf(result).some(w => w.includes("第 1 段") && w.includes("隐藏或删除线"));
+
+test("a title word partly hidden is kept with a warning", async () => {
+  let result = format(archive(para(["非友好修", "<w:vanish/>"], ["正案1.", ""], ["3.2", ""]) + UA_BODY), "unfriendly-amendment");
+  assert.deepEqual(errors(result), []);
+  const xml = await documentOf(result);
+  assert.ok(paragraph(xml, "非友好修正案1.3.2"));
+  assert.equal(marked(xml, "vanish"), "非友好修");
+  assert.ok(kept(result));
+  result = format(archive(para(["工作文件", ""], ["1.", "<w:vanish/>"], ["8", ""]) + ["委员会：安全理事会", "议题：网络安全", "起草国：法国", "1. 呼吁各国加强合作。"].map(t => line(t)).join("")), "working-paper");
+  assert.deepEqual(errors(result), []);
+  assert.equal(marked(await documentOf(result), "vanish"), "1.");
+});
+
+test("a label with a hidden middle or a struck blank is kept with a warning", async () => {
+  for (const [name, committee, mark, text] of [
+    ["hidden middle", para(["委", ""], ["员会", "<w:vanish/>"], ["：安全理事会", ""]), "vanish", "员会"],
+    ["struck blank", para(["委员会：", ""], [" ", "<w:strike/>"], ["安全理事会", ""]), "strike", " "],
+  ]) {
+    const result = format(archive(line("决议草案") + committee + DR_AFTER_COMMITTEE), "draft-resolution");
+    assert.deepEqual(errors(result), [], name);
+    const xml = await documentOf(result);
+    assert.ok(paragraph(xml, "委员会："), name);
+    assert.equal(marked(xml, mark), text, name);
+    assert.ok(warningsOf(result).some(w => w.includes("第 2 段") && w.includes("隐藏或删除线")), name);
+  }
+  // Hidden characters outside the BMP in the value that stays do not stop the label drop.
+  const result = format(archive(line("决议草案") + para(["委员会：安全", ""], ["😀𠀀", "<w:vanish/>"], ["理事会", ""]) + DR_AFTER_COMMITTEE), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const xml = await documentOf(result);
+  assert.ok(paragraph(xml, "安全😀𠀀理事会") && !paragraph(xml, "委员会："));
+  assert.equal(marked(xml, "vanish"), "😀𠀀");
+  assert.ok(!warningsOf(result).some(w => w.includes("第 2 段") && w.includes("隐藏或删除线")));
+});
+
+test("a step-03 title change on a partly hidden title is still refused", () => {
+  const input = archive(para(["非友好修", "<w:vanish/>"], ["正案1.", ""], ["3.2", ""]) + UA_BODY);
+  assert.throws(() => format(input, "unfriendly-amendment", { title: "非友好修正案2.0" }), /为保护原有内容已中止输出：.*隐藏或删除线/);
 });
