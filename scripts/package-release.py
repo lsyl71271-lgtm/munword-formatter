@@ -45,8 +45,12 @@ def package(output: Path, desktop: bool = False) -> dict:
         modes[name] = 0o755 if mode == "100755" else 0o644
     names = sorted(modes)
     if desktop:
+        build_spec = importlib.util.spec_from_file_location("local_build", ROOT / "scripts" / "verify-local-build.py")
+        build_check = importlib.util.module_from_spec(build_spec)
+        build_spec.loader.exec_module(build_check)
+        build_check.verify(ROOT, index=True)
         # These exact generated assets are required for offline local tools.
-        names += ["public/studio-tools.js", "public/local-app.js", "public/local-styles.css", "public/licenses/react.txt", "public/licenses/react-dom.txt", "public/licenses/docx-preview.txt", "public/licenses/docxtemplater.txt", "public/licenses/pizzip.txt", "public/licenses/jszip.txt", "public/licenses/@xmldom-xmldom.txt", "public/licenses/fflate.txt"]
+        names += json.loads((ROOT / "shared/local-build-policy.json").read_text())["assets"] + ["public/local-build.json"]
     files = {}
     for name in names:
         path = ROOT / name

@@ -80,6 +80,7 @@ worker-configuration.d.ts
 /public/studio-tools.js
 /public/local-app.js
 /public/local-styles.css
+/public/local-build.json
 /public/licenses/
 /.local-runtime/
 /examples/acceptance-outputs/

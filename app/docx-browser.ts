@@ -1,6 +1,7 @@
 import { zipSync } from "fflate";
 import { readPackage, visibleText, contentSignature, decodeXml, canCut, breakLineBefore, moveToNewParagraph, Unsplittable } from "./docx-safety.ts";
 import { documentTokens, marksKept, paragraphMarks, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
+import { isPlainField } from "./field-policy.ts";
 import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
@@ -68,7 +69,7 @@ const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\
 const spacedAlias = (value: string) => [...value].map(escapePattern).join(/^[\u3400-\u9fff]+$/.test(value) ? "\\s*" : "");
 const LABELS = Object.fromEntries(METADATA_KEYS.map((key) => [
   key,
-  new RegExp(`^(?:${[...POLICY.metadata[key].aliases].sort((a, b) => b.length - a.length).map(spacedAlias).join("|")})\\s*[:：]\\s*(.*)$`, "i"),
+  new RegExp(`^(?:${[...POLICY.metadata[key].aliases].sort((a, b) => b.length - a.length).map(spacedAlias).join("|")})\\s*[:：]\\s*([\\s\\S]*)$`, "i"),
 ])) as Record<MetadataKey, RegExp>;
 
 function parsePackage(content: ArrayBuffer) {
@@ -1088,15 +1089,17 @@ function recordCountryNames(ctx: Ctx, p: Element, key: string, values: string[])
 
 function scalarCountry(ctx: Ctx, p: Element, labeled: boolean) {
   const resolution = resolveCountry(ctx.model.country, ctx.language);
-  if (!resolution.changed && !ctx.changed.has("country")) return;
-  if (hasComplexContent(p) || carriesSemanticMarks(p) || signature(p).some(token => token[0] !== "t")) {
-    if (ctx.changed.has("country")) throw new ProtectedContentError(sourceNumber(ctx, p), "第 03 步修改的国家字段含复杂结构，不能安全改写");
-    protect(ctx, p, "国家字段含链接、域、修订、书签或隐藏/删除线文字，未自动展开全称"); return;
-  }
   const target = labeled ? labelValueText("country", resolution.display, ctx.language) : resolution.display;
+  if (!ctx.changed.has("country") && (!resolution.changed && (!labeled || resolution.status !== "resolved" || paragraphText(p) === target))) return;
+  const reason = fieldProtectionReason(p);
+  if (reason) {
+    if (ctx.changed.has("country")) throw new ProtectedContentError(sourceNumber(ctx, p), `第 03 步修改的国家字段${reason}，不能安全改写`);
+    protect(ctx, p, `国家字段${reason}，未自动展开全称`); return;
+  }
   if (setText(ctx, p, target)) {
     logEdit(ctx, p, ctx.changed.has("country") ? "field" : "country-name", "country", target);
     recordCountryNames(ctx, p, "country", [ctx.model.country]);
+    if (labeled) ctx.countryChanges.push(`第 ${sourceNumber(ctx, p)} 段 country：按共用字段策略统一国家标签与分隔符。`);
   }
 }
 
@@ -1112,7 +1115,8 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
     const index = texts.findIndex((text, i) => i < ctx.headerEnd && !labeledField(text) && text === ctx.original[key]);
     if (index < 0) continue;
     if (key === "country") { scalarCountry(ctx, paragraphs[index], false); continue; }
-    if (hasComplexContent(paragraphs[index])) throw new ProtectedContentError(index + 1, `第 03 步修改了${POLICY.metadata[key].output[ctx.language]}，但该段含图片、域或修订痕迹，不能安全改写`);
+    const reason = fieldProtectionReason(paragraphs[index]);
+    if (reason) throw new ProtectedContentError(index + 1, `第 03 步修改了${POLICY.metadata[key].output[ctx.language]}，但该段${reason}，不能安全改写`);
     if (setText(ctx, paragraphs[index], ctx.model[key])) logEdit(ctx, paragraphs[index], "field", key, ctx.model[key]);
   }
   restoreMissingLabels(ctx, paragraphs, texts);
@@ -1136,8 +1140,8 @@ function formatMetadata(ctx: Ctx, paragraphs: Element[]) {
     } else if (labeled.key === "country") {
       scalarCountry(ctx, p, true);
     } else if (ctx.changed.has(labeled.key)) {
-      if (hasComplexContent(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含图片或域，不能安全改写");
-      if (carriesSemanticMarks(p)) throw new ProtectedContentError(index + 1, "第 03 步修改的元数据段含隐藏或删除线文字，改写会改变其显示或删除含义");
+      const reason = fieldProtectionReason(p);
+      if (reason) throw new ProtectedContentError(index + 1, `第 03 步修改的元数据段${reason}，不能安全改写`);
       const target = labelValueText(labeled.key, ctx.model[labeled.key] as string, ctx.language);
       clearParagraph(p);
       formatRun(appendRun(p, target), ctx, { bold: false, italic: false, underline: false });
@@ -1175,7 +1179,7 @@ function formatCountryField(ctx: Ctx, p: Element, continuations: Element[], key:
   const differs = values.length > 0 && (ctx.normalizePunctuation || reordered) && (
     reordered || continuations.some(c => paragraphText(c).trim()) || paragraphText(p).trim() !== expected.trim());
   if (ctx.changed.has(key) || differs) {
-    const complexPart = [p, ...continuations].find(part => hasComplexContent(part) || carriesSemanticMarks(part) || signature(part).some(token => token[0] !== "t"));
+    const complexPart = [p, ...continuations].find(part => fieldProtectionReason(part));
     if (!complexPart) {
       clearParagraph(p);
       appendRun(p, expected);
@@ -1185,11 +1189,18 @@ function formatCountryField(ctx: Ctx, p: Element, continuations: Element[], key:
       recordCountryNames(ctx, p, key, source);
       return;
     }
-    if (ctx.changed.has(key)) throw new ProtectedContentError(sourceNumber(ctx, complexPart), "第 03 步修改了国家名单，但名单含图片、域、修订痕迹或隐藏/删除线文字，不能安全改写");
-    protect(ctx, complexPart, "国家列表含图片、域、修订痕迹或隐藏/删除线文字，未重写");
+    const reason = fieldProtectionReason(complexPart);
+    if (ctx.changed.has(key)) throw new ProtectedContentError(sourceNumber(ctx, complexPart), `第 03 步修改了国家名单，但${reason}，不能安全改写`);
+    protect(ctx, complexPart, `国家列表${reason}，未重写`);
   }
   styleCountryLine(ctx, p, true);
   for (const c of continuations) formatRuns(c, ctx, { bold: true, italic: true, underline: false });
+}
+
+function fieldProtectionReason(p: Element): string | null {
+  if (carriesSemanticMarks(p)) return "含隐藏或删除线文字";
+  if (hasComplexContent(p)) return "含图片、链接、域、书签或修订结构";
+  return isPlainField(signature(p)) ? null : "含分页符、分栏符或其他不能作为普通分隔符的记号";
 }
 
 function styleCountryLine(ctx: Ctx, p: Element, labeled: boolean) {
@@ -1924,6 +1935,12 @@ function formatInner(
     { code: "browser_private", label: "本地处理", status: "pass", detail: "文件在当前浏览器中处理，未发送到外部排版服务。" },
   ];
   const edits = editSummary(ctx.editLog, repaired, split);
+  for (const key of ctx.changed) {
+    const written = [...ctx.editLog.values()].some(edit => edit.key === key && (edit.kind === "field" || edit.country?.manual));
+    const label = key === "title" ? "标题" : POLICY.metadata[key as MetadataKey].output.zh;
+    validations.push({ code: written ? "manual-field" : "manual-field-unwritten", label: `第 03 步${label}修改结果`, status: written ? "pass" : "warning",
+      detail: written ? `${label}已写入，并通过逐段内容校验。` : `${label}未写入：文档中没有可安全替换的${label}字段行。已保留原稿，不自动添加新行；请在原稿补充该字段后重新上传。` });
+  }
   for (const detail of [...new Set(ctx.countryChanges)]) validations.push({ code: "country_names", label: "国家全称展开与身份去重记录", status: "pass", detail });
   for (const detail of countryWarnings([model.country, ...model.sponsors, ...model.signatories], ctx.language)) validations.push({ code: "country-review", label: "国家或实体名称待人工确认", status: "warning", detail });
   validations.splice(1, 0, { code: "structural_edits", label: "结构与人工修改记录", status: edits.length ? "warning" : "pass", detail: edits.join("；") || "未改写正文文字。" });

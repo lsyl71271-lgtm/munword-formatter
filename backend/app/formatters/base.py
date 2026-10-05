@@ -27,6 +27,7 @@ from docx.shared import Mm, Pt
 from docx.text.paragraph import Paragraph
 
 from .. import content_guard
+from ..field_policy import is_plain_field
 from ..errors import ProtectedContentError
 from ..countries import COUNTRY_DATA_DATE, country_warnings, plan_countries, resolve_country
 from ..docx_view import (
@@ -513,10 +514,13 @@ class BaseFormatter(HandbookPassMixin):
                     if position < len(paragraphs)
                 ]
                 self._format_country_field(paragraph, continuations, key, data[key], model.language, getattr(model, key))
-            elif key == "country" and (data[key] != model.country or key in self._changed_fields):
+            elif key == "country" and (data[key] != model.country or key in self._changed_fields or (
+                resolve_country(model.country, model.language)["status"] == "resolved" and visible_text(paragraph) != self._label_value_text(key, str(data[key]), model.language)
+            )):
                 if self._write_label_value(paragraph, key, str(data[key]), model.language):
                     self._log_edit(paragraph, "field" if key in self._changed_fields else "country-name", key, expected=self._label_value_text(key, str(data[key]), model.language))
                     self._record_country_names(paragraph, key, [model.country], model.language)
+                    self._country_changes.append(f"第 {self._source_number(paragraph)} 段 country：按共用字段策略统一国家标签与分隔符。")
             elif key in self._changed_fields:
                 if self._write_label_value(paragraph, key, str(data[key]), model.language):
                     self._log_edit(paragraph, "field", key, expected=self._label_value_text(key, str(data[key]), model.language))
@@ -534,10 +538,11 @@ class BaseFormatter(HandbookPassMixin):
             if label_value(visible_text(paragraph).strip())[0]:
                 continue  # labeled lines are rewritten with their label below
             value = str(data[key])
-            if has_complex_content(paragraph) or carries_semantic_marks(paragraph) or any(token[0] != "t" for token in content_guard.signature(paragraph._p)):
+            reason = self._field_protection_reason(paragraph)
+            if reason:
                 if key in self._changed_fields:
-                    raise ProtectedContentError(index + 1, f"第 03 步修改了{META_LABELS[model.language][key]}，但该段含图片、域或修订痕迹，不能安全改写")
-                self._protect(paragraph, "国家字段含链接、域、修订、书签或隐藏/删除线文字，未自动展开全称")
+                    raise ProtectedContentError(index + 1, f"第 03 步修改了{META_LABELS[model.language][key]}，但该段{reason}，不能安全改写")
+                self._protect(paragraph, f"国家字段{reason}，未自动展开全称")
                 continue
             if self._set_text(paragraph, value, model.language):
                 self._log_edit(paragraph, "field" if key in self._changed_fields else "country-name", key, expected=value)
@@ -578,7 +583,7 @@ class BaseFormatter(HandbookPassMixin):
             # must be plain text.  Rewriting the first line while a complex
             # continuation stayed would duplicate names; clearing plain
             # continuations after a refused rewrite would delete them.
-            complex_part = next((item for item in [paragraph, *continuations] if has_complex_content(item) or carries_semantic_marks(item) or any(token[0] != "t" for token in content_guard.signature(item._p))), None)
+            complex_part = next((item for item in [paragraph, *continuations] if self._field_protection_reason(item)), None)
             if complex_part is None:
                 self._write_country_line(paragraph, key, list(values), language)
                 expected = self._country_line_text(key, list(values), language)
@@ -588,11 +593,12 @@ class BaseFormatter(HandbookPassMixin):
                     self._log_edit(continuation, "countries", key, expected=expected)
                 self._record_country_names(paragraph, key, source_values or [], language)
                 return
+            reason = self._field_protection_reason(complex_part)
             if key in self._changed_fields:
                 raise ProtectedContentError(
-                    self._source_number(complex_part), "第 03 步修改了国家名单，但名单含图片、域、修订痕迹或隐藏/删除线文字，不能安全改写"
+                    self._source_number(complex_part), f"第 03 步修改了国家名单，但{reason}，不能安全改写"
                 )
-            self._protect(complex_part, "国家列表含图片、域、修订痕迹或隐藏/删除线文字，未重写")
+            self._protect(complex_part, f"国家列表{reason}，未重写")
         self._style_labeled_paragraph(paragraph, key, language, value_emphasis=True)
         for continuation in continuations:
             self._format_runs(continuation, language, bold=True, italic=True, underline=False)
@@ -672,8 +678,9 @@ class BaseFormatter(HandbookPassMixin):
         self._format_run(label_run, language, bold=True)
 
     def _write_label_value(self, paragraph: Paragraph, key: str, value: str, language: str) -> bool:
-        if has_complex_content(paragraph) or carries_semantic_marks(paragraph) or any(token[0] != "t" for token in content_guard.signature(paragraph._p)):
-            reason = "元数据段含链接、图片、域、修订或隐藏/删除线文字，不能安全改写"
+        protected = self._field_protection_reason(paragraph)
+        if protected:
+            reason = "元数据段" + protected + "，不能安全改写"
             if key in self._changed_fields:
                 raise ProtectedContentError(self._source_number(paragraph), f"第 03 步修改了{META_LABELS[language][key]}，但{reason}")
             self._protect(paragraph, reason)
@@ -682,6 +689,14 @@ class BaseFormatter(HandbookPassMixin):
         run = paragraph.add_run(self._label_value_text(key, value, language))
         self._format_run(run, language, bold=False, italic=False, underline=False)
         return True
+
+    @staticmethod
+    def _field_protection_reason(paragraph):
+        if carries_semantic_marks(paragraph):
+            return "含隐藏或删除线文字"
+        if has_complex_content(paragraph):
+            return "含图片、链接、域、书签或修订结构"
+        return None if is_plain_field(content_guard.signature(paragraph._p)) else "含分页符、分栏符或其他不能作为普通分隔符的记号"
 
     def _write_country_line(self, paragraph: Paragraph, key: str, values: list[str], language: str) -> None:
         if has_complex_content(paragraph) or carries_semantic_marks(paragraph):
@@ -837,18 +852,28 @@ class BaseFormatter(HandbookPassMixin):
         ]
         edits = edit_summary(self._edit_log)
         items.insert(1, ValidationItem("structural_edits", "结构与人工修改记录", "warning" if edits else "pass", "；".join(edits) or "未改写正文文字。"))
+        unwritten = set()
+        for key in sorted(self._changed_fields):
+            written = any(edit.key == key and (edit.kind == "field" or (edit.country and edit.country["manual"])) for edit in self._edit_log.values())
+            label = "标题" if key == "title" else META_LABELS["zh"][key]
+            if not written:
+                unwritten.add(key)
+            detail = f"{label}已写入，并通过逐段内容校验。" if written else f"{label}未写入：文档中没有可安全替换的{label}字段行。已保留原稿，不自动添加新行；请在原稿补充该字段后重新上传。"
+            items.append(ValidationItem("manual-field" if written else "manual-field-unwritten", f"第 03 步{label}修改结果", "pass" if written else "warning", detail))
         for warning in self._protected_warnings:
             items.append(ValidationItem("content-protected", "为保护原有内容，部分段落未自动改写", "warning", warning))
         for detail in dict.fromkeys(self._country_changes):
             items.append(ValidationItem("country_names", "国家全称展开与身份去重记录", "pass", detail))
         for note in getattr(self, "_kept_hidden", []):
             items.append(ValidationItem("hidden-text", "隐藏文字与删除线按原稿保留", "warning", note))
-        if model.sponsors:
-            ok = self._metadata_value_emphasis_ok(document, "sponsors")
-            items.append(ValidationItem("sponsors", "起草国顺序保留、值为粗斜体", "pass" if ok else "error"))
-        if model.signatories:
-            ok = self._metadata_value_emphasis_ok(document, "signatories")
-            items.append(ValidationItem("signatories", "附议国顺序保留、值为粗斜体", "pass" if ok else "error"))
+        for key in ("sponsors", "signatories"):
+            if not getattr(model, key):
+                continue
+            ok = self._metadata_value_emphasis_ok(document, key)
+            protected = any(LABEL_PATTERNS[key].match(visible_text(p).strip()) and self._field_protection_reason(p) for p in body_paragraphs(document))
+            status = "pass" if ok else "warning" if protected or key in unwritten else "error"
+            detail = "" if ok else "原字段受内容保护或文档中无此字段行，未强制重建粗斜体；请人工复核。" if status == "warning" else "国家名单字段存在，但值未全部达到粗斜体要求。"
+            items.append(ValidationItem(key, f"{META_LABELS['zh'][key]}顺序保留、值为粗斜体", status, detail))
         for warning in country_warnings([model.country, *model.sponsors, *model.signatories], model.language):
             items.append(ValidationItem("country-formal-name", "国家正式名称待确认", "warning", warning))
         for warning in model.warnings:

@@ -65,7 +65,7 @@ test("country identity deduplicates and sorts independently of alias spelling; i
 
 test("Python and browser agree for EVERY official name and alias, in both languages", () => {
   const names = data.records.flatMap(item => [...Object.values(item.formal),...Object.values(item.source_formal),...Object.values(item.short),...item.aliases]);
-  names.push(...data.policy.ambiguous,...data.policy.historical,...data.policy.organizations,"未知国家","𠀀国","\uE000国");
+  names.push(...data.policy.ambiguous,...data.policy.historical,...data.policy.organizations,"未知国家","𠀀国","\uE000国","France\uFEFF","\u0085China","China\u200B");
   const source = `import json,sys\nfrom pathlib import Path\nsys.path.insert(0,str(Path.cwd()/"backend"))\nfrom app.countries import resolve_country,plan_countries\nv=json.load(sys.stdin)\nprint(json.dumps({"resolutions":[resolve_country(n,l) for l in ("zh","en") for n in v],"plans":[plan_countries(v,l,p) for l in ("zh","en") for p in (False,True)]},ensure_ascii=False))`;
   const python = JSON.parse(execFileSync(process.env.MUNWORD_PYTHON || "python3",["-c",source],{input:JSON.stringify(names),maxBuffer:16*1024*1024,encoding:"utf8"}));
   assert.deepEqual(python.resolutions,["zh","en"].flatMap(l=>names.map(n=>resolveCountry(n,l))));
@@ -123,4 +123,67 @@ test("duplicate header fields are retained for manual confirmation, not overwrit
   const result=await formatted(input,"position-paper");
   assert.ok(result.texts.includes("国家：中国") && result.texts.includes("国家：日本"));
   assert.ok(result.result.validations.some(v=>v.code==="content-protected" && v.detail.includes("多个同名")));
+});
+
+test("plain field separators expand safely, including manual edits, and repeat unchanged", async () => {
+  for (const separator of ["<w:tab/>","<w:br/>","<w:cr/>",'<w:br w:type="textWrapping"/>']) {
+    for (const language of ["zh","en"]) {
+      const prefix = language === "zh" ? ["工作文件1.1","委员会：联合国大会","议题：合作"] : ["Working Paper 1.1","Committee: General Assembly","Topic: Cooperation"];
+      const label = language === "zh" ? "起草国：" : "Sponsors: ";
+      const names = language === "zh" ? ["中国","美国"] : ["China","USA"];
+      const body = language === "zh" ? "第一条 要求继续合作。" : "1. Calls for continued cooperation;";
+      const input = archive(prefix.map(line).join("") + `<w:p>${run(label)}<w:r>${separator}</w:r>${run(names[0])}<w:r>${separator}</w:r>${run(names[1])}</w:p>` + line(body));
+      for (const overrides of [{}, {sponsors: language === "zh" ? ["日本","中国"] : ["Japan","China"]}]) {
+        const first = await formatted(input,"working-paper",overrides);
+        assert.ok(first.texts.join("").includes(language === "zh" ? "中华人民共和国" : "People's Republic of China"));
+        assert.equal(first.result.validations.some(v=>v.code==="content-protected"),false);
+        assert.deepEqual((await formatted(first.bytes,"working-paper")).texts,first.texts);
+      }
+    }
+  }
+});
+
+test("page/column breaks and links are not plain field separators", async () => {
+  for (const separator of ['<w:br w:type="page"/>','<w:br w:type="column"/>','<w:br w:clear="all"/>']) {
+    const input = archive(["立场文件","委员会：联合国大会","议题：合作"].map(line).join("")+`<w:p>${run("国家：")}<w:r>${separator}</w:r>${run("中国")}</w:p>`+line("代表：甲")+line("正文不变。"));
+    const result=await formatted(input,"position-paper");
+    assert.ok(result.texts.includes("国家：中国"));
+    assert.ok(result.result.validations.some(v=>v.code==="content-protected"));
+    assert.throws(()=>formatDocxInBrowser(input,{...parseDocxInBrowser(input,"position-paper"),country:"日本"},options),/不能安全改写/);
+  }
+});
+
+test("missing manual fields explicitly report that the entered value was not written", async () => {
+  const input = archive(["立场文件","委员会：联合国大会","国家：中国","正文：这个内容必须保持不变。"].map(line).join(""));
+  const result=await formatted(input,"position-paper",{delegate:"新增代表",topic:"新增议题"});
+  const warnings=result.result.validations.filter(v=>v.code==="manual-field-unwritten");
+  assert.equal(warnings.length,2);
+  assert.ok(warnings.every(v=>v.status==="warning" && v.detail.includes("未写入")));
+  assert.equal(result.texts.join("").includes("新增"),false);
+  const listInput = archive(["工作文件1.1","委员会：联合国大会","议题：合作","第一条 正文不变。"].map(line).join(""));
+  const list = await formatted(listInput,"working-paper",{sponsors:["中国"]});
+  assert.ok(list.result.validations.some(v=>v.code==="manual-field-unwritten" && v.detail.includes("起草国")));
+  assert.equal(list.texts.join("").includes("中华人民共和国"),false);
+});
+
+test("manual list authorization cannot bypass the independent structure guard", () => {
+  for (const manual of [true,false]) {
+    const document = new DOMParser().parseFromString(xml(`<w:p>${run("起草国：中国")}<w:r><w:br w:type="page"/></w:r></w:p>`),"application/xml");
+    const p=document.getElementsByTagNameNS(W,"p")[0], before=takeSnapshot(document);
+    while(p.firstChild) p.removeChild(p.firstChild);
+    const replacement=new DOMParser().parseFromString(xml(line("起草国：中华人民共和国")),"application/xml").getElementsByTagNameNS(W,"p")[0];
+    for(const node of [...replacement.children]) p.appendChild(document.importNode(node,true));
+    const edit={kind:"countries",key:"sponsors",expected:"起草国：中华人民共和国",country:{language:"zh",preserveOrder:false,manual}};
+    assert.ok(verifyFormat(before,document,new Map([[p,edit]]),[],[]).some(reason=>reason.includes("复杂结构")));
+  }
+});
+
+test("formal names and aliases use the same country label policy with a trace", async () => {
+  for(const name of ["法国","法兰西共和国"]) {
+    const input=archive(["立场文件","委员会：联合国大会","议题：合作",`国家/席位：${name}`,"代表：甲","正文不变。"].map(line).join(""));
+    const first=await formatted(input,"position-paper");
+    assert.ok(first.texts.includes("国家：法兰西共和国"));
+    assert.ok(first.result.validations.some(v=>v.code==="country_names" && v.detail.includes("统一国家标签")));
+    assert.deepEqual((await formatted(first.bytes,"position-paper")).texts,first.texts);
+  }
 });

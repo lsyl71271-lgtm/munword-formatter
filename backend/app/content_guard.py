@@ -25,6 +25,8 @@ and every embedded resource byte for byte.
 
 from __future__ import annotations
 
+from .field_policy import is_plain_field
+
 import difflib
 import hashlib
 import re
@@ -86,7 +88,7 @@ def element_text(element) -> str:
     """Visible text of a paragraph (deleted revisions excluded)."""
 
     parts = []
-    for node in element.iter(_TEXT, _W + "tab", _W + "br"):
+    for node in element.iter(_TEXT, _W + "tab", _W + "br", _W + "cr"):
         ancestor = node.getparent()
         hidden = False
         while ancestor is not None and ancestor is not element:
@@ -293,14 +295,14 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
             if not _is_plain(signature(el)):
                 problems.append(f"{key} 名单段落含有文字以外的内容")
         new_text = "".join(element_text(el) for el in after_group)
+        if any(not is_plain_field(before.signatures[el]) for el in group["before"]):
+            problems.append(f"{key} 原名单含复杂结构，不能授权名称替换")
         country = group["country"]
         if country and not country["manual"]:
             originals = _country_name_list([before.texts[el] for el in group["before"]])
             permitted = plan_countries(originals, country["language"], country["preserveOrder"])["values"]
             if _country_name_list([new_text]) != permitted:
                 problems.append(f"{key} 名单包含无法由原字段和共用国家表证明的名称变更、删除或排序")
-            if any(not _is_plain(before.signatures[el]) for el in group["before"]):
-                problems.append(f"{key} 原名单含复杂结构，不能授权名称替换")
         elif not country and _country_names([before.texts[el] for el in group["before"]]) != _country_names([new_text]):
             problems.append(f"{key} 名单名称变化缺少国家表证明或第 03 步人工授权")
         if group["expected"] is not None:
@@ -333,8 +335,8 @@ def _check_edit(edit: Edit, old, new, old_text, new_text, allowed_titles, labels
     if kind == "countries":
         return ""  # checked per list in ``verify_format``
     if kind == "country-name":
-        return "" if _is_plain(old) and _is_plain(new) and edit.country and not edit.country["manual"] and valid_country_field_change(old_text, new_text, edit.country["language"]) else "国家全称变更不能由共用名称表从原字段证明"
-    if _structure_only(old) != _structure_only(new):
+        return "" if is_plain_field(old) and _is_plain(new) and edit.country and not edit.country["manual"] and valid_country_field_change(old_text, new_text, edit.country["language"]) else "国家全称变更不能由共用名称表从原字段证明"
+    if not (kind == "field" and is_plain_field(old) and _is_plain(new)) and _structure_only(old) != _structure_only(new):
         return "图片、域、链接或修订等内容结构发生变化"
     if kind == "title":
         old_word = _longest_prefix(old_text.strip(), allowed_titles)

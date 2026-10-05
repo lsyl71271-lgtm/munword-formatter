@@ -5,12 +5,13 @@
 import data from "../shared/country-names.json" with { type: "json" };
 import pinyin from "../shared/country-pinyin.json" with { type: "json" };
 import policy from "../shared/document-policy.json" with { type: "json" };
+import { normalizeCountryWhitespace, splitCountryList, trimCountry } from "./field-policy.ts";
 
 export type CountryLanguage = "zh" | "en";
 export type CountryStatus = "resolved" | "ambiguous" | "historical" | "entity" | "unknown";
 export type CountryResolution = { input: string; display: string; id: string | null; status: CountryStatus; sortName: string; changed: boolean };
 export const COUNTRY_DATA_DATE = data.checked_on;
-const nameKey = (value: string) => value.normalize("NFKC").replace(/[’‘]/g, "'").replace(/\s+/gu, " ").trim().toLowerCase();
+const nameKey = (value: string) => normalizeCountryWhitespace(value.normalize("NFKC").replace(/[’‘]/g, "'")).toLowerCase();
 const index = new Map<string, typeof data.records>();
 for (const record of data.records) for (const name of [...Object.values(record.formal), ...Object.values(record.source_formal), ...Object.values(record.short), ...record.aliases]) {
   const key = nameKey(name), existing = index.get(key) || [];
@@ -60,7 +61,7 @@ const compare = (a: string[], b: string[]) => {
 };
 
 export function planCountries(values: string[], language: CountryLanguage, preserveOrder = false) {
-  const resolutions = values.filter(value => value.trim()).map(value => resolveCountry(value, language));
+  const resolutions = values.filter(trimCountry).map(value => resolveCountry(value, language));
   const seen = new Set<string>();
   const kept = resolutions.filter(item => {
     if (!item.id) return true; // Unconfirmed entities must not silently vanish.
@@ -76,14 +77,14 @@ export function planCountries(values: string[], language: CountryLanguage, prese
 
 export function countryWarnings(values: string[], language: CountryLanguage): string[] {
   const reasons = { ambiguous: "称呼有歧义", historical: "历史国家或历史名称", entity: "组织、观察员或其他非会员国实体", unknown: "资料表未确认的名称" };
-  return [...new Set(values.filter(value => value.trim()).map(value => resolveCountry(value, language)).filter(item => item.status !== "resolved")
+  return [...new Set(values.filter(trimCountry).map(value => resolveCountry(value, language)).filter(item => item.status !== "resolved")
     .map(item => `“${item.input}”属于${reasons[item.status as keyof typeof reasons]}；已保留原输入，请在第 03 步人工确认。`))];
 }
 
 export function splitCountryNames(value: string): string[] {
-  if (!value.trim()) return [];
-  if (index.has(nameKey(value)) || review.has(nameKey(value))) return [value.trim()];
-  return value.split(/[,，、;；/|\n]+/u).map(item => item.trim()).filter(Boolean);
+  if (!trimCountry(value)) return [];
+  if (index.has(nameKey(value)) || review.has(nameKey(value))) return [trimCountry(value)];
+  return splitCountryList(value);
 }
 
 /** Parse ONLY known country-field labels, not arbitrary text before a colon. */

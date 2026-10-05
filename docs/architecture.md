@@ -1,4 +1,4 @@
-# Architecture navigation (v1.8.1)
+# Architecture navigation (v1.8.2)
 
 This is a navigation guide for reviewers, not a redesign or a promise of complete semantic recovery.
 
@@ -55,4 +55,4 @@ Auth (`app/chatgpt-auth.ts`), D1/Drizzle (`db/`, `drizzle/`, `examples/d1/`) and
 - A dated country snapshot is not a live guarantee. Unknown/ambiguous/historical/observer input still needs human review.
 - Main-thread browser processing and platform/font rendering remain separate future work; do not replace the formatter/introduce a Worker or new framework without resource, UI and rendering baselines.
 
-See [v1.8.1 verification and dependency decisions](release-1.8.1.md). Source lint and structural regression results do not prove identical Word/WPS pagination.
+See [v1.8.2 review integration](release-1.8.2.md) and [v1.8.1 verification and dependency decisions](release-1.8.1.md). Field separators and Unicode country whitespace are shared in `field-edit-policy.json`; offline build provenance is verified against `local-build-policy.json`. Source lint and structural regression results do not prove identical Word/WPS pagination.

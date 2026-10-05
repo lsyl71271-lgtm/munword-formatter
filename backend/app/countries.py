@@ -4,6 +4,7 @@ import json
 import re
 import unicodedata
 from pathlib import Path
+from .field_policy import normalize_country_whitespace, split_country_list, trim_country
 
 
 SHARED = Path(__file__).resolve().parents[2] / "shared"
@@ -13,7 +14,7 @@ _POLICY = json.loads((SHARED / "document-policy.json").read_text(encoding="utf-8
 
 
 def normalize_country(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip())
+    return normalize_country_whitespace(value)
 
 
 _PINYIN = json.loads((SHARED / "country-pinyin.json").read_text(encoding="utf-8"))
@@ -76,7 +77,7 @@ def sort_countries(countries: list[str], language: str, preserve_order: bool = F
 
 
 def plan_countries(values: list[str], language: str, preserve_order: bool = False) -> dict:
-    resolutions = [resolve_country(value, language) for value in values if value.strip()]
+    resolutions = [resolve_country(value, language) for value in values if trim_country(value)]
     seen, kept = set(), []
     for item in resolutions:
         if item["id"]:
@@ -92,16 +93,16 @@ def plan_countries(values: list[str], language: str, preserve_order: bool = Fals
 def country_warnings(values: list[str], language: str) -> list[str]:
     reasons = {"ambiguous": "称呼有歧义", "historical": "历史国家或历史名称", "entity": "组织、观察员或其他非会员国实体", "unknown": "资料表未确认的名称"}
     warnings = [f"“{item['input']}”属于{reasons[item['status']]}；已保留原输入，请在第 03 步人工确认。"
-                for item in map(lambda value: resolve_country(value, language), filter(str.strip, values)) if item["status"] != "resolved"]
+                for item in map(lambda value: resolve_country(value, language), filter(trim_country, values)) if item["status"] != "resolved"]
     return list(dict.fromkeys(warnings))
 
 
 def split_country_names(value: str) -> list[str]:
-    if not value.strip():
+    if not trim_country(value):
         return []
     if _name_key(value) in _INDEX or _name_key(value) in _REVIEW:
-        return [value.strip()]
-    return [item.strip() for item in re.split(r"[,，、;；/|\n]+", value) if item.strip()]
+        return [trim_country(value)]
+    return split_country_list(value)
 
 
 def country_field_value(text: str) -> str | None:

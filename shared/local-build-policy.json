@@ -1,0 +1,5 @@
+{
+  "sourceDirectories": ["app/", "local_web/", "shared/", "scripts/", "public/"],
+  "sourceFiles": ["VERSION", "package.json", "pnpm-lock.yaml", "postcss.config.mjs", "tsconfig.json", "vite.config.ts", "next.config.ts"],
+  "assets": ["public/studio-tools.js", "public/local-app.js", "public/local-styles.css", "public/licenses/react.txt", "public/licenses/react-dom.txt", "public/licenses/docx-preview.txt", "public/licenses/docxtemplater.txt", "public/licenses/pizzip.txt", "public/licenses/jszip.txt", "public/licenses/@xmldom-xmldom.txt", "public/licenses/fflate.txt"]
+}

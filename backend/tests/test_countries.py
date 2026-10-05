@@ -32,6 +32,51 @@ def process(content, kind="position-paper", **options):
 
 
 class CountryTests(unittest.TestCase):
+    def test_page_breaks_preserved_and_manual_bypass_rejected(self):
+        doc = Document(BytesIO(source(["立场文件", "委员会：联合国大会", "议题：合作", "国家：中国", "代表：甲", "正文不变。"])))
+        node = OxmlElement("w:br"); node.set(qn("w:type"), "page")
+        doc.paragraphs[3].add_run()._r.append(node)
+        stream = BytesIO(); doc.save(stream)
+        result, texts = process(stream.getvalue())
+        self.assertTrue(any(v.code == "content-protected" for v in result.validations))
+        self.assertIn("国家：中国", "".join(texts))
+        with self.assertRaisesRegex(Exception, "不能安全改写"):
+            process(stream.getvalue(), overrides={"country": "日本"})
+        before = content_guard.Snapshot.take(doc)
+        doc.paragraphs[3].clear(); doc.paragraphs[3].add_run("国家：中华人民共和国")
+        log = {doc.paragraphs[3]._p: content_guard.Edit("field", "country", "国家：中华人民共和国")}
+        self.assertTrue(content_guard.verify_format(before, doc, log, allowed_titles=(), labels=()))
+
+    def test_plain_field_separators_and_manual_edits(self):
+        for separator in ("tab", "br", "cr", "textWrapping"):
+            for language in ("zh", "en"):
+                prefix = ["工作文件1.1", "委员会：联合国大会", "议题：合作"] if language == "zh" else ["Working Paper 1.1", "Committee: General Assembly", "Topic: Cooperation"]
+                doc = Document(BytesIO(source(prefix)))
+                p = doc.add_paragraph("起草国：" if language == "zh" else "Sponsors: ")
+                for name in (["中国", "美国"] if language == "zh" else ["China", "USA"]):
+                    node = OxmlElement("w:br" if separator == "textWrapping" else "w:" + separator)
+                    if separator == "textWrapping":
+                        node.set(qn("w:type"), "textWrapping")
+                    p.add_run()._r.append(node)
+                    p.add_run(name)
+                doc.add_paragraph("第一条 要求继续合作。" if language == "zh" else "1. Calls for continued cooperation;")
+                stream = BytesIO(); doc.save(stream)
+                for overrides in ({}, {"sponsors": ["日本", "中国"] if language == "zh" else ["Japan", "China"]}):
+                    result, texts = process(stream.getvalue(), "working-paper", overrides=overrides)
+                    self.assertIn("中华人民共和国" if language == "zh" else "People's Republic of China", "".join(texts))
+                    self.assertFalse(any(v.code == "content-protected" for v in result.validations))
+                    self.assertEqual(process(result.content, "working-paper")[1], texts)
+
+    def test_missing_manual_fields_are_reported(self):
+        result, texts = process(source(["立场文件", "委员会：联合国大会", "国家：中国", "正文：这个内容必须保持不变。"]), overrides={"delegate": "新增代表", "topic": "新增议题"})
+        warnings = [v for v in result.validations if v.code == "manual-field-unwritten"]
+        self.assertEqual(len(warnings), 2)
+        self.assertTrue(all(v.status == "warning" and "未写入" in v.detail for v in warnings))
+        self.assertNotIn("新增", "".join(texts))
+        result, texts = process(source(["工作文件1.1", "委员会：联合国大会", "议题：合作", "第一条 正文不变。"]), "working-paper", overrides={"sponsors": ["中国"]})
+        self.assertTrue(any(v.code == "manual-field-unwritten" and "起草国" in v.detail for v in result.validations))
+        self.assertNotIn("中华人民共和国", "".join(texts))
+
     def test_all_records_and_formal_forms(self):
         self.assertEqual(len(COUNTRY_DATA["records"]), 197)
         self.assertEqual(sum(item["kind"] == "member-state" for item in COUNTRY_DATA["records"]), 193)

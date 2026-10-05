@@ -15,6 +15,7 @@ import { unzipSync } from "fflate";
 import { decodeXml } from "./docx-safety.ts";
 import { planCountries, splitCountryNames, validCountryFieldChange } from "./countries.ts";
 import type { CountryLanguage } from "./countries.ts";
+import { isPlainField } from "./field-policy.ts";
 
 export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const FORMATTING = new Set(["pPr", "rPr", "tblPr", "trPr", "tcPr", "tblGrid", "sectPr", "tblPrEx"]);
@@ -72,7 +73,7 @@ export function elementText(element: Element): string {
         if (["del", "moveFrom", "txbxContent", ...FORMATTING].includes(child.localName)) continue;
         if (child.localName === "t") { text += child.textContent || ""; continue; }
         if (child.localName === "tab") { text += "\t"; continue; }
-        if (child.localName === "br") { text += "\n"; continue; }
+        if (["br", "cr"].includes(child.localName)) { text += "\n"; continue; }
       }
       walk(child);
     }
@@ -198,9 +199,9 @@ function checkEdit(edit: Edit, oldSig: Token[], newSig: Token[], oldText: string
   if (kind === "ending") return key(withoutEnding(oldSig)) === key(withoutEnding(newSig)) ? "" : "句末以外的内容发生变化";
   if (kind === "marker") return key(normalizeMarker(oldSig)) === key(normalizeMarker(newSig)) ? "" : "编号以外的内容发生变化";
   if (kind === "countries") return "";
-  if (kind === "country-name") return isPlain(oldSig) && isPlain(newSig) && edit.country && !edit.country.manual
+  if (kind === "country-name") return isPlainField(oldSig) && isPlain(newSig) && edit.country && !edit.country.manual
     && validCountryFieldChange(oldText, newText, edit.country.language) ? "" : "国家全称变更不能由共用名称表从原字段证明";
-  if (key(structureOnly(oldSig)) !== key(structureOnly(newSig))) return "图片、域、链接或修订等内容结构发生变化";
+  if (!(kind === "field" && isPlainField(oldSig) && isPlain(newSig)) && key(structureOnly(oldSig)) !== key(structureOnly(newSig))) return "图片、域、链接或修订等内容结构发生变化";
   if (kind === "title") {
     const oldWord = longestPrefix(oldText.trim(), titles), newWord = longestPrefix(newText.trim(), titles);
     return oldWord !== null && newWord !== null && oldText.trim().slice(oldWord.length) === newText.trim().slice(newWord.length) ? "" : "标题编号或其他文字发生变化";
@@ -261,12 +262,12 @@ export function verifyFormat(before: Snapshot, document: Document, editLog: Map<
       if (changed && !isPlain(signature(el))) problems.push(`${name} 名单段落含有文字以外的内容`);
     }
     const newText = after.map(elementText).join("");
+    if (group.before.some(el => !isPlainField(before.signatures.get(el)!))) problems.push(`${name} 原名单含复杂结构，不能授权名称替换`);
     if (group.country && !group.country.manual) {
       const originals = countryNameList(group.before.map(el => before.texts.get(el)!));
       const actual = countryNameList([newText]);
       const permitted = planCountries(originals, group.country.language, group.country.preserveOrder).values;
       if (JSON.stringify(actual) !== JSON.stringify(permitted)) problems.push(`${name} 名单包含无法由原字段和共用国家表证明的名称变更、删除或排序`);
-      if (group.before.some(el => !isPlain(before.signatures.get(el)!))) problems.push(`${name} 原名单含复杂结构，不能授权名称替换`);
     } else if (!group.country && !sameCounts(countryNames(group.before.map(el => before.texts.get(el)!)), countryNames([newText]))) {
       problems.push(`${name} 名单名称变化缺少国家表证明或第 03 步人工授权`);
     }

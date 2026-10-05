@@ -32,9 +32,31 @@ for asset in public/local-app.js public/local-styles.css; do
   fi
 done
 
+# Reuse a supported installation; never silently create a new Python 3.9 venv.
+if [[ -x "$PYTHON_BIN" ]]; then
+  if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
+    echo "现有环境低于 Python 3.12，未修改现有安装。请使用 Python 3.12+ 重新创建虚拟环境后重试。" >&2
+    exit 1
+  fi
+  INSTALL_PYTHON="$PYTHON_BIN"
+else
+  INSTALL_PYTHON=""
+  for candidate in "${MUNWORD_PYTHON:-}" /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 /usr/local/bin/python3.13 /usr/local/bin/python3.12 python3.13 python3.12 python3; do
+    [[ -n "$candidate" ]] || continue
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' 2>/dev/null; then
+      INSTALL_PYTHON="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$INSTALL_PYTHON" ]]; then
+    echo "未找到 Python 3.12+。请先安装 Python 3.12 或 3.13，或设置 MUNWORD_PYTHON 指向该解释器；现有安装未改动。" >&2
+    exit 1
+  fi
+fi
+"$INSTALL_PYTHON" "$PROJECT_DIR/scripts/verify-local-build.py"
 mkdir -p "$HOME/Library/LaunchAgents" "$INSTALL_ROOT"
 if [[ ! -x "$PYTHON_BIN" ]]; then
-  /usr/bin/python3 -m venv "$INSTALL_ROOT/venv"
+  "$INSTALL_PYTHON" -m venv "$INSTALL_ROOT/venv"
 fi
 if [[ ! -f "$REQUIREMENTS_STAMP" ]] || [[ "$(cat "$REQUIREMENTS_STAMP")" != "$CURRENT_REQUIREMENTS_SHA" ]]; then
   "$PYTHON_BIN" -m pip install --disable-pip-version-check -r "$PROJECT_DIR/backend/requirements.txt"

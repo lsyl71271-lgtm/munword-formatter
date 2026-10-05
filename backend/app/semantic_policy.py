@@ -52,7 +52,7 @@ def _alternation(aliases) -> str:
 
 # ``label: value`` for one metadata key; group 1 is the value.
 _LABEL_VALUE_PATTERNS = {
-    key: re.compile(rf"^(?:{_alternation(aliases)})\s*[:：]\s*(.*)$", re.I)
+    key: re.compile(rf"^(?:{_alternation(aliases)})\s*[:：]\s*([\s\S]*)$", re.I)
     for key, aliases in META_ALIASES.items()
 }
 # Label prefix only, per key (iteration order follows the policy file).

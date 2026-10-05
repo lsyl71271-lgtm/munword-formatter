@@ -19,9 +19,7 @@ export function generateFromTemplate(type: BrowserDocumentType, input: TemplateI
   if (!["zh", "en"].includes(input.language)) throw new Error("请选择有效语言。");
   if (Object.values(input).some(value => typeof value !== "string" || value.length > 100_000 || !validXmlText(value))) throw new Error("输入过长或包含无效字符。");
   if (!input.body.trim()) throw new Error("请先填写正文；程序不会替你编写内容。");
-  const labels = input.language === "zh"
-    ? { committee: "委员会", topic: "议题", country: "国家/席位", delegate: "代表", sponsors: "起草国", signatories: "附议国" }
-    : { committee: "Committee", topic: "Topic", country: "Country", delegate: "Delegate", sponsors: "Sponsors", signatories: "Signatories" };
+  const labels = Object.fromEntries(Object.entries(policy.metadata).map(([key, value]) => [key, value.output[input.language]])) as Record<keyof typeof policy.metadata, string>;
   const keys: Array<keyof typeof labels> = ["committee"];
   if (type !== "draft-directive") keys.push("topic");
   if (type === "position-paper") keys.push("country", "delegate");
