@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import plistlib
 import shutil
 import subprocess
@@ -14,9 +15,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleaseTests(unittest.TestCase):
-    def test_mac_app_reports_the_release_version(self):
+    def test_every_current_version_declaration_matches_VERSION(self):
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
         info = plistlib.loads((ROOT / "PKUNMUN 2026 文件排版系统.app" / "Contents" / "Info.plist").read_bytes())
-        self.assertEqual(info["CFBundleShortVersionString"], (ROOT / "VERSION").read_text(encoding="utf-8").strip())
+        self.assertEqual(info["CFBundleShortVersionString"], version)
+        self.assertEqual(json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"], version)
+        for page in ("app/page.tsx", "local_web/index.html"):
+            with self.subTest(page=page):
+                self.assertIn(f"v{version}</span></div>", (ROOT / page).read_text(encoding="utf-8"))
+        self.assertIn(f"当前版本 **v{version}**", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertTrue((ROOT / "docs" / f"release-{version}.md").is_file())
 
     def test_release_package_refuses_uncommitted_changes(self):
         with tempfile.TemporaryDirectory() as directory:

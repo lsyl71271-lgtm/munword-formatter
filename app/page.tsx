@@ -365,7 +365,7 @@ export default function Home() {
         )}
       </section>
 
-      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v1.7.1</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
+      <footer><div><b>PKUNMUN 2026</b><span>文件自动排版系统 · v1.7.2</span></div><p>依据 PKUNMUN 2026 学标示例排版；保留正文、图片、引用与可编辑编号。</p></footer>
     </main>
   );
 }

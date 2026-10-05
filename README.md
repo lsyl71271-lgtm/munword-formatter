@@ -1,6 +1,6 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.7.1**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建和本机批处理。学标规则与现有界面保持不变，本次合并独立审查的通用修复。本源码仓库不是包含运行时的免安装程序。
+当前版本 **v1.7.2**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建和本机批处理。学标规则与现有界面保持不变，本次合并独立审查的通用修复。本源码仓库不是包含运行时的免安装程序。
 
 ## 功能与运行模式
 
@@ -83,7 +83,7 @@ py -3.12 -m venv .venv
 
 ```sh
 pnpm build:local-tools
-.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.7.1-desktop-source.zip
+.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.7.2-desktop-source.zip
 ```
 
 包内包含校验清单及依赖许可证，不包含 `.env`、部署账号配置、缓存或用户文档。仍需 Python 和首次安装联网下载依赖，不是无需运行时的 EXE。
@@ -97,7 +97,7 @@ docker compose -f deploy/visual-qa.compose.yaml up -d
 
 无 Docker 时改用 `--renderer /path/to/render_docx.py`。可设置 `MUNWORD_PDF_RASTERIZER` 指向 `pdftocairo` 或 `pdftoppm`；macOS 的部分 Poppler 后端会丢失 CJK 字形，建议 Cairo。`--reference-pages` 只接受同正文、同字体、同渲染环境的基线，失败返回非零状态。报告记录字号、斜体与像素差异，不代表所有学标要求自动验收完成。此服务不部署到公网网站，不自动上传文件。
 
-第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明见 [v1.7.1](docs/release-1.7.1.md)，此前工具集成见 [v1.7.0](docs/release-1.7.0.md)。
+第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明见 [v1.7.2](docs/release-1.7.2.md)，此前版本见 [v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
 
 根目录的 macOS/Windows 一键安装入口仍保留。它们会安装依赖、复制程序并配置持续运行的本机服务，不应由云端审查 agent 当作普通测试运行。macOS `.app` 中的启动器是 Bash 源码，生成的代码签名已排除；重新分发签名安装包是独立工作，不属于本源码仓库的可复现性承诺。
 

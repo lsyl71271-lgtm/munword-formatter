@@ -1,6 +1,6 @@
 {
   "name": "pkunmun-2026-docx-formatter",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "engines": {
