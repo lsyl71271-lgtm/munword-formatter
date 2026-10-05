@@ -1,0 +1,32 @@
+{
+  "source": "PKUNMUN2026 学术标准手册，第42–45页",
+  "scope": "draft-resolution operative lists only; preserve ordinal values, list identities, starts and restarts",
+  "chineseDigits": "零一二三四五六七八九",
+  "zodiac": "子丑寅卯辰巳午未申酉戌亥",
+  "stems": "甲乙丙丁戊己庚辛壬癸",
+  "formats": {
+    "zh": [
+      {"family":"article", "fmt":"chineseCounting", "text":"第%n条"},
+      {"family":"chinese", "fmt":"chineseCounting", "text":"（%n）"},
+      {"family":"zodiac", "fmt":"ideographZodiac", "text":"（%n）"},
+      {"family":"stem", "fmt":"ideographTraditional", "text":"（%n）"}
+    ],
+    "en": [
+      {"family":"decimal", "fmt":"decimal", "text":"%n."},
+      {"family":"letter", "fmt":"lowerLetter", "text":"(%n)"},
+      {"family":"roman", "fmt":"lowerRoman", "text":"(%n)"},
+      {"family":"roman-dot", "fmt":"lowerRoman", "text":"%n."}
+    ]
+  },
+  "nativeFamilies": {
+    "chineseCounting":"chinese", "chineseCountingThousand":"chinese", "decimal":"decimal",
+    "lowerLetter":"letter", "upperLetter":"letter", "lowerRoman":"roman", "upperRoman":"roman",
+    "ideographZodiac":"zodiac", "ideographTraditional":"stem"
+  },
+  "defaultLevels": {"article":0,"decimal":0,"paren-decimal":1,"letter":1,"chinese":1,"zodiac":2,"stem":3,"roman":2,"roman-dot":3},
+  "notes": [
+    "编号样式不等于结构。用父项引出关系和同系列兄弟项识别层级，不能仅按可见字形固定层级。",
+    "无父项、同系列出现在冲突层级、多个列表共享标识而需要不同样式、复杂结构、超过四级时保留并提示。",
+    "只转换编号表示法；不补缺号，不修正猜测的错字，不排序条款，不修改正文交叉引用。"
+  ]
+}

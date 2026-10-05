@@ -202,6 +202,8 @@ class BaseFormatter(HandbookPassMixin):
         self._east_asia = handbook.east_asian_font(self.document_type, model.language)
         self._protected_warnings = []
         self._country_changes = []
+        self._dr_numbering_rules = []
+        self._dr_numbering_notes = []
         # The model's paragraph indices refer to this list.  The final pass
         # adds and removes empty paragraphs, so later lookups go through it.
         self._source_paragraphs = list(body_paragraphs(document))
@@ -233,7 +235,8 @@ class BaseFormatter(HandbookPassMixin):
         content_out = normalize_font_parts(
             output.getvalue(), model.language, east_asia=self._east_asia, note_size_pt=handbook.NOTE_SIZE_PT
         )
-        package_problems = content_guard.verify_package(content, content_out)
+        package_problems = content_guard.verify_package(content, content_out, self._dr_numbering_rules)
+        validations.extend(ValidationItem('dr-numbering','决议草案编号体系核查','warning',note) for note in self._dr_numbering_notes)
         validations.append(ValidationItem(
             "package",
             "链接目标、关系与嵌入资源逐项保留",
@@ -935,6 +938,7 @@ class BaseFormatter(HandbookPassMixin):
 _EDIT_NOTES = {
     "title": "按学标统一标题用词", "label-drop": "按范例删除委员会/议题标签", "label-restore": "补齐页首标签",
     "countries": "国家名单按顺序排列并按国名断行留签字空行", "ending": "按学标统一条款末尾标点", "marker": "统一立场文件建议编号写法",
+    "dr-marker": "按学标纠正决议草案编号表示法（保留序号数值）",
     "blank": "按范例调整空行", "empty-line": "按范例调整空行",
     "country-name": "按共用 UNTERM 名称表展开明确国家字段的全称",
 }

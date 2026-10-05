@@ -16,6 +16,8 @@ import { decodeXml } from "./docx-safety.ts";
 import { planCountries, splitCountryNames, validCountryFieldChange } from "./countries.ts";
 import type { CountryLanguage } from "./countries.ts";
 import { isPlainField } from "./field-policy.ts";
+import { applyNativeRules, validMarkerChange } from "./dr-numbering.ts";
+import type { NativeRule } from "./dr-numbering.ts";
 
 export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const FORMATTING = new Set(["pPr", "rPr", "tblPr", "trPr", "tcPr", "tblGrid", "sectPr", "tblPrEx"]);
@@ -198,6 +200,7 @@ function checkEdit(edit: Edit, oldSig: Token[], newSig: Token[], oldText: string
   const kind = edit.kind;
   if (kind === "ending") return key(withoutEnding(oldSig)) === key(withoutEnding(newSig)) ? "" : "句末以外的内容发生变化";
   if (kind === "marker") return key(normalizeMarker(oldSig)) === key(normalizeMarker(newSig)) ? "" : "编号以外的内容发生变化";
+  if (kind === "dr-marker") return isPlain(oldSig) && isPlain(newSig) && validMarkerChange(oldText,newText) ? "" : "决议编号转换改变了条号数值、正文或受保护结构";
   if (kind === "countries") return "";
   if (kind === "country-name") return isPlainField(oldSig) && isPlain(newSig) && edit.country && !edit.country.manual
     && validCountryFieldChange(oldText, newText, edit.country.language) ? "" : "国家全称变更不能由共用名称表从原字段证明";
@@ -371,7 +374,7 @@ function packageRelations(parts: Record<string, Uint8Array>) {
 }
 
 /** Every relationship keeps its target, type and mode; every resource keeps its bytes. */
-export function verifyPackage(before: Uint8Array, after: Uint8Array): string[] {
+export function verifyPackage(before: Uint8Array, after: Uint8Array, nativeRules: NativeRule[] = []): string[] {
   const oldParts = unzipSync(before), newParts = unzipSync(after);
   const oldRels = packageRelations(oldParts), newRels = packageRelations(newParts);
   const problems: string[] = [];
@@ -383,7 +386,9 @@ export function verifyPackage(before: Uint8Array, after: Uint8Array): string[] {
       if (!sameBytes(bytes, newParts[name])) problems.push(`资源 ${name} 的内容发生变化`);
     } else if (/^word\/(?:numbering|footnotes|endnotes|comments|header\d+|footer\d+)\.xml$/.test(name)) {
       const parse = (data: Uint8Array) => new DOMParser().parseFromString(decodeXml(data), "application/xml").documentElement;
-      if (!newParts[name] || key(signature(parse(bytes))) !== key(signature(parse(newParts[name])))) problems.push(`部件 ${name} 的内容或编号语义发生变化`);
+      const expected = parse(bytes);
+      if (name === "word/numbering.xml" && nativeRules.length) applyNativeRules(expected.ownerDocument,nativeRules);
+      if (!newParts[name] || key(signature(expected)) !== key(signature(parse(newParts[name])))) problems.push(`部件 ${name} 的内容或编号语义发生变化`);
     }
   }
   return problems;

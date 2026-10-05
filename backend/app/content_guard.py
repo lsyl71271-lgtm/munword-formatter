@@ -26,6 +26,7 @@ and every embedded resource byte for byte.
 from __future__ import annotations
 
 from .field_policy import is_plain_field
+from .dr_numbering import apply_native_rules, valid_marker_change
 
 import difflib
 import hashlib
@@ -332,6 +333,8 @@ def _check_edit(edit: Edit, old, new, old_text, new_text, allowed_titles, labels
         return "" if _without_ending(old) == _without_ending(new) else "句末以外的内容发生变化"
     if kind == "marker":
         return "" if _normalize_marker(old) == _normalize_marker(new) else "编号以外的内容发生变化"
+    if kind == 'dr-marker':
+        return '' if _is_plain(old) and _is_plain(new) and valid_marker_change(old_text,new_text) else '决议编号转换改变了条号数值、正文或受保护结构'
     if kind == "countries":
         return ""  # checked per list in ``verify_format``
     if kind == "country-name":
@@ -536,11 +539,16 @@ def _package(content: bytes):
     return relationships, resources, protected
 
 
-def verify_package(before: bytes, after: bytes) -> list:
+def verify_package(before: bytes, after: bytes, native_rules=()) -> list:
     """Every relationship keeps its target, type and mode; every resource keeps its bytes."""
 
     old_rels, old_resources, old_protected = _package(before)
     new_rels, new_resources, new_protected = _package(after)
+    if native_rules and 'word/numbering.xml' in old_protected:
+        with zipfile.ZipFile(BytesIO(before)) as archive:
+            expected = etree.fromstring(archive.read('word/numbering.xml'), _PARSER)
+        apply_native_rules(expected, native_rules)
+        old_protected['word/numbering.xml'] = signature(expected)
     problems = []
     for part, rels in old_rels.items():
         for identifier, attributes in rels.items():

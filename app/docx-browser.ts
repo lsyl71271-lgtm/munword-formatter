@@ -7,6 +7,8 @@ import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
 import { COUNTRY_DATA_DATE, countryWarnings, planCountries, resolveCountry, splitCountryNames } from "./countries.ts";
 import { InvalidRequestError, validateReview } from "./request-validation.ts";
+import { applyNativeRules, markerOf, markerText, nativeFamily, nativeLevel, nativeRangeReason, planHierarchy } from "./dr-numbering.ts";
+import type { NativeRule, NumberedItem } from "./dr-numbering.ts";
 
 export type BrowserDocumentType =
   | "position-paper"
@@ -967,7 +969,7 @@ function clearParagraph(paragraph: Element) {
   for (const child of Array.from(paragraph.childNodes)) if (child.nodeType !== 1 || (child as Element).localName !== "pPr") paragraph.removeChild(child);
 }
 
-type Block = { p: Element; role: string; level: number; group: string; operative: boolean };
+type Block = { p: Element; role: string; level: number; group: string; operative: boolean; uncertainNumbering?: boolean };
 type Ctx = {
   document: Document; parts: Record<string, Uint8Array>; model: BrowserModel; recognized: BrowserModel; original: BrowserModel;
   type: BrowserDocumentType; language: "zh" | "en"; spec: Spec; eastAsia: string;
@@ -1266,6 +1268,10 @@ function numberingIndex(parts: Record<string, Uint8Array>) {
     if (!abstract) continue;
     for (const lvl of elements(abstract, "lvl")) levels.set(`${wordAttribute(num, "numId")}:${wordAttribute(lvl, "ilvl")}`, {
       fmt: wordAttribute(directChild(lvl, "numFmt"), "val") || "", text: wordAttribute(directChild(lvl, "lvlText"), "val") || "" });
+  }
+  for (const num of elements(numbering,"num")) for (const override of elements(num,"lvlOverride")) {
+    const lvl = directChild(override,"lvl");
+    if (lvl) levels.set(`${wordAttribute(num,"numId")}:${wordAttribute(override,"ilvl")}`, {fmt:wordAttribute(directChild(lvl,"numFmt"),"val")||"",text:wordAttribute(directChild(lvl,"lvlText"),"val")||""});
   }
   return levels;
 }
@@ -1569,6 +1575,7 @@ function punctuation(ctx: Ctx, blocks: Block[]) {
   for (const block of blocks) if (block.role === "subject" || block.role === "preamble") setEnding(ctx, block.p, zh ? "，" : ",");
   const clauses = blocks.filter(b => b.operative && (b.role === "item" || b.role === "prose") && !BARE_ARTICLE.test(paragraphText(b.p)));
   clauses.forEach((block, position) => {
+    if (block.uncertainNumbering) return;
     const following = clauses[position + 1];
     const ending = following && following.level > block.level ? (zh ? "：" : ":") : !following ? (zh ? "。" : ".") : (zh ? "；" : ";");
     setEnding(ctx, block.p, ending);
@@ -1835,7 +1842,66 @@ const EDIT_NOTES: Record<string, string> = {
   countries: "国家名单按顺序排列并按国名断行留签字空行", ending: "按学标统一条款末尾标点", marker: "统一立场文件建议编号写法",
   blank: "按范例调整空行", "empty-line": "按范例调整空行",
   "country-name": "按共用 UNTERM 名称表展开明确国家字段的全称",
+  "dr-marker": "按学标纠正决议草案编号表示法（保留序号数值）",
 };
+
+/** Resolve ranks before punctuation; rewrite markers afterwards so both edits
+ * are checked together. Native changes are independently reconstructed by
+ * the package guard, never exempted from it. */
+function resolutionNumbering(ctx: Ctx, blocks: Block[]) {
+  if (ctx.type !== "draft-resolution") return {apply:()=>{},rules:[] as NativeRule[],notes:[] as string[]};
+  const xml = ctx.parts["word/numbering.xml"] ? new DOMParser().parseFromString(decodeXml(ctx.parts["word/numbering.xml"]),"application/xml") : null;
+  const items: NumberedItem[] = blocks.map(b=>{
+    const text=paragraphText(b.p), active=activeNumbering(b.p);
+    const marker=b.role==="item" ? markerOf(text, ctx.language==="en" && b.level>=2) : null;
+    const family=marker?.family || (b.role==="item" && active && xml ? nativeFamily(xml,active.numId,active.ilvl) : "");
+    return {text,family,value:marker?.value ?? null,level:b.level,key:active ? `${active.numId}:${active.ilvl}` : undefined,top:family==="article" || family==="decimal" && !/^[（(]/.test(text.trim()) && b.level===0};
+  });
+  const plan=planHierarchy(items,ctx.language), rules:NativeRule[]=[], notes:string[]=[], rewrites:{b:Block;marker:NonNullable<ReturnType<typeof markerOf>>;level:number}[]=[];
+  const uncertain=(index:number)=>{
+    blocks[index].uncertainNumbering=true;
+    blocks[index].level=items[index].level;
+    if (index && /[：:]$/.test(items[index-1].text.trim())) blocks[index-1].uncertainNumbering=true;
+  };
+  const candidates=new Map<string,{rule:NativeRule;blocks:Block[];levels:Set<number>}>();
+  blocks.forEach((b,index)=>{
+    const item=items[index], decision=plan[index], active=activeNumbering(b.p);
+    if (!item.family) { if (b.role==="item") {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号类型无法可靠识别，保留原样，请人工确认。`);} return; }
+    if (decision.reason) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：${decision.reason}，保留原编号，请人工确认。`);return;}
+    const marker=markerOf(item.text,ctx.language==="en" && b.level>=2);
+    if (marker && active) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：同时含手打与原生编号，保留原样，请人工确认。`);return;}
+    b.level=decision.level;
+    if (marker) {
+      const target=markerText(ctx.language,b.level,marker.value);
+      if (target && item.text.slice(0,marker.length).trim()!==target) {
+        if (signature(b.p).some(t=>t[0]!=="t") || UNIFORM_DAMAGE.some(tag=>elements(b.p,"r").some(r=>runHas(r,tag)))) {uncertain(index);protect(ctx,b.p,"编号段含链接、域、修订、隐藏或其他复杂结构，未自动转换编号");return;}
+        rewrites.push({b,marker,level:b.level});
+      }
+    } else if (active && xml) {
+      const key=`${active.numId}:${active.ilvl}`, existing=candidates.get(key);
+      if (existing) {existing.blocks.push(b);existing.levels.add(b.level);}
+      else candidates.set(key,{rule:{id:active.numId,ilvl:active.ilvl,level:b.level,language:ctx.language},blocks:[b],levels:new Set([b.level])});
+    }
+  });
+  for (const [key,candidate] of candidates) {
+    const outside=elements(ctx.document,"p").some(p=>{const a=activeNumbering(p);return a && `${a.numId}:${a.ilvl}`===key && !candidate.blocks.some(b=>b.p===p);});
+    const external=Object.entries(ctx.parts).some(([name,bytes])=>/^word\/(?:header\d+|footer\d+|footnotes|endnotes)\.xml$/.test(name) && elements(new DOMParser().parseFromString(decodeXml(bytes),"application/xml"),"p").some(p=>{const a=activeNumbering(p);return a && `${a.numId}:${a.ilvl}`===key;}));
+    const unsafe=candidate.blocks.some(b=>signature(b.p).some(t=>t[0]!=="t") || UNIFORM_DAMAGE.some(tag=>elements(b.p,"r").some(r=>runHas(r,tag))));
+    if (outside || external || unsafe || candidate.levels.size!==1) {candidate.blocks.forEach(b=>uncertain(blocks.indexOf(b)));notes.push(`原生列表 ${key} 的用途或层级存在冲突/受保护内容，未转换，请人工确认。`);continue;}
+    const lvl=nativeLevel(xml!,candidate.rule.id,candidate.rule.ilvl);
+    if (!lvl || !directChild(lvl,"numFmt") || elements(lvl,"isLgl").length || (wordAttribute(directChild(lvl,"lvlText"),"val")||"").match(/%[1-9]/g)?.join("")!==`%${Number(candidate.rule.ilvl)+1}`) {candidate.blocks.forEach(b=>uncertain(blocks.indexOf(b)));notes.push(`原生列表 ${key} 使用复合编号或定义不完整，未转换，请人工确认。`);continue;}
+    const rangeReason=nativeRangeReason(xml!,candidate.rule,candidate.blocks.length);
+    if (rangeReason) {candidate.blocks.forEach(b=>uncertain(blocks.indexOf(b)));notes.push(`原生列表 ${key}：${rangeReason}，保留原编号，请人工确认。`);continue;}
+    rules.push(candidate.rule);
+  }
+  return {rules,notes,apply:()=>{
+    for (const {b,marker,level} of rewrites) {
+      const old=paragraphText(b.p), next=markerText(ctx.language,level,marker.value)! + old.slice(marker.length);
+      if (rewriteLogged(ctx,b.p,next,"dr-marker")) notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号“${old.slice(0,marker.length).trim()}” → “${markerText(ctx.language,level,marker.value)}”，序号数值不变。`);
+    }
+    if (xml && rules.length) {const before=new XMLSerializer().serializeToString(xml);applyNativeRules(xml,rules);ctx.parts["word/numbering.xml"]=encoder.encode(new XMLSerializer().serializeToString(xml));if(before!==new XMLSerializer().serializeToString(xml)) notes.push("按父子层级纠正原生决议编号样式；保留列表标识、序号、起始值与重启规则。");}
+  }};
+}
 
 /** User-facing record of every logged edit (same wording as the Python engine). */
 function editSummary(editLog: Map<Element, Edit>, repaired: boolean, split: boolean): string[] {
@@ -1912,8 +1978,10 @@ function formatInner(
     positionPaperMarkers(ctx, paragraphs, lastLabel);
   }
   let blocks = handbookBlocks(ctx, paragraphs, numbering);
+  const drNumbering = resolutionNumbering(ctx,blocks);
   headerText(ctx, blocks);
   if (ctx.normalizePunctuation && ctx.spec.clausePunctuation) punctuation(ctx, blocks);
+  drNumbering.apply();
   for (const block of blocks) { geometry(ctx, block); emphasis(ctx, block); }
   if (ctx.spec.signatureLines) blocks = signatureLines(ctx, blocks);
   numberingMarkers(ctx);
@@ -1925,7 +1993,7 @@ function formatInner(
   const problems = [...verifyFormat(snapshot, document, ctx.editLog, TITLE_WORDS(ctx.type), [...POLICY.metadata.committee.aliases, ...POLICY.metadata.topic.aliases]), ...verifyMarks(marks, document)];
   parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
   const output = zipSync(parts, { level: 6 });
-  const packageProblems = verifyPackage(originalBytes, output);
+  const packageProblems = verifyPackage(originalBytes, output, drNumbering.rules);
   const sizeIssues = runSizeIssues(ctx);
   const validations: BrowserValidation[] = [
     { code: "docx_package", label: "DOCX 包结构", status: "pass", detail: "必要的 Word 部件完整。" },
@@ -1935,6 +2003,7 @@ function formatInner(
     { code: "browser_private", label: "本地处理", status: "pass", detail: "文件在当前浏览器中处理，未发送到外部排版服务。" },
   ];
   const edits = editSummary(ctx.editLog, repaired, split);
+  for (const detail of drNumbering.notes) validations.push({code:"dr-numbering",label:"决议草案编号体系核查",status:"warning",detail});
   for (const key of ctx.changed) {
     const written = [...ctx.editLog.values()].some(edit => edit.key === key && (edit.kind === "field" || edit.country?.manual));
     const label = key === "title" ? "标题" : POLICY.metadata[key as MetadataKey].output.zh;

@@ -232,6 +232,9 @@ def _numbering_semantic_level(paragraph) -> int | None:
             item for item in abstract.findall(qn("w:lvl"))
             if item.get(qn("w:ilvl")) == source_level
         )
+        override = next((item for item in num.findall(qn('w:lvlOverride')) if item.get(qn('w:ilvl')) == source_level), None)
+        if override is not None and override.find(qn('w:lvl')) is not None:
+            level = override.find(qn('w:lvl'))
         marker = level.find(qn("w:lvlText")).get(qn("w:val"))
         number_format = level.find(qn("w:numFmt"))
         number_format = number_format.get(qn("w:val")) if number_format is not None else ""
@@ -382,7 +385,7 @@ class DocxParser:
             previous_paren_digit = bool(PAREN_DIGIT_RE.match(text))
             previous_level = level
             model.max_numbering_level = max(model.max_numbering_level, level + 1)
-            if document_type == "draft-resolution" and committee_subject_seen and first_top_level is not None:
+            if document_type == "draft-resolution" and first_top_level is not None:
                 if index < first_top_level:
                     kind, confidence = "preambulatory", 0.98
                     level = 0

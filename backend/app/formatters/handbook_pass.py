@@ -38,6 +38,8 @@ from ..parser import (
 from ..semantic_policy import OPERATIVE_EN, OPERATIVE_ZH, PREAMBLE_EN, PREAMBLE_ZH, label_value, title_parts
 from . import handbook
 from .handbook import HandbookSpec, spec_for
+from ..dr_numbering import apply_native_rules, marker_of, marker_text, native_family, native_level, native_range_reason, plan_hierarchy
+from ..content_guard import signature
 
 HEADER_ROLES = ("title", "committee", "topic", "country", "delegate", "sponsors", "signatories", "header")
 BODY_ROLES = ("preamble", "item", "prose", "reference")
@@ -96,6 +98,7 @@ class Block:
     level: int = 0
     group: str = ""
     operative: bool = False
+    uncertain_numbering: bool = False
 
     @property
     def attached(self) -> bool:
@@ -112,9 +115,11 @@ class HandbookPassMixin:
     def _apply_handbook(self, document: DocumentObject, model: IntermediateDocument, normalize_punctuation: bool) -> None:
         spec = spec_for(self.document_type, model.language)
         blocks = self._handbook_blocks(model, spec)
+        apply_numbering = self._resolution_numbering(document, blocks, model.language)
         self._handbook_header_text(blocks, spec, model)
         if normalize_punctuation and spec.clause_punctuation:
             self._handbook_punctuation(blocks, model.language)
+        apply_numbering()
         for block in blocks:
             self._handbook_geometry(block, spec, model.language)
             self._handbook_emphasis(block, spec, model.language)
@@ -123,6 +128,123 @@ class HandbookPassMixin:
         self._handbook_numbering_markers(document, model.language)
         self._numbering_continuity(blocks, model)
         self._normalize_blank_lines(document, blocks, spec, model.language)
+
+    def _resolution_numbering(self, document, blocks, language):
+        if self.document_type != 'draft-resolution':
+            return lambda: None
+        try:
+            xml = document.part.part_related_by(RT.NUMBERING).element
+        except KeyError:
+            xml = None
+        def membership(p):
+            identifier = active_num_id(p)
+            if identifier is None:
+                return None
+            ilvl = p._p.pPr.numPr.ilvl
+            return identifier, str(ilvl.val if ilvl is not None else 0)
+        items = []
+        for block in blocks:
+            text = visible_text(block.paragraph)
+            active = membership(block.paragraph)
+            marker = marker_of(text, language == 'en' and block.level >= 2) if block.role == 'item' else None
+            family = marker['family'] if marker else native_family(xml,*active) if block.role == 'item' and active and xml is not None else ''
+            items.append(dict(text=text,family=family,value=marker['value'] if marker else None,level=block.level,
+                              key=':'.join(active) if active else None,top=family == 'article' or family == 'decimal' and not text.strip().startswith(('（','(')) and block.level == 0))
+        plan = plan_hierarchy(items,language)
+        def uncertain(index):
+            blocks[index].uncertain_numbering = True
+            blocks[index].level = items[index]['level']
+            if index and items[index-1]['text'].rstrip().endswith(('：',':')):
+                blocks[index-1].uncertain_numbering = True
+        rewrites, candidates = [], {}
+        notes = self._dr_numbering_notes
+        def unsafe(p):
+            return any(t[0] != 't' for t in signature(p._p)) or carries_semantic_marks(p)
+        for index, (block, item, decision) in enumerate(zip(blocks,items,plan)):
+            paragraph = block.paragraph
+            active = membership(paragraph)
+            number = self._source_number(paragraph)
+            if not item['family']:
+                if block.role == 'item':
+                    uncertain(index)
+                    notes.append(f'第 {number} 段：编号类型无法可靠识别，保留原样，请人工确认。')
+                continue
+            if decision['reason']:
+                uncertain(index)
+                notes.append(f"第 {number} 段：{decision['reason']}，保留原编号，请人工确认。")
+                continue
+            marker = marker_of(item['text'], language == 'en' and block.level >= 2)
+            if marker and active:
+                uncertain(index)
+                notes.append(f'第 {number} 段：同时含手打与原生编号，保留原样，请人工确认。')
+                continue
+            block.level = decision['level']
+            if marker:
+                target = marker_text(language,block.level,marker['value'])
+                if target and item['text'][:marker['length']].strip() != target:
+                    if unsafe(paragraph):
+                        uncertain(index)
+                        self._protect(paragraph,'编号段含链接、域、修订、隐藏或其他复杂结构，未自动转换编号')
+                        continue
+                    rewrites.append((block,marker))
+            elif active and xml is not None:
+                key = ':'.join(active)
+                candidate = candidates.setdefault(key,dict(rule=dict(id=active[0],ilvl=active[1],level=block.level,language=language),blocks=[],levels=set()))
+                candidate['blocks'].append(block)
+                candidate['levels'].add(block.level)
+        for key, candidate in candidates.items():
+            selected = {b.paragraph._p for b in candidate['blocks']}
+            outside = any(membership(p) and ':'.join(membership(p)) == key and p._p not in selected for p in self._source_paragraphs)
+            # Headers, notes, tables, revisions and text boxes must not inherit
+            # an instance override intended only for operative clauses.
+            for part in document.part.package.parts:
+                if not re.fullmatch(r'/word/(?:document|header\d+|footer\d+|footnotes|endnotes)\.xml',str(part.partname)):
+                    continue
+                root = getattr(part,'element',None)
+                if root is None:
+                    from lxml import etree
+                    root = etree.fromstring(part.blob,etree.XMLParser(resolve_entities=False,no_network=True))
+                for p in root.iter(qn('w:p')):
+                    if p in selected:
+                        continue
+                    num = p.find('./'+qn('w:pPr')+'/'+qn('w:numPr'))
+                    if num is not None and native_family(xml, candidate['rule']['id'],candidate['rule']['ilvl']):
+                        identifier, level = num.find(qn('w:numId')), num.find(qn('w:ilvl'))
+                        if identifier is not None and (identifier.get(qn('w:val'))+':'+(level.get(qn('w:val')) if level is not None else '0')) == key:
+                            outside = True
+            if outside or len(candidate['levels']) != 1 or any(unsafe(b.paragraph) for b in candidate['blocks']):
+                for b in candidate['blocks']:
+                    uncertain(blocks.index(b))
+                notes.append(f'原生列表 {key} 的用途或层级存在冲突/受保护内容，未转换，请人工确认。')
+                continue
+            rule = candidate['rule']
+            lvl = native_level(xml,rule['id'],rule['ilvl'])
+            if lvl is None or lvl.find(qn('w:numFmt')) is None or lvl.find(qn('w:lvlText')) is None or lvl.find(qn('w:isLgl')) is not None or ''.join(re.findall(r'%[1-9]',lvl.find(qn('w:lvlText')).get(qn('w:val'),''))) != '%'+str(int(rule['ilvl'])+1):
+                for b in candidate['blocks']:
+                    uncertain(blocks.index(b))
+                notes.append(f'原生列表 {key} 使用复合编号或定义不完整，未转换，请人工确认。')
+                continue
+            range_reason = native_range_reason(xml,rule,len(candidate['blocks']))
+            if range_reason:
+                for b in candidate['blocks']:
+                    uncertain(blocks.index(b))
+                notes.append(f'原生列表 {key}：{range_reason}，保留原编号，请人工确认。')
+                continue
+            self._dr_numbering_rules.append(rule)
+        def apply():
+            for block, marker in rewrites:
+                p = block.paragraph
+                old = visible_text(p)
+                target = marker_text(language,block.level,marker['value'])
+                if self._rewrite_logged(p,target+old[marker['length']:],language,'dr-marker'):
+                    notes.append(f"第 {self._source_number(p)} 段：编号“{old[:marker['length']].strip()}” → “{target}”，序号数值不变。")
+            if xml is not None and self._dr_numbering_rules:
+                from lxml import etree
+                before = etree.tostring(xml)
+                apply_native_rules(xml,self._dr_numbering_rules)
+                if before != etree.tostring(xml):
+                    notes.append('按父子层级纠正原生决议编号样式；保留列表标识、序号、起始值与重启规则。')
+        return apply
 
     # ----------------------------------------------------------- header text
 
@@ -561,6 +683,8 @@ class HandbookPassMixin:
             and not _BARE_ARTICLE_RE.fullmatch(visible_text(block.paragraph))
         ]
         for position, block in enumerate(clauses):
+            if block.uncertain_numbering:
+                continue
             following = clauses[position + 1] if position + 1 < len(clauses) else None
             if following is not None and following.level > block.level:
                 ending = "：" if zh else ":"
