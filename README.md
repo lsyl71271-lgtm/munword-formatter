@@ -47,6 +47,21 @@ pnpm start
 
 默认不需要 `.env`。若需要连接本机 API，可复制 `.env.example` 到 `.env.local`，设置 `NEXT_PUBLIC_API_URL` 后重启/重建网页。`NEXT_PUBLIC_*` 会进入客户端，绝不能填写秘密。本机后端现有跨域白名单保留原兼容行为；任意开发端口不一定被允许，最简后端使用方式是直接打开端口 8000 的本机页面。
 
+### Cloudflare 静态托管（GitHub 自动构建）
+
+复用 `app/page.tsx`、共享样式和浏览器排版引擎，不需要 `.openai/hosting.json`、Python、账号登录或 API Key：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build:static
+pnpm test:static
+pnpm deploy:cloudflare
+```
+
+在 Cloudflare 现有 `munword-formatter` Worker 的 Git 构建设置中，生产分支选 `main`，根目录 `/`，构建命令 `pnpm build:static`，部署命令 `pnpm deploy:cloudflare`。预览分支如启用，可用 `pnpm exec wrangler versions upload --config wrangler.static.json`。保持免费计划；GitHub 授权与 Cloudflare 发布凭据仅由平台管理，不写进仓库。配置参考 [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/)。
+
+`static-site/` 是自动生成且忽略的发布目录，只包含页面、共用 JS/CSS、图标、许可证和无敏感信息的版本摘要。构建采用资源白名单，不公开源码目录、Python API、原稿、`.env` 或原托管配置。原稿解析、生成、模板和预览仍在浏览器运行；Cloudflare 只提供网页资源。原 Sites 构建与本机兼容 API 不受影响。网站可独立于制作人的电脑运行，但大陆不同运营商对 `workers.dev` 的连通性需实际测试，不能保证所有网络可达。
+
 ### Python 本机引擎
 
 macOS/Linux：

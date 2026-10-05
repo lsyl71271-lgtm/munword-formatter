@@ -72,6 +72,8 @@ yarn-error.log*
 next-env.d.ts
 worker-configuration.d.ts
 /dist/
+/static-site/
+/.static-site-*/
 /.wrangler/
 /outputs/
 /output/

@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "munword-formatter",
+  "compatibility_date": "2026-10-05",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./static-site"
+  }
+}
