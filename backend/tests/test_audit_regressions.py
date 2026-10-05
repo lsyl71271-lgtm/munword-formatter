@@ -428,6 +428,42 @@ class PackageTests(unittest.TestCase):
             validate_docx_package(content)
 
 
+def emphasized(paragraph_element, tag: str) -> str:
+    """Text of a paragraph's own runs that carry a switched-on property."""
+
+    out = []
+    for run_ in paragraph_element.iter(q("r")):
+        owner = run_.getparent()
+        while owner is not None and owner.tag != q("p"):
+            owner = owner.getparent()
+        if owner is paragraph_element and switched_on(run_, tag):
+            out.append("".join(t.text or "" for t in run_.findall(q("t"))))
+    return "".join(out)
+
+
+class ClauseWordTests(unittest.TestCase):
+    def test_added_chinese_clause_words_take_the_preamble_underline_and_the_operative_italics(self):
+        source = lines([
+            "决议草案", "委员会：安全理事会", "议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，",
+            "深切关切网络攻击日益增多，", "深表关切关键基础设施面临的风险，", "进一步回顾其以往的相关决议，",
+            "第一条 促请各国加强信息共享；", "第二条 进一步呼吁各方开展能力建设；", "第三条 进一步回顾其所作的承诺。",
+        ])
+        result = format_("draft-resolution", package(source))
+        self.assertEqual(errors(result), [])
+        root = body(result.content)
+        for word in ("深切关切", "深表关切", "进一步回顾"):
+            with self.subTest(word=word):
+                p = paragraph(root, word)
+                self.assertEqual(emphasized(p, "u"), word)
+                self.assertEqual(emphasized(p, "i"), "")
+        # A word in both lists follows the clause's place: "进一步回顾" in an article is operative.
+        for start, word in (("第一条", "促请"), ("第二条", "进一步呼吁"), ("第三条", "进一步回顾")):
+            with self.subTest(word=word):
+                p = paragraph(root, start)
+                self.assertEqual(emphasized(p, "i"), word)
+                self.assertEqual(emphasized(p, "u"), "")
+
+
 NON_BMP_HIDDEN = "（备注😀𠀀）"
 NON_BMP_STRUCK = "删去𠀁词😀"
 

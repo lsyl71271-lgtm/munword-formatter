@@ -351,6 +351,32 @@ test("the guard reports hidden text that became visible and a strike that was re
   assert.equal(verifyMarks(before, xml).length, 2);
 });
 
+// ---------------------------------------------------------------- clause words (shared policy prefixes)
+
+/** Text of a paragraph's own runs that carry a switched-on property. */
+const emphasized = (p, tag) => nodes(p, "r").filter(r => ownRun(r, p) && switchedOn(r, tag)).map(r => [...r.children].filter(c => c.localName === "t").map(t => t.textContent).join("")).join("");
+const ownRun = (r, p) => { let a = r.parentElement; while (a && a.localName !== "p") a = a.parentElement; return a === p; };
+
+test("added Chinese clause words take the preamble underline and the operative italics", async () => {
+  const source = ["决议草案", "委员会：安全理事会", "议题：网络安全", "起草国：德国、法国", "附议国：美国、中国", "安全理事会，",
+    "深切关切网络攻击日益增多，", "深表关切关键基础设施面临的风险，", "进一步回顾其以往的相关决议，",
+    "第一条 促请各国加强信息共享；", "第二条 进一步呼吁各方开展能力建设；", "第三条 进一步回顾其所作的承诺。"].map(t => line(t)).join("");
+  const result = format(archive(source), "draft-resolution");
+  assert.deepEqual(errors(result), []);
+  const xml = await documentOf(result);
+  for (const word of ["深切关切", "深表关切", "进一步回顾"]) {
+    const p = paragraph(xml, word);
+    assert.equal(emphasized(p, "u"), word, word);
+    assert.equal(emphasized(p, "i"), "", word);
+  }
+  // A word in both lists follows the clause's place: "进一步回顾" in an article is operative.
+  for (const [start, word] of [["第一条", "促请"], ["第二条", "进一步呼吁"], ["第三条", "进一步回顾"]]) {
+    const p = paragraph(xml, start);
+    assert.equal(emphasized(p, "i"), word, word);
+    assert.equal(emphasized(p, "u"), "", word);
+  }
+});
+
 // ---------------------------------------------------------------- hidden / struck characters outside the BMP
 
 const NON_BMP_HIDDEN = "（备注😀𠀀）", NON_BMP_STRUCK = "删去𠀁词😀";
