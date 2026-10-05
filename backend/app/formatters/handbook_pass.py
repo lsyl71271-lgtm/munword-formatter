@@ -38,7 +38,7 @@ from ..parser import (
 from ..semantic_policy import OPERATIVE_EN, OPERATIVE_ZH, PREAMBLE_EN, PREAMBLE_ZH, label_value, title_parts
 from . import handbook
 from .handbook import HandbookSpec, spec_for
-from ..dr_numbering import apply_native_rules, marker_of, marker_text, native_family, native_level, native_range_reason, plan_hierarchy
+from ..numbering import apply_native_rules, marker_of, marker_text, native_family, native_level, native_range_reason, plan_hierarchy, numbering_profile, valid_marker_change, sequence_issues
 from ..content_guard import signature
 
 HEADER_ROLES = ("title", "committee", "topic", "country", "delegate", "sponsors", "signatories", "header")
@@ -58,38 +58,6 @@ _KEEP_WITH_NEXT_ROLES = ("title", "committee", "topic", "country", "delegate", "
 # Copy-paste damage a list marker must not keep.
 # A hidden list number stays hidden (Word hides heading numbers this way).
 _MARKER_NOISE_TAGS = ("strike", "dstrike", "shd", "highlight", "position", "spacing", "w", "caps", "smallCaps", "color")
-
-_CN_DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
-
-
-def _chinese_number(text: str) -> int | None:
-    """一 … 九十九 (and 百) as an integer."""
-
-    if text == "百":
-        return 100
-    if "十" in text:
-        tens, _, ones = text.partition("十")
-        value = (_CN_DIGITS.get(tens, 0) if tens else 1) * 10 + (_CN_DIGITS.get(ones, 0) if ones else 0)
-        return value if (not tens or tens in _CN_DIGITS) and (not ones or ones in _CN_DIGITS) else None
-    return _CN_DIGITS.get(text)
-
-
-def _series(alphabet: str):
-    return lambda value: alphabet.index(value) + 1 if value in alphabet else None
-
-
-# Typed clause-number series checked for gaps, most specific first.
-_SEQUENCES = (
-    ("article", re.compile(r"^\s*(?:第)([一二三四五六七八九十百]+)条"), _chinese_number),
-    ("zodiac", re.compile(r"^\s*[（(]([子丑寅卯辰巳午未申酉戌亥])[）)]"), _series("子丑寅卯辰巳午未申酉戌亥")),
-    ("stem", re.compile(r"^\s*[（(]([甲乙丙丁戊己庚辛壬癸])[）)]"), _series("甲乙丙丁戊己庚辛壬癸")),
-    ("paren-chinese", re.compile(r"^\s*[（(]([一二三四五六七八九十]+)[）)]"), _chinese_number),
-    ("paren-decimal", re.compile(r"^\s*[（(](\d{1,2})[）)]"), int),
-    ("decimal", re.compile(r"^\s*(\d{1,3})[.、．)）]"), int),
-    ("paren-letter", re.compile(r"^\s*[（(]([a-hj-uw-z])[）)]"), _series("abcdefghjklmnopqrstuwxyz")),
-    ("letter", re.compile(r"^\s*([a-hj-uw-z])[.)）]"), _series("abcdefghjklmnopqrstuwxyz")),
-)
-
 
 @dataclass
 class Block:
@@ -115,7 +83,7 @@ class HandbookPassMixin:
     def _apply_handbook(self, document: DocumentObject, model: IntermediateDocument, normalize_punctuation: bool) -> None:
         spec = spec_for(self.document_type, model.language)
         blocks = self._handbook_blocks(model, spec)
-        apply_numbering = self._resolution_numbering(document, blocks, model.language)
+        apply_numbering = self._document_numbering(document, blocks, model.language)
         self._handbook_header_text(blocks, spec, model)
         if normalize_punctuation and spec.clause_punctuation:
             self._handbook_punctuation(blocks, model.language)
@@ -129,9 +97,10 @@ class HandbookPassMixin:
         self._numbering_continuity(blocks, model)
         self._normalize_blank_lines(document, blocks, spec, model.language)
 
-    def _resolution_numbering(self, document, blocks, language):
-        if self.document_type != 'draft-resolution':
-            return lambda: None
+    def _document_numbering(self, document, blocks, language):
+        profile = numbering_profile(self.document_type)
+        resolution = self.document_type == 'draft-resolution'
+        section_pattern = re.compile(profile['sectionPattern']) if profile.get('sectionPattern') else None
         try:
             xml = document.part.part_related_by(RT.NUMBERING).element
         except KeyError:
@@ -146,18 +115,22 @@ class HandbookPassMixin:
         for block in blocks:
             text = visible_text(block.paragraph)
             active = membership(block.paragraph)
-            marker = marker_of(text, language == 'en' and block.level >= 2) if block.role == 'item' else None
-            family = marker['family'] if marker else native_family(xml,*active) if block.role == 'item' and active and xml is not None else ''
+            section = bool(section_pattern and section_pattern.match(text) and block.role != 'item' and not active)
+            eligible = block.role in ('item','prose') and not section
+            marker = marker_of(text, block.level >= 2) if eligible else None
+            family = marker['family'] if marker else native_family(xml,*active) if eligible and active and xml is not None else ''
             items.append(dict(text=text,family=family,value=marker['value'] if marker else None,level=block.level,
-                              key=':'.join(active) if active else None,top=family == 'article' or family == 'decimal' and not text.strip().startswith(('（','(')) and block.level == 0))
-        plan = plan_hierarchy(items,language)
+                              key=':'.join(active) if active else None,top=family == 'article' or family == 'decimal' and not text.strip().startswith(('（','(')) and block.level == 0,
+                              reset=not resolution and (block.role == 'part' or section)))
+        plan = plan_hierarchy(items,language,self.document_type)
+        self._numbering_checked = sum(bool(item['family']) for item in items)
         def uncertain(index):
             blocks[index].uncertain_numbering = True
             blocks[index].level = items[index]['level']
             if index and items[index-1]['text'].rstrip().endswith(('：',':')):
                 blocks[index-1].uncertain_numbering = True
         rewrites, candidates = [], {}
-        notes = self._dr_numbering_notes
+        notes = self._numbering_notes
         def unsafe(p):
             return any(t[0] != 't' for t in signature(p._p)) or carries_semantic_marks(p)
         for index, (block, item, decision) in enumerate(zip(blocks,items,plan)):
@@ -165,7 +138,7 @@ class HandbookPassMixin:
             active = membership(paragraph)
             number = self._source_number(paragraph)
             if not item['family']:
-                if block.role == 'item':
+                if block.role == 'item' or block.role in ('item','prose') and active:
                     uncertain(index)
                     notes.append(f'第 {number} 段：编号类型无法可靠识别，保留原样，请人工确认。')
                 continue
@@ -173,15 +146,28 @@ class HandbookPassMixin:
                 uncertain(index)
                 notes.append(f"第 {number} 段：{decision['reason']}，保留原编号，请人工确认。")
                 continue
-            marker = marker_of(item['text'], language == 'en' and block.level >= 2)
+            marker = marker_of(item['text'], block.level >= 2)
             if marker and active:
                 uncertain(index)
                 notes.append(f'第 {number} 段：同时含手打与原生编号，保留原样，请人工确认。')
                 continue
+            if 'amendment' in self.document_type and decision['level'] > 0:
+                uncertain(index)
+                notes.append(f'第 {number} 段：修正案嵌套内容可能是待新增或引用条款，编号归属目标草案，保留原样，请人工确认。')
+                continue
             block.level = decision['level']
+            block.role = 'item'
             if marker:
-                target = marker_text(language,block.level,marker['value'])
+                target = marker_text(language,block.level,marker['value'],self.document_type)
+                if not target:
+                    uncertain(index)
+                    notes.append(f'第 {number} 段：该序号超出当前文种可安全表示的范围，保留原样，请人工确认。')
+                    continue
                 if target and item['text'][:marker['length']].strip() != target:
+                    if not valid_marker_change(item['text'],target+item['text'][marker['length']:]):
+                        uncertain(index)
+                        notes.append(f'第 {number} 段：编号字母与罗马数字的序号解释有歧义，保留原样，请人工确认。')
+                        continue
                     if unsafe(paragraph):
                         uncertain(index)
                         self._protect(paragraph,'编号段含链接、域、修订、隐藏或其他复杂结构，未自动转换编号')
@@ -189,7 +175,7 @@ class HandbookPassMixin:
                     rewrites.append((block,marker))
             elif active and xml is not None:
                 key = ':'.join(active)
-                candidate = candidates.setdefault(key,dict(rule=dict(id=active[0],ilvl=active[1],level=block.level,language=language),blocks=[],levels=set()))
+                candidate = candidates.setdefault(key,dict(rule=dict(id=active[0],ilvl=active[1],level=block.level,language=language,type=self.document_type),blocks=[],levels=set()))
                 candidate['blocks'].append(block)
                 candidate['levels'].add(block.level)
         for key, candidate in candidates.items():
@@ -230,20 +216,20 @@ class HandbookPassMixin:
                     uncertain(blocks.index(b))
                 notes.append(f'原生列表 {key}：{range_reason}，保留原编号，请人工确认。')
                 continue
-            self._dr_numbering_rules.append(rule)
+            self._numbering_rules.append(rule)
         def apply():
             for block, marker in rewrites:
                 p = block.paragraph
                 old = visible_text(p)
-                target = marker_text(language,block.level,marker['value'])
-                if self._rewrite_logged(p,target+old[marker['length']:],language,'dr-marker'):
+                target = marker_text(language,block.level,marker['value'],self.document_type)
+                if self._rewrite_logged(p,target+old[marker['length']:],language,'dr-marker' if resolution else 'list-marker'):
                     notes.append(f"第 {self._source_number(p)} 段：编号“{old[:marker['length']].strip()}” → “{target}”，序号数值不变。")
-            if xml is not None and self._dr_numbering_rules:
+            if xml is not None and self._numbering_rules:
                 from lxml import etree
                 before = etree.tostring(xml)
-                apply_native_rules(xml,self._dr_numbering_rules)
+                apply_native_rules(xml,self._numbering_rules)
                 if before != etree.tostring(xml):
-                    notes.append('按父子层级纠正原生决议编号样式；保留列表标识、序号、起始值与重启规则。')
+                    notes.append('按当前文种及父子层级纠正原生编号样式；保留列表标识、序号、起始值与重启规则。')
         return apply
 
     # ----------------------------------------------------------- header text
@@ -294,25 +280,19 @@ class HandbookPassMixin:
         followed by "（五）").
         """
 
-        last: dict[str, int] = {}
-        findings: list[str] = []
+        profile = numbering_profile(self.document_type)
+        section = re.compile(profile['sectionPattern']) if profile.get('sectionPattern') else None
+        items = []
         for block in blocks:
-            if block.role not in ("item", "prose", "preamble") or not block.attached:
-                continue
             text = visible_text(block.paragraph)
-            for name, pattern, value_of in _SEQUENCES:
-                match = pattern.match(text)
-                if not match:
-                    continue
-                value = value_of(match.group(1))
-                if value is None:
-                    break
-                previous = last.get(name)
-                if previous is not None and value != 1 and value != previous + 1:
-                    number = self._source_number(block.paragraph)
-                    findings.append(f"第 {number} 段“{match.group(0).strip()}”（前一个为第 {previous} 项）")
-                last[name] = value
-                break
+            marker = marker_of(text,block.level >= 2) if block.role == 'item' and block.attached else None
+            items.append(dict(text=text,family=marker['family'] if marker else '',value=marker['value'] if marker else None,level=block.level,
+                reset=self.document_type != 'draft-resolution' and (block.role == 'part' or block.role != 'item' and bool(section and section.match(text)))))
+        findings = []
+        for finding in sequence_issues(items):
+            index = finding['index']
+            marker = marker_of(items[index]['text'],blocks[index].level >= 2)
+            findings.append(f"第 {self._source_number(blocks[index].paragraph)} 段“{items[index]['text'][:marker['length']].strip()}”（前一个为第 {finding['previous']} 项）")
         if findings:
             model.warnings.append("编号不连续，已保留原文、未自动改号，请确认：" + "；".join(findings[:8]) + ("……" if len(findings) > 8 else ""))
 

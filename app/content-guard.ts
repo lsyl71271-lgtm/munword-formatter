@@ -16,8 +16,8 @@ import { decodeXml } from "./docx-safety.ts";
 import { planCountries, splitCountryNames, validCountryFieldChange } from "./countries.ts";
 import type { CountryLanguage } from "./countries.ts";
 import { isPlainField } from "./field-policy.ts";
-import { applyNativeRules, validMarkerChange } from "./dr-numbering.ts";
-import type { NativeRule } from "./dr-numbering.ts";
+import { applyNativeRules, validMarkerChange } from "./numbering.ts";
+import type { NativeRule } from "./numbering.ts";
 
 export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const FORMATTING = new Set(["pPr", "rPr", "tblPr", "trPr", "tcPr", "tblGrid", "sectPr", "tblPrEx"]);
@@ -200,7 +200,7 @@ function checkEdit(edit: Edit, oldSig: Token[], newSig: Token[], oldText: string
   const kind = edit.kind;
   if (kind === "ending") return key(withoutEnding(oldSig)) === key(withoutEnding(newSig)) ? "" : "句末以外的内容发生变化";
   if (kind === "marker") return key(normalizeMarker(oldSig)) === key(normalizeMarker(newSig)) ? "" : "编号以外的内容发生变化";
-  if (kind === "dr-marker") return isPlain(oldSig) && isPlain(newSig) && validMarkerChange(oldText,newText) ? "" : "决议编号转换改变了条号数值、正文或受保护结构";
+  if (kind === "dr-marker" || kind === "list-marker") return isPlain(oldSig) && isPlain(newSig) && validMarkerChange(oldText,newText) ? "" : "编号转换改变了条号数值、正文或受保护结构";
   if (kind === "countries") return "";
   if (kind === "country-name") return isPlainField(oldSig) && isPlain(newSig) && edit.country && !edit.country.manual
     && validCountryFieldChange(oldText, newText, edit.country.language) ? "" : "国家全称变更不能由共用名称表从原字段证明";

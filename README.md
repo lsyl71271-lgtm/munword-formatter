@@ -1,12 +1,12 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.8.3**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
+当前版本 **v1.8.4**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
 
 ## 功能与运行模式
 
 - 六种文书：立场文件、工作文件、指令草案、决议草案、友好修正案、非友好修正案；支持中英文。
 - 四步流程：选择类型、上传原稿、确认识别、生成下载。第三步人工修改入口保留，自动回归不代填第三步。
-- 根据共享规则处理字体、字号、强调、缩进、页边距、名单与条款；保留编号起始值、跳号、重启和交叉引用。决议草案按学标检查编号体系，依据明确父子关系纠正表示法与层级；不能确定时保留并提示人工确认。
+- 根据共享规则处理字体、字号、强调、缩进、页边距、名单与条款；六种文种按各自策略检查编号体系，依据明确父子关系纠正表示法与层级；保留编号起始值、跳号、重启和交叉引用，不能确定时保留并提示人工确认。
 - ZIP 安全检查、20 MB 上传限制、内容/编号/修订/关系/媒体等保护；无法安全处理时拒绝输出。
 - 浏览器版默认在客户端处理原稿，不依赖 Python、账号或 API Key；也可选用本机 FastAPI 引擎。
 - 本机服务提供同一网页的离线构建，不再维护独立界面/排版流程；默认只监听 `127.0.0.1:8000`，不能作为无认证公网 API 部署。
@@ -118,7 +118,7 @@ python3 scripts/import-country-names.py --unterm-export /path/to/unterm-countrie
 ```sh
 pnpm build:local-tools
 .venv/bin/python scripts/verify-local-build.py
-.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.8.3-desktop-source.zip
+.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.8.4-desktop-source.zip
 ```
 
 包内包含校验清单及依赖许可证，不包含 `.env`、部署账号配置、缓存或用户文档。仍需 Python 和首次安装联网下载依赖，不是无需运行时的 EXE。
@@ -132,7 +132,9 @@ docker compose -f deploy/visual-qa.compose.yaml up -d
 
 无 Docker 时改用 `--renderer /path/to/render_docx.py`。可设置 `MUNWORD_PDF_RASTERIZER` 指向 `pdftocairo` 或 `pdftoppm`；macOS 的部分 Poppler 后端会丢失 CJK 字形，建议 Cairo。`--reference-pages` 只接受同正文、同字体、同渲染环境的基线，失败返回非零状态。报告记录字号、斜体与像素差异，不代表所有学标要求自动验收完成。此服务不部署到公网网站，不自动上传文件。
 
-第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明与核查记录见 [v1.8.3](docs/release-1.8.3.md)，此前版本见 [v1.8.2](docs/release-1.8.2.md)、[v1.8.1](docs/release-1.8.1.md)、[v1.8.0](docs/release-1.8.0.md)、[v1.7.2](docs/release-1.7.2.md)、[v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
+第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明与核查记录见 [v1.8.4](docs/release-1.8.4.md)，此前版本见 [v1.8.3](docs/release-1.8.3.md)、[v1.8.2](docs/release-1.8.2.md)、[v1.8.1](docs/release-1.8.1.md)、[v1.8.0](docs/release-1.8.0.md)、[v1.7.2](docs/release-1.7.2.md)、[v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
+
+六种文种全部执行各自的编号策略检查，策略集中在 `shared/numbering-profiles.json`。只转换能够确认的编号表示法，保留序号数值、跳号、重启和原生列表归属；编号冲突、受保护内容和不可表示的范围提示人工确认。立场文件的章节编号、工作文件的 PART、参考文献及修正案引用/嵌套的目标条款不被套用 DR 格式。样例未覆盖的更深层工作文件/立场文件列表属于项目统一延伸，不能称为手册明文要求。
 
 根目录的 macOS/Windows 一键安装入口仍保留。它们会安装依赖、复制程序并配置持续运行的本机服务，不应由云端审查 agent 当作普通测试运行。macOS `.app` 中的启动器是 Bash 源码，生成的代码签名已排除；重新分发签名安装包是独立工作，不属于本源码仓库的可复现性承诺。
 

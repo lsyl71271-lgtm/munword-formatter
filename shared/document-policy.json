@@ -82,7 +82,7 @@
    }
   },
   "numbering": {
-   "policy": "保留来源编号数值与列表归属，不补缺号、不猜错字；决议草案按 shared/dr-numbering-policy.json 核查父子层级并纠正明确的编号表示法。原生编号通过实例覆盖转换显示样式，保持 numId、ilvl、起始值和重启；不确定、复合编号或受保护内容保留并提示。其他文种沿用原编号。"
+   "policy": "全部六种文种按 shared/numbering-profiles.json 检查各自编号规则，DR 基础表示法见 shared/dr-numbering-policy.json。保留来源编号数值与列表归属，不补缺号、不猜错字；仅纠正明确的编号表示法及有证据的父子层级。章节、参考文献、正文交叉引用及修正案嵌套的目标草案内容不自动换号；PART 和新引出列表允许重新起号。原生编号通过实例覆盖转换显示样式，保持 numId、ilvl、起始值和重启；不确定、复合编号或受保护内容保留并提示。"
   },
   "types": {
    "position-paper": {

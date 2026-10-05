@@ -1,6 +1,6 @@
 {
   "name": "pkunmun-2026-docx-formatter",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "engines": {
@@ -15,7 +15,7 @@
     "deploy:cloudflare": "wrangler deploy --config wrangler.static.json",
     "test:static": "node --test tests/static-deployment.test.mjs",
     "test": "pnpm test:unit && pnpm build && node --test tests/rendered-html.test.mjs",
-    "test:unit": "node --test tests/docx-safety.test.mjs tests/engine-parity.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs tests/studio-tools.test.mjs tests/review-regressions.test.mjs tests/local-web-race.test.mjs tests/audit-regressions.test.mjs tests/countries.test.mjs tests/final-audit.test.mjs tests/template-race.test.mjs tests/dr-numbering.test.mjs",
+    "test:unit": "node --test tests/docx-safety.test.mjs tests/engine-parity.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs tests/studio-tools.test.mjs tests/review-regressions.test.mjs tests/local-web-race.test.mjs tests/audit-regressions.test.mjs tests/countries.test.mjs tests/final-audit.test.mjs tests/template-race.test.mjs tests/dr-numbering.test.mjs tests/all-numbering.test.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test:docx-browser": "node --test tests/docx-safety.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",

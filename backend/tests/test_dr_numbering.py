@@ -9,7 +9,7 @@ from docx.oxml.ns import qn
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'backend'))
 from app.pipelines import PIPELINES
-from app.dr_numbering import valid_marker_change, plan_hierarchy, marker_of, marker_text, native_range_reason
+from app.numbering import valid_marker_change, plan_hierarchy, marker_of, marker_text, native_range_reason
 from app.content_guard import verify_package
 
 def source(lines):

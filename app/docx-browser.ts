@@ -7,8 +7,8 @@ import policyData from "../shared/document-policy.json" with { type: "json" };
 import regionNames from "../shared/region-names-en.json" with { type: "json" };
 import { COUNTRY_DATA_DATE, countryWarnings, planCountries, resolveCountry, splitCountryNames } from "./countries.ts";
 import { InvalidRequestError, validateReview } from "./request-validation.ts";
-import { applyNativeRules, markerOf, markerText, nativeFamily, nativeLevel, nativeRangeReason, planHierarchy } from "./dr-numbering.ts";
-import type { NativeRule, NumberedItem } from "./dr-numbering.ts";
+import { applyNativeRules, markerOf, markerText, nativeFamily, nativeLevel, nativeRangeReason, planHierarchy, numberingProfile, validMarkerChange, sequenceIssues } from "./numbering.ts";
+import type { NativeRule, NumberedItem } from "./numbering.ts";
 
 export type BrowserDocumentType =
   | "position-paper"
@@ -738,28 +738,6 @@ const RUN_NOISE = ["outline", "shadow", "emboss", "imprint", "highlight", "shd",
 const MARKER_NOISE = ["strike", "dstrike", "shd", "highlight", "position", "spacing", "w", "caps", "smallCaps", "color"];
 const RPR_ORDER = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline", "shadow", "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"];
 const PPR_ORDER = ["pStyle", "keepNext", "keepLines", "pageBreakBefore", "framePr", "widowControl", "numPr", "suppressLineNumbers", "pBdr", "shd", "tabs", "suppressAutoHyphens", "kinsoku", "wordWrap", "overflowPunct", "topLinePunct", "autoSpaceDE", "autoSpaceDN", "bidi", "adjustRightInd", "snapToGrid", "spacing", "ind", "contextualSpacing", "mirrorIndents", "suppressOverlap", "jc", "textDirection", "textAlignment", "textboxTightWrap", "outlineLvl", "divId", "cnfStyle", "rPr", "sectPr", "pPrChange"];
-const SEQUENCES: [RegExp, (value: string) => number | null][] = [
-  [/^\s*第([一二三四五六七八九十百]+)条/, chineseNumber],
-  [/^\s*[（(]([子丑寅卯辰巳午未申酉戌亥])[）)]/, v => "子丑寅卯辰巳午未申酉戌亥".indexOf(v) + 1 || null],
-  [/^\s*[（(]([甲乙丙丁戊己庚辛壬癸])[）)]/, v => "甲乙丙丁戊己庚辛壬癸".indexOf(v) + 1 || null],
-  [/^\s*[（(]([一二三四五六七八九十]+)[）)]/, chineseNumber],
-  [/^\s*[（(](\d{1,2})[）)]/, v => Number(v)],
-  [/^\s*(\d{1,3})[.、．)）]/, v => Number(v)],
-  [/^\s*[（(]([a-hj-uw-z])[）)]/, v => "abcdefghjklmnopqrstuwxyz".indexOf(v.toLowerCase()) + 1 || null],
-  [/^\s*([a-hj-uw-z])[.)）]/, v => "abcdefghjklmnopqrstuwxyz".indexOf(v.toLowerCase()) + 1 || null],
-];
-const SEQUENCE_NAMES = ["article", "zodiac", "stem", "paren-chinese", "decimal", "paren-letter", "letter"];
-
-function chineseNumber(text: string): number | null {
-  const digits: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
-  if (text === "百") return 100;
-  if (text.includes("十")) {
-    const [tens, ones] = text.split("十");
-    if ((tens && !(tens in digits)) || (ones && !(ones in digits))) return null;
-    return (tens ? digits[tens] : 1) * 10 + (ones ? digits[ones] : 0);
-  }
-  return digits[text] ?? null;
-}
 
 /** ``w:<tag>`` child of a property element, created in its schema position. */
 function orderedChild(parent: Element, tag: string, order: string[]): Element {
@@ -1747,22 +1725,15 @@ function numberingMarkers(ctx: Ctx) {
 }
 
 function continuity(ctx: Ctx, blocks: Block[]) {
-  const last = new Map<string, number>();
-  const findings: string[] = [];
-  for (const block of blocks) {
-    if (!["item", "prose", "preamble"].includes(block.role) || !attached(block)) continue;
-    const text = paragraphText(block.p);
-    for (const [index, [pattern, valueOf]] of SEQUENCES.entries()) {
-      const match = text.match(pattern);
-      if (!match) continue;
-      const value = valueOf(match[1]);
-      if (value === null) break;
-      const previous = last.get(SEQUENCE_NAMES[index]);
-      if (previous !== undefined && value !== 1 && value !== previous + 1) findings.push(`第 ${sourceNumber(ctx, block.p)} 段“${match[0].trim()}”（前一个为第 ${previous} 项）`);
-      last.set(SEQUENCE_NAMES[index], value);
-      break;
-    }
-  }
+  const profile=numberingProfile(ctx.type), section="sectionPattern" in profile ? new RegExp(profile.sectionPattern) : null;
+  const items=blocks.map(b=>{
+    const text=paragraphText(b.p), marker=b.role==="item" && attached(b) ? markerOf(text,b.level>=2) : null;
+    return {text,family:marker?.family || "",value:marker?.value ?? null,level:b.level,reset:ctx.type!=="draft-resolution" && (b.role==="part" || b.role!=="item" && Boolean(section?.test(text)))};
+  });
+  const findings=sequenceIssues(items).map(f=>{
+    const marker=markerOf(items[f.index].text,blocks[f.index].level>=2)!;
+    return `第 ${sourceNumber(ctx,blocks[f.index].p)} 段“${items[f.index].text.slice(0,marker.length).trim()}”（前一个为第 ${f.previous} 项）`;
+  });
   if (findings.length) ctx.warnings.push(`编号不连续，已保留原文、未自动改号，请确认：${findings.slice(0, 8).join("；")}${findings.length > 8 ? "……" : ""}`);
 }
 
@@ -1843,21 +1814,25 @@ const EDIT_NOTES: Record<string, string> = {
   blank: "按范例调整空行", "empty-line": "按范例调整空行",
   "country-name": "按共用 UNTERM 名称表展开明确国家字段的全称",
   "dr-marker": "按学标纠正决议草案编号表示法（保留序号数值）",
+  "list-marker": "按当前文种统一编号表示法（保留序号数值）",
 };
 
 /** Resolve ranks before punctuation; rewrite markers afterwards so both edits
  * are checked together. Native changes are independently reconstructed by
  * the package guard, never exempted from it. */
-function resolutionNumbering(ctx: Ctx, blocks: Block[]) {
-  if (ctx.type !== "draft-resolution") return {apply:()=>{},rules:[] as NativeRule[],notes:[] as string[]};
+function documentNumbering(ctx: Ctx, blocks: Block[]) {
+  const profile=numberingProfile(ctx.type), resolution=ctx.type==="draft-resolution";
+  const sectionPattern="sectionPattern" in profile ? new RegExp(profile.sectionPattern) : null;
   const xml = ctx.parts["word/numbering.xml"] ? new DOMParser().parseFromString(decodeXml(ctx.parts["word/numbering.xml"]),"application/xml") : null;
   const items: NumberedItem[] = blocks.map(b=>{
     const text=paragraphText(b.p), active=activeNumbering(b.p);
-    const marker=b.role==="item" ? markerOf(text, ctx.language==="en" && b.level>=2) : null;
-    const family=marker?.family || (b.role==="item" && active && xml ? nativeFamily(xml,active.numId,active.ilvl) : "");
-    return {text,family,value:marker?.value ?? null,level:b.level,key:active ? `${active.numId}:${active.ilvl}` : undefined,top:family==="article" || family==="decimal" && !/^[（(]/.test(text.trim()) && b.level===0};
+    const section=Boolean(sectionPattern?.test(text) && b.role!=="item" && !active);
+    const eligible=["item","prose"].includes(b.role) && !section;
+    const marker=eligible ? markerOf(text, b.level>=2) : null;
+    const family=marker?.family || (eligible && active && xml ? nativeFamily(xml,active.numId,active.ilvl) : "");
+    return {text,family,value:marker?.value ?? null,level:b.level,key:active ? `${active.numId}:${active.ilvl}` : undefined,top:family==="article" || family==="decimal" && !/^[（(]/.test(text.trim()) && b.level===0,reset:!resolution && (b.role==="part" || section)};
   });
-  const plan=planHierarchy(items,ctx.language), rules:NativeRule[]=[], notes:string[]=[], rewrites:{b:Block;marker:NonNullable<ReturnType<typeof markerOf>>;level:number}[]=[];
+  const plan=planHierarchy(items,ctx.language,ctx.type), rules:NativeRule[]=[], notes:string[]=[], rewrites:{b:Block;marker:NonNullable<ReturnType<typeof markerOf>>;level:number}[]=[];
   const uncertain=(index:number)=>{
     blocks[index].uncertainNumbering=true;
     blocks[index].level=items[index].level;
@@ -1866,21 +1841,27 @@ function resolutionNumbering(ctx: Ctx, blocks: Block[]) {
   const candidates=new Map<string,{rule:NativeRule;blocks:Block[];levels:Set<number>}>();
   blocks.forEach((b,index)=>{
     const item=items[index], decision=plan[index], active=activeNumbering(b.p);
-    if (!item.family) { if (b.role==="item") {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号类型无法可靠识别，保留原样，请人工确认。`);} return; }
+    if (!item.family) { if (b.role==="item" || ["item","prose"].includes(b.role) && active) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号类型无法可靠识别，保留原样，请人工确认。`);} return; }
     if (decision.reason) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：${decision.reason}，保留原编号，请人工确认。`);return;}
-    const marker=markerOf(item.text,ctx.language==="en" && b.level>=2);
+    const marker=markerOf(item.text,b.level>=2);
     if (marker && active) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：同时含手打与原生编号，保留原样，请人工确认。`);return;}
+    if (ctx.type.includes("amendment") && decision.level>0) {
+      uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：修正案嵌套内容可能是待新增或引用条款，编号归属目标草案，保留原样，请人工确认。`);return;
+    }
     b.level=decision.level;
+    b.role="item";
     if (marker) {
-      const target=markerText(ctx.language,b.level,marker.value);
+      const target=markerText(ctx.language,b.level,marker.value,ctx.type);
+      if (!target) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：该序号超出当前文种可安全表示的范围，保留原样，请人工确认。`);return;}
       if (target && item.text.slice(0,marker.length).trim()!==target) {
+        if (!validMarkerChange(item.text,target+item.text.slice(marker.length))) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号字母与罗马数字的序号解释有歧义，保留原样，请人工确认。`);return;}
         if (signature(b.p).some(t=>t[0]!=="t") || UNIFORM_DAMAGE.some(tag=>elements(b.p,"r").some(r=>runHas(r,tag)))) {uncertain(index);protect(ctx,b.p,"编号段含链接、域、修订、隐藏或其他复杂结构，未自动转换编号");return;}
         rewrites.push({b,marker,level:b.level});
       }
     } else if (active && xml) {
       const key=`${active.numId}:${active.ilvl}`, existing=candidates.get(key);
       if (existing) {existing.blocks.push(b);existing.levels.add(b.level);}
-      else candidates.set(key,{rule:{id:active.numId,ilvl:active.ilvl,level:b.level,language:ctx.language},blocks:[b],levels:new Set([b.level])});
+      else candidates.set(key,{rule:{id:active.numId,ilvl:active.ilvl,level:b.level,language:ctx.language,type:ctx.type},blocks:[b],levels:new Set([b.level])});
     }
   });
   for (const [key,candidate] of candidates) {
@@ -1894,12 +1875,12 @@ function resolutionNumbering(ctx: Ctx, blocks: Block[]) {
     if (rangeReason) {candidate.blocks.forEach(b=>uncertain(blocks.indexOf(b)));notes.push(`原生列表 ${key}：${rangeReason}，保留原编号，请人工确认。`);continue;}
     rules.push(candidate.rule);
   }
-  return {rules,notes,apply:()=>{
+  return {rules,notes,label:profile.label,checked:items.filter(i=>i.family).length,apply:()=>{
     for (const {b,marker,level} of rewrites) {
-      const old=paragraphText(b.p), next=markerText(ctx.language,level,marker.value)! + old.slice(marker.length);
-      if (rewriteLogged(ctx,b.p,next,"dr-marker")) notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号“${old.slice(0,marker.length).trim()}” → “${markerText(ctx.language,level,marker.value)}”，序号数值不变。`);
+      const old=paragraphText(b.p), target=markerText(ctx.language,level,marker.value,ctx.type)!, next=target + old.slice(marker.length);
+      if (rewriteLogged(ctx,b.p,next,resolution ? "dr-marker" : "list-marker")) notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号“${old.slice(0,marker.length).trim()}” → “${target}”，序号数值不变。`);
     }
-    if (xml && rules.length) {const before=new XMLSerializer().serializeToString(xml);applyNativeRules(xml,rules);ctx.parts["word/numbering.xml"]=encoder.encode(new XMLSerializer().serializeToString(xml));if(before!==new XMLSerializer().serializeToString(xml)) notes.push("按父子层级纠正原生决议编号样式；保留列表标识、序号、起始值与重启规则。");}
+    if (xml && rules.length) {const before=new XMLSerializer().serializeToString(xml);applyNativeRules(xml,rules);ctx.parts["word/numbering.xml"]=encoder.encode(new XMLSerializer().serializeToString(xml));if(before!==new XMLSerializer().serializeToString(xml)) notes.push("按当前文种及父子层级纠正原生编号样式；保留列表标识、序号、起始值与重启规则。");}
   }};
 }
 
@@ -1978,10 +1959,10 @@ function formatInner(
     positionPaperMarkers(ctx, paragraphs, lastLabel);
   }
   let blocks = handbookBlocks(ctx, paragraphs, numbering);
-  const drNumbering = resolutionNumbering(ctx,blocks);
+  const listNumbering = documentNumbering(ctx,blocks);
   headerText(ctx, blocks);
   if (ctx.normalizePunctuation && ctx.spec.clausePunctuation) punctuation(ctx, blocks);
-  drNumbering.apply();
+  listNumbering.apply();
   for (const block of blocks) { geometry(ctx, block); emphasis(ctx, block); }
   if (ctx.spec.signatureLines) blocks = signatureLines(ctx, blocks);
   numberingMarkers(ctx);
@@ -1993,7 +1974,7 @@ function formatInner(
   const problems = [...verifyFormat(snapshot, document, ctx.editLog, TITLE_WORDS(ctx.type), [...POLICY.metadata.committee.aliases, ...POLICY.metadata.topic.aliases]), ...verifyMarks(marks, document)];
   parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
   const output = zipSync(parts, { level: 6 });
-  const packageProblems = verifyPackage(originalBytes, output, drNumbering.rules);
+  const packageProblems = verifyPackage(originalBytes, output, listNumbering.rules);
   const sizeIssues = runSizeIssues(ctx);
   const validations: BrowserValidation[] = [
     { code: "docx_package", label: "DOCX 包结构", status: "pass", detail: "必要的 Word 部件完整。" },
@@ -2003,7 +1984,8 @@ function formatInner(
     { code: "browser_private", label: "本地处理", status: "pass", detail: "文件在当前浏览器中处理，未发送到外部排版服务。" },
   ];
   const edits = editSummary(ctx.editLog, repaired, split);
-  for (const detail of drNumbering.notes) validations.push({code:"dr-numbering",label:"决议草案编号体系核查",status:"warning",detail});
+  validations.push({code:"numbering-policy",label:`${listNumbering.label}编号规则检查`,status:listNumbering.notes.length ? "warning" : "pass",detail:`已检查 ${listNumbering.checked} 个可识别编号段；只纠正可确认的表示法，章节、引文和原序号受保护。${listNumbering.checked ? "不能据此保证语义层级完全正确。" : "未发现可确认的编号列表，不自动给正文添加编号。"}`});
+  for (const detail of listNumbering.notes) validations.push({code:ctx.type==="draft-resolution" ? "dr-numbering" : "list-numbering",label:`${listNumbering.label}编号体系核查`,status:"warning",detail});
   for (const key of ctx.changed) {
     const written = [...ctx.editLog.values()].some(edit => edit.key === key && (edit.kind === "field" || edit.country?.manual));
     const label = key === "title" ? "标题" : POLICY.metadata[key as MetadataKey].output.zh;

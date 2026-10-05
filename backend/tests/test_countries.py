@@ -115,7 +115,7 @@ class CountryTests(unittest.TestCase):
         result, texts = process(content, "working-paper", preserve_country_order=True, normalize_punctuation=False)
         self.assertIn("起草国：中华人民共和国、美利坚合众国", "".join(texts))
         self.assertIn("大韩民国、刚果、苏联、欧盟", "".join(texts))
-        self.assertIn("第一条 要求中国与美国继续合作。", texts)
+        self.assertIn("1. 要求中国与美国继续合作。", texts)  # WP marker changes; body country names do not.
         self.assertEqual(process(result.content, "working-paper", preserve_country_order=True, normalize_punctuation=False)[1], texts)
 
     def test_complex_fields_preserved_not_flattened(self):

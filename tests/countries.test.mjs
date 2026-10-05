@@ -89,7 +89,7 @@ test("automatic lists deduplicate without step 03, even with order/punctuation n
   const first = await formatted(input,"working-paper",{}, {preserveCountryOrder:true,normalizePunctuation:false});
   assert.ok(first.texts.join("").includes("起草国：中华人民共和国、美利坚合众国"));
   assert.ok(first.texts.join("").includes("大韩民国、刚果、苏联、欧盟"));
-  assert.ok(first.texts.includes("第一条 要求中国与美国继续合作。"));
+  assert.ok(first.texts.includes("1. 要求中国与美国继续合作。"),"WP marker changes, but countries in the body are not expanded");
   assert.equal(first.result.validations.filter(v=>v.code==="country-review").length,3);
   assert.deepEqual((await formatted(first.bytes,"working-paper",{}, {preserveCountryOrder:true,normalizePunctuation:false})).texts,first.texts);
 });

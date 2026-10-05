@@ -1,4 +1,4 @@
-"""Context-sensitive DR numbering; mirrors app/dr-numbering.ts, one shared policy.
+"""Context-sensitive numbering for all types; mirrors app/numbering.ts.
 
 Only presentation changes: ordinal values, counter identities and restarts survive.
 """
@@ -10,6 +10,16 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 POLICY = json.loads((Path(__file__).resolve().parents[2] / 'shared/dr-numbering-policy.json').read_text(encoding='utf-8'))
+PROFILES = json.loads((Path(__file__).resolve().parents[2] / 'shared/numbering-profiles.json').read_text(encoding='utf-8'))
+
+
+def numbering_profile(document_type):
+    return PROFILES['profiles'][document_type]
+
+
+def formats(document_type, language):
+    profile = numbering_profile(document_type)
+    return (POLICY['formats'] if profile.get('useResolutionFormats') else PROFILES['amendmentFormats'] if profile.get('useAmendmentFormats') else profile['formats'])[language]
 
 
 def chinese(value):
@@ -68,18 +78,24 @@ def marker_of(text, roman_context=False):
     return dict(family=family,value=value,length=match.end()) if family and value and value < 100 else None
 
 
-def marker_text(language, level, value):
-    if not 0 <= level < 4 or not 0 < value < 100:
+def marker_text(language, level, value, document_type='draft-resolution'):
+    targets = formats(document_type,language)
+    if not 0 <= level < len(targets) or not 0 < value < 100:
         return None
-    target = POLICY['formats'][language][level]
+    target = targets[level]
     family = target['family']
     token = chinese(value) if family in ('article','chinese') else _series(value,POLICY['zodiac']) if family == 'zodiac' else _series(value,POLICY['stems']) if family == 'stem' else (chr(96+value) if value <= 26 else '') if family == 'letter' else _roman(value) if family.startswith('roman') else str(value)
     return target['text'].replace('%n',token) if token else None
 
 
-def plan_hierarchy(items, language):
+def plan_hierarchy(items, language, document_type='draft-resolution'):
     ranks, identities, ambiguous, parent, active, result = {}, {}, {}, None, False, []
     for item in items:
+        if item.get('reset'):
+            ranks.clear()
+            identities.clear()
+            ambiguous.clear()
+            parent, active = None, False
         if item.get('top'):
             ranks.clear()
             identities.clear()
@@ -94,13 +110,16 @@ def plan_hierarchy(items, language):
         if not active:
             result.append(dict(level=item['level'],reason='无明确顶层条款，不能确定编号层级'))
             continue
-        canonical = POLICY['defaultLevels'].get(item['family'],item['level'])
+        own_rank = next((i for i,target in enumerate(formats(document_type,language)) if target['family'] == item['family']),None)
+        canonical = own_rank if own_rank is not None else 2 if item['family'] == 'roman-dot' and len(formats(document_type,language)) == 3 else POLICY['defaultLevels'].get(item['family'],item['level'])
         known_family = item['family'] in ranks
         level = identities.get(item['key']) if item.get('key') else ranks.get(item['family'])
         reason = ''
         if level is None:
             level = ranks.get(item['family'],canonical)
             if parent is not None and (canonical <= 1 or item.get('key')):
+                level = parent + 1
+            if document_type != 'draft-resolution' and parent is not None and not known_family:
                 level = parent + 1
             if parent is None and not known_family and level in ranks.values():
                 reason = '不同编号系列占用同一层级，但缺少明确父子关系'
@@ -110,9 +129,9 @@ def plan_hierarchy(items, language):
                 identities[item['key']] = level
         elif parent is not None and parent == level:
             reason = '相同编号系列既作父项又作子项，层级证据冲突'
-        if level > 3:
-            reason = '超过学标示例的四级层次，不能安全转换'
-        if language == 'zh' and item['family'] == 'zodiac' and not known_family and 'stem' in ranks:
+        if level >= len(formats(document_type,language)):
+            reason = '超过该文种配置的编号层次，不能安全转换'
+        if language == 'zh' and document_type in ('draft-resolution','draft-directive') and item['family'] == 'zodiac' and not known_family and 'stem' in ranks:
             reason = '地支与天干系列交错，疑似编号错字或层级冲突'
         key = item.get('key') or item['family']
         if reason:
@@ -129,6 +148,25 @@ def valid_marker_change(before, after):
     old = marker_of(before)
     return bool(old and any(b and old['value'] == b['value'] and tail(before,old) == tail(after,b)
                            for b in (marker_of(after),marker_of(after,True))))
+
+
+def sequence_issues(items):
+    last, result, previous = {}, [], None
+    for index,item in enumerate(items):
+        if item.get('reset'):
+            last.clear()
+        if item['family'] and item['value'] is not None:
+            for key in list(last):
+                if key[0] > item['level']:
+                    del last[key]
+            key = item['level'],item['family']
+            old = last.get(key)
+            restart = item['value'] == 1 and previous and (not previous['family'] and previous['text'].rstrip().endswith(('：',':')) or previous['level'] < item['level'])
+            if old is not None and item['value'] != old+1 and not restart:
+                result.append(dict(index=index,previous=old))
+            last[key] = item['value']
+        previous = item
+    return result
 
 
 def _val(node, attr='val'):
@@ -159,7 +197,7 @@ def native_family(xml, identifier, ilvl):
 
 
 def native_range_reason(xml, rule, count):
-    target = POLICY['formats'][rule['language']][rule['level']]
+    target = formats(rule.get('type','draft-resolution'),rule['language'])[rule['level']]
     limit = len(POLICY['zodiac']) if target['family'] == 'zodiac' else len(POLICY['stems']) if target['family'] == 'stem' else None
     if limit is None:
         return ''
@@ -179,7 +217,7 @@ def apply_native_rules(xml, rules):
         identifier, ilvl = rule['id'], rule['ilvl']
         num = next((n for n in xml.findall(qn('w:num')) if _val(n,'numId') == identifier), None)
         original = native_level(xml,identifier,ilvl)
-        target = POLICY['formats'][rule['language']][rule['level']]
+        target = formats(rule.get('type','draft-resolution'),rule['language'])[rule['level']]
         if num is None or original is None or original.find(qn('w:numFmt')) is None or original.find(qn('w:lvlText')) is None or not native_family(xml,identifier,ilvl):
             raise ValueError('不能证明原生编号的转换规则')
         placeholder = '%'+str(int(ilvl)+1)

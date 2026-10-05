@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {zipSync,unzipSync} from 'fflate';
 import {parseDocxInBrowser,formatDocxInBrowser} from '../app/docx-browser.ts';
-import {validMarkerChange,planHierarchy,markerOf,markerText,nativeRangeReason} from '../app/dr-numbering.ts';
+import {validMarkerChange,planHierarchy,markerOf,markerText,nativeRangeReason} from '../app/numbering.ts';
 const dom=new JSDOM(''); globalThis.DOMParser=dom.window.DOMParser; globalThis.XMLSerializer=dom.window.XMLSerializer;
 const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main', enc=new TextEncoder(),dec=new TextDecoder();
 const p=text=>`<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;

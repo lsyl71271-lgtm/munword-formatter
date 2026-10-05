@@ -152,7 +152,7 @@ class PipelineTests(unittest.TestCase):
             stream.getvalue(), normalize_punctuation=False
         )
         repaired = Document(BytesIO(result.content))
-        # The only text change is the handbook's unlabeled committee / topic lines (页31).
+        # Authorized label and list-notation changes only; ordinal/body stay intact.
         expected = visible_text_signature(damaged).replace("委员会:", "", 1).replace("议题:", "", 1)
         self.assertEqual(expected, visible_text_signature(repaired))
         self.assertGreater(repaired.sections[0].page_height, repaired.sections[0].page_width)
@@ -249,8 +249,8 @@ class PipelineTests(unittest.TestCase):
             stream.getvalue(), normalize_punctuation=False
         )
         repaired = Document(BytesIO(result.content))
-        # The only text change is the handbook's unlabeled committee / topic lines (页31).
-        expected = visible_text_signature(damaged).replace("委员会:", "", 1).replace("议题:", "", 1)
+        # Authorized label and WP-notation changes only; ordinal/body stay intact.
+        expected = visible_text_signature(damaged).replace("委员会:", "", 1).replace("议题:", "", 1).replace("a)提交季度报告", "(a)提交季度报告", 1)
         self.assertEqual(expected, visible_text_signature(repaired))
         self.assertAlmostEqual(repaired.sections[0].page_width.mm, 210, places=1)
         self.assertAlmostEqual(repaired.sections[0].left_margin.mm, 31.75, places=1)

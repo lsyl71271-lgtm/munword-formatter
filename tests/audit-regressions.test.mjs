@@ -191,7 +191,7 @@ test("links and revisions wholly inside one subclause do not block the split", a
 test("working papers and directives split by the same rule", async () => {
   const header = ["委员会：安全理事会", "议题：网络安全", "起草国：德国、法国"];
   let result = format(archive(["工作文件", ...header, "1. 呼吁各国加强合作：（子）建立信息共享机制；（丑）定期举行会议。"].map(t => line(t)).join("")), "working-paper");
-  await assertSplit(result, ["1. 呼吁各国加强合作：", "（子）建立信息共享机制；", "（丑）定期举行会议"], "1.");
+  await assertSplit(result, ["1. 呼吁各国加强合作：", "(a)建立信息共享机制；", "(b)定期举行会议"], "1.");
   result = format(archive(["指令草案", ...header, "1. 要求各部门：（一）提交报告；（二）说明进展。"].map(t => line(t)).join("")), "draft-directive");
   await assertSplit(result, ["1. 要求各部门：", "（一）提交报告；", "（二）说明进展"], "1.");
 });

@@ -1,0 +1,42 @@
+{
+  "source": "PKUNMUN2026 学术标准手册：立场文件15–18页，工作文件31–35页，指令草案38页，决议草案42–45页，修正案52–53页",
+  "scope": "All six document types. Inspect body lists only; preserve sections, references, quoted clause numbers, ordinals and native counter identities.",
+  "profiles": {
+    "position-paper": {
+      "label": "立场文件",
+      "pages": "15–18",
+      "sectionPattern": "^\\s*(?:[（(][一二三四五六七八九十百]+[）)]|[一二三四五六七八九十百]+[、.．])",
+      "formats": {
+        "zh": [{"family":"decimal","fmt":"decimal","text":"%n、"},{"family":"letter","fmt":"lowerLetter","text":"%n)"},{"family":"roman","fmt":"lowerRoman","text":"%n)"}],
+        "en": [{"family":"decimal","fmt":"decimal","text":"%n."},{"family":"letter","fmt":"lowerLetter","text":"%n)"},{"family":"roman","fmt":"lowerRoman","text":"%n)"}]
+      },
+      "note": "章节编号与建议列表分开。样例正文中文一、二、三等及来源章节保留；只规范明确建议列表。三级为项目对示例的延伸，不称为手册明文要求。"
+    },
+    "working-paper": {
+      "label": "工作文件",
+      "pages": "31–35",
+      "formats": {
+        "zh": [{"family":"decimal","fmt":"decimal","text":"%n."},{"family":"letter","fmt":"lowerLetter","text":"(%n)"},{"family":"roman","fmt":"lowerRoman","text":"(%n)"},{"family":"roman-dot","fmt":"lowerRoman","text":"%n."}],
+        "en": [{"family":"decimal","fmt":"decimal","text":"%n."},{"family":"letter","fmt":"lowerLetter","text":"(%n)"},{"family":"roman","fmt":"lowerRoman","text":"(%n)"},{"family":"roman-dot","fmt":"lowerRoman","text":"%n."}]
+      },
+      "note": "顶层及一级子项按31–35页示例；更深层采用项目统一列表延伸。PART和新的引出段允许重新起号，保留来源数值，不自动续号。"
+    },
+    "draft-directive": {
+      "label": "指令草案",
+      "pages": "38，42–45",
+      "formats": {
+        "zh": [{"family":"decimal","fmt":"decimal","text":"%n."},{"family":"chinese","fmt":"chineseCounting","text":"（%n）"},{"family":"zodiac","fmt":"ideographZodiac","text":"（%n）"},{"family":"stem","fmt":"ideographTraditional","text":"（%n）"}],
+        "en": [{"family":"decimal","fmt":"decimal","text":"%n."},{"family":"letter","fmt":"lowerLetter","text":"%n."},{"family":"roman","fmt":"lowerRoman","text":"(%n)"},{"family":"roman-dot","fmt":"lowerRoman","text":"%n."}]
+      },
+      "note": "顶层1.、英文一级a.按38页示例；更深层遵循该页注明的决议草案编号规则。"
+    },
+    "draft-resolution": {"label":"决议草案","pages":"42–45","useResolutionFormats":true},
+    "friendly-amendment": {"label":"友好修正案","pages":"52–53","useAmendmentFormats":true},
+    "unfriendly-amendment": {"label":"非友好修正案","pages":"52–53","useAmendmentFormats":true}
+  },
+  "amendmentFormats": {
+    "zh": [{"family":"decimal","fmt":"decimal","text":"%n."},{"family":"chinese","fmt":"chineseCounting","text":"（%n）"},{"family":"zodiac","fmt":"ideographZodiac","text":"（%n）"},{"family":"stem","fmt":"ideographTraditional","text":"（%n）"}],
+    "en": [{"family":"decimal","fmt":"decimal","text":"%n."},{"family":"letter","fmt":"lowerLetter","text":"(%n)"},{"family":"roman","fmt":"lowerRoman","text":"(%n)"},{"family":"roman-dot","fmt":"lowerRoman","text":"%n."}]
+  },
+  "amendmentNestedPolicy": "Inspect nested inserted/quoted clauses but never rewrite them automatically: their numbering belongs to the target draft, not the amendment operation list."
+}

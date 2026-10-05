@@ -202,8 +202,9 @@ class BaseFormatter(HandbookPassMixin):
         self._east_asia = handbook.east_asian_font(self.document_type, model.language)
         self._protected_warnings = []
         self._country_changes = []
-        self._dr_numbering_rules = []
-        self._dr_numbering_notes = []
+        self._numbering_rules = []
+        self._numbering_notes = []
+        self._numbering_checked = 0
         # The model's paragraph indices refer to this list.  The final pass
         # adds and removes empty paragraphs, so later lookups go through it.
         self._source_paragraphs = list(body_paragraphs(document))
@@ -235,8 +236,13 @@ class BaseFormatter(HandbookPassMixin):
         content_out = normalize_font_parts(
             output.getvalue(), model.language, east_asia=self._east_asia, note_size_pt=handbook.NOTE_SIZE_PT
         )
-        package_problems = content_guard.verify_package(content, content_out, self._dr_numbering_rules)
-        validations.extend(ValidationItem('dr-numbering','决议草案编号体系核查','warning',note) for note in self._dr_numbering_notes)
+        package_problems = content_guard.verify_package(content, content_out, self._numbering_rules)
+        from ..numbering import numbering_profile
+        label = numbering_profile(self.document_type)['label']
+        checked = self._numbering_checked
+        validations.append(ValidationItem('numbering-policy',label+'编号规则检查','warning' if self._numbering_notes else 'pass',
+            f'已检查 {checked} 个可识别编号段；只纠正可确认的表示法，章节、引文和原序号受保护。'+('不能据此保证语义层级完全正确。' if checked else '未发现可确认的编号列表，不自动给正文添加编号。')))
+        validations.extend(ValidationItem('dr-numbering' if self.document_type == 'draft-resolution' else 'list-numbering',label+'编号体系核查','warning',note) for note in self._numbering_notes)
         validations.append(ValidationItem(
             "package",
             "链接目标、关系与嵌入资源逐项保留",
@@ -939,6 +945,7 @@ _EDIT_NOTES = {
     "title": "按学标统一标题用词", "label-drop": "按范例删除委员会/议题标签", "label-restore": "补齐页首标签",
     "countries": "国家名单按顺序排列并按国名断行留签字空行", "ending": "按学标统一条款末尾标点", "marker": "统一立场文件建议编号写法",
     "dr-marker": "按学标纠正决议草案编号表示法（保留序号数值）",
+    "list-marker": "按当前文种统一编号表示法（保留序号数值）",
     "blank": "按范例调整空行", "empty-line": "按范例调整空行",
     "country-name": "按共用 UNTERM 名称表展开明确国家字段的全称",
 }

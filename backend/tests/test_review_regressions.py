@@ -261,13 +261,13 @@ class MarkerTests(unittest.TestCase):
 
     def test_letters_that_are_also_numerals_follow_their_sequence(self):
         indents = self._indents()
-        self.assertEqual({indents[key]["left"] for key in ("（a）决", "（b）资", "（c）尊", "（d）定")}, {indents["（a）决"]["left"]})
-        self.assertGreater(int(indents["（i）按"]["left"]), int(indents["（d）定"]["left"]), "(i) after (d) is a numeral, one level deeper")
-        self.assertEqual(indents["（i）按"], indents["（ii）"])
+        self.assertEqual({indents[key]["left"] for key in ("(a)决", "(b)资", "(c)尊", "(d)定")}, {indents["(a)决"]["left"]})
+        self.assertGreater(int(indents["(i)按"]["left"]), int(indents["(d)定"]["left"]), "(i) after (d) is a numeral, one level deeper")
+        self.assertEqual(indents["(i)按"], indents["(ii)"])
 
     def test_full_width_period_marks_a_numbered_item(self):
         indents = self._indents()
-        self.assertEqual(indents["5．建立"], indents["6. 鼓"])
+        self.assertEqual(indents["5.建立"], indents["6. 鼓"])
 
 
 class ParenDigitTests(unittest.TestCase):
@@ -277,8 +277,8 @@ class ParenDigitTests(unittest.TestCase):
         result = run("working-paper", save(source(lines)))
         self.assertEqual(errors(result), [])
         indents = {own_text(p)[:3]: indent_of(p) for p in body_xml(result.content).iter(q("p")) if own_text(p)}
-        self.assertEqual(indents["（1）"], indents["（2）"])
-        self.assertGreater(int(indents["（1）"]["left"]), int(indents["1. "]["left"]))
+        self.assertEqual(indents["(a)"], indents["(b)"])
+        self.assertGreater(int(indents["(a)"]["left"]), int(indents["1. "]["left"]))
         self.assertEqual(indents["1. "], indents["2. "])
 
 

@@ -26,7 +26,7 @@ and every embedded resource byte for byte.
 from __future__ import annotations
 
 from .field_policy import is_plain_field
-from .dr_numbering import apply_native_rules, valid_marker_change
+from .numbering import apply_native_rules, valid_marker_change
 
 import difflib
 import hashlib
@@ -333,8 +333,8 @@ def _check_edit(edit: Edit, old, new, old_text, new_text, allowed_titles, labels
         return "" if _without_ending(old) == _without_ending(new) else "句末以外的内容发生变化"
     if kind == "marker":
         return "" if _normalize_marker(old) == _normalize_marker(new) else "编号以外的内容发生变化"
-    if kind == 'dr-marker':
-        return '' if _is_plain(old) and _is_plain(new) and valid_marker_change(old_text,new_text) else '决议编号转换改变了条号数值、正文或受保护结构'
+    if kind in ('dr-marker','list-marker'):
+        return '' if _is_plain(old) and _is_plain(new) and valid_marker_change(old_text,new_text) else '编号转换改变了条号数值、正文或受保护结构'
     if kind == "countries":
         return ""  # checked per list in ``verify_format``
     if kind == "country-name":

@@ -300,7 +300,7 @@ class SplitTests(unittest.TestCase):
     def test_working_papers_and_directives_split_by_the_same_rule(self):
         header = ["委员会：安全理事会", "议题：网络安全", "起草国：德国、法国"]
         result = format_("working-paper", package(lines(["工作文件", *header, "1. 呼吁各国加强合作：（子）建立信息共享机制；（丑）定期举行会议。"])))
-        self.assertSplit(result, ["1. 呼吁各国加强合作：", "（子）建立信息共享机制；", "（丑）定期举行会议"], "1.")
+        self.assertSplit(result, ["1. 呼吁各国加强合作：", "(a)建立信息共享机制；", "(b)定期举行会议"], "1.")
         result = format_("draft-directive", package(lines(["指令草案", *header, "1. 要求各部门：（一）提交报告；（二）说明进展。"])))
         self.assertSplit(result, ["1. 要求各部门：", "（一）提交报告；", "（二）说明进展"], "1.")
 

@@ -187,14 +187,14 @@ async function markerIndents() {
 
 test("letters that are also numerals follow their sequence", async () => {
   const indents = await markerIndents();
-  assert.deepEqual(new Set(["（a）决", "（b）资", "（c）尊", "（d）定"].map(key => indents[key].left)), new Set([indents["（a）决"].left]));
-  assert.ok(Number(indents["（i）按"].left) > Number(indents["（d）定"].left));
-  assert.deepEqual(indents["（i）按"], indents["（ii）"]);
+  assert.deepEqual(new Set(["(a)决", "(b)资", "(c)尊", "(d)定"].map(key => indents[key].left)), new Set([indents["(a)决"].left]));
+  assert.ok(Number(indents["(i)按"].left) > Number(indents["(d)定"].left));
+  assert.deepEqual(indents["(i)按"], indents["(ii)"]);
 });
 
 test("a full-width period marks a numbered item", async () => {
   const indents = await markerIndents();
-  assert.deepEqual(indents["5．建立"], indents["6. 鼓"]);
+  assert.deepEqual(indents["5.建立"], indents["6. 鼓"]);
 });
 
 test("parenthesized digits nest under the item that introduces them", async () => {
@@ -202,8 +202,8 @@ test("parenthesized digits nest under the item that introduces them", async () =
   const result = typed("working-paper", input);
   assert.deepEqual(errors(result), []);
   const indents = Object.fromEntries(nodes(await documentOf(result), "p").filter(p => ownText(p)).map(p => [ownText(p).slice(0, 3), indentOf(p)]));
-  assert.deepEqual(indents["（1）"], indents["（2）"]);
-  assert.ok(Number(indents["（1）"].left) > Number(indents["1. "].left));
+  assert.deepEqual(indents["(a)"], indents["(b)"]);
+  assert.ok(Number(indents["(a)"].left) > Number(indents["1. "].left));
   assert.deepEqual(indents["1. "], indents["2. "]);
 });
 

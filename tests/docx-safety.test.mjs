@@ -148,8 +148,8 @@ test("40 deterministic fragmentation and extreme-size stress variants preserve c
     }
     const input = archive(p("工作文件") + `<w:p>${runs}</w:p>`);
     const { buffer } = await format(input);
-    // Typed article numbers stay as written (v1.6.3: no conversion to Word numbering).
-    assert.equal(nodes(xml(buffer), "p").map(p => nodes(p, "t").map(t => t.textContent).join("")).at(-1), text, `seed ${seed}`);
+    // WP notation is corrected, but the ordinal and complete body survive.
+    assert.equal(nodes(xml(buffer), "p").map(p => nodes(p, "t").map(t => t.textContent).join("")).at(-1), text.replace("第一条", "1."), `seed ${seed}`);
     assert.equal(nodes(xml(buffer), "numPr").length, 0);
     assert.ok(nodes(xml(buffer), "sz").every(node => node.getAttributeNS(W, "val") === "24"));
     assert.ok(nodes(xml(buffer), "szCs").every(node => node.getAttributeNS(W, "val") === "24"));
