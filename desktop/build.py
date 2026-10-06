@@ -166,7 +166,10 @@ def main():
     elif sys.platform == "win32":
         output = DIST / ("Munword-%s-Windows-%s-Setup.exe" % (version, args.arch))
         compiler = shutil.which("makensis") or str(Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "NSIS/makensis.exe")
-        run(compiler, "/DVERSION=" + version, "/DARCH=" + args.arch, "/DBUNDLE=" + str(WORK / "bundle/Munword"),
+        # The script is UTF-8 without a BOM; without /INPUTCHARSET makensis reads it in the build machine's
+        # ANSI code page (1252 on GitHub's runners) and every Chinese string, including the shortcut
+        # and uninstall-entry names, ends up as mojibake such as "Munword æœ¬æœºæŽ’ç‰ˆ".
+        run(compiler, "/INPUTCHARSET", "UTF8", "/DVERSION=" + version, "/DARCH=" + args.arch, "/DBUNDLE=" + str(WORK / "bundle/Munword"),
             "/DOUTFILE=" + str(output), ROOT / "desktop/windows-installer.nsi")
     else:
         # Linux builds are test tools only; never presented as DMG/EXE.

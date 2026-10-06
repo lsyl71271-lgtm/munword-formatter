@@ -160,7 +160,10 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install selenium==4.50.0
       - name: Allow WebDriver in Safari
-        run: sudo safaridriver --enable
+        run: |
+          sudo safaridriver --enable
+          defaults write com.apple.Safari AllowRemoteAutomation 1 || true
+          defaults write com.apple.Safari IncludeDevelopMenu 1 || true
       - name: Verify, codesign, Gatekeeper verdict, native launch, full flow in Safari / Chrome / Firefox
         env:
           PYTHONUTF8: '1'
@@ -212,3 +215,19 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag
           fi
           gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --title "$title" --notes-file notes.md --latest
+      - name: Point the superseded Munword release at this one
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat VERSION)
+          old="v${version}-desktop"
+          new="v${version}-desktop.2"
+          gh release view "$old" >/dev/null 2>&1 || exit 0
+          gh release view "$old" --json body --jq .body > old.md
+          grep -q "$new" old.md && exit 0
+          {
+            printf '> **有更新版本：[%s](%s/%s/releases/tag/%s)**，推荐下载。它用一个 DMG、一个 EXE 支持更多系统（Windows 7 起，macOS 10.11 起，Intel 与 Apple 芯片通用），每个约 0.5 MB。\n' "$new" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$new"
+            printf '> 已知问题：本页的 Windows 安装包在桌面快捷方式、开始菜单和“应用和功能”里的中文名称显示为乱码（构建时未按 UTF-8 读取安装脚本；源码已修复）。\n\n'
+            cat old.md
+          } > old-updated.md
+          gh release edit "$old" --notes-file old-updated.md

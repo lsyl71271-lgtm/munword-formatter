@@ -129,6 +129,7 @@ MUNWORD_TEST_SHELLS=/path/to/bash-3.2:/bin/zsh:/bin/bash node --test tests/deskt
 | 窗口 | Edge/Chrome/Brave/Vivaldi 独立应用窗口 | 默认浏览器的标签页 |
 | 端口、防火墙、后台进程 | 无 | 本机回环端口，后台进程 |
 | 构建 | Linux 上可逐字节复现，CI 比对已发布文件 | 在各原生系统上构建 |
+| Windows 中文名称 | 快捷方式、开始菜单、卸载项均正常 | v1.8.5-desktop 发布版显示为乱码；原因是构建时未加 `/INPUTCHARSET UTF8`，源码已修复，验收也加了名称检查 |
 
 从 Munword 方案借鉴并已加入本目录的做法：
 

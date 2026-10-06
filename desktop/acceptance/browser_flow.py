@@ -219,7 +219,15 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     report = {"browser": args.browser, "platform": platform.platform(), "page": str(args.page), "passed": False}
     try:
-        driver = make_driver(args.browser)
+        # safaridriver sometimes exits right after `safaridriver --enable` on fresh machines; retry briefly.
+        for attempt in range(3):
+            try:
+                driver = make_driver(args.browser)
+                break
+            except WebDriverException:
+                if args.browser != "safari" or attempt == 2:
+                    raise
+                time.sleep(5)
     except WebDriverException as exc:
         report.update(available=False, error=str(exc).splitlines()[0] if str(exc) else repr(exc))
         (args.out / f"{args.browser}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -254,8 +262,18 @@ def main() -> int:
             driver.save_screenshot(str(out / "failure.png"))
             report["page_text"] = body_text(driver)[:2000]
             report["url_at_failure"] = driver.current_url
-        except Exception:  # noqa: BLE001
-            pass
+            report["diagnostics"] = driver.execute_script("""
+              var root = document.getElementById("root");
+              return { href: location.href, ready: document.readyState, title: document.title,
+                scripts: Array.prototype.map.call(document.scripts, function (s) { return s.src || "inline"; }),
+                stylesheets: Array.prototype.map.call(document.styleSheets, function (s) { try { return (s.href || "inline") + ":" + s.cssRules.length; } catch (e) { return (s.href || "inline") + ":" + e.name; } }),
+                root: root ? root.innerHTML.slice(0, 400) : null, findLast: typeof Array.prototype.findLast,
+                layers: typeof window.CSSLayerBlockRule, userAgent: navigator.userAgent };
+            """)
+        except Exception as diag:  # noqa: BLE001
+            report["diagnostics_error"] = repr(diag)
+        # CI logs are often all there is; print what the page looked like.
+        print(json.dumps({k: report.get(k) for k in ("url_at_failure", "diagnostics", "diagnostics_error", "page_text")}, ensure_ascii=False)[:3000])
     finally:
         report["seconds"] = round(time.monotonic() - started, 1)
         driver.quit()

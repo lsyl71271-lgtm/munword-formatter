@@ -36,6 +36,7 @@ Section
   StrCpy $page "$EXEDIR\site\index.html"
   ${IfNot} ${FileExists} "$page"
     MessageBox MB_OK|MB_ICONSTOP "程序文件不完整，请重新运行安装程序。"
+    SetErrorLevel 1
     Quit
   ${EndIf}
   ; file:/// URL; the browser encodes Chinese user names itself, URL syntax characters are escaped here.
@@ -54,12 +55,15 @@ Section
       Exec '"$Browser" --app="$url" --no-first-run --no-default-browser-check'
     ${EndIf}
     ${IfNot} ${Errors}
+      ; Quit alone reports exit code 2 ("aborted"); a started browser is success.
+      SetErrorLevel 0
       Quit
     ${EndIf}
   ${EndIf}
   ClearErrors
   ExecShell "open" "$page"
   ${If} ${Errors}
+    SetErrorLevel 1
     MessageBox MB_OK|MB_ICONSTOP "没有找到可用的浏览器。请安装或更新 Microsoft Edge、Chrome 或 Firefox 后重试。$\r$\n（Windows 7 / 8.1 可用 Chrome 109 或 Firefox ESR 115。）"
   ${EndIf}
 SectionEnd

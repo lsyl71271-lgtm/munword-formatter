@@ -43,6 +43,13 @@ def main():
             subprocess.run(command, check=True, timeout=120)
             executable = install / "app/Munword.exe"
             assert executable.is_file()
+            # Chinese names must survive the build (they turned into mojibake when makensis guessed the encoding).
+            import winreg
+            desktop = Path(subprocess.run(["powershell", "-NoProfile", "-Command", "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Environment]::GetFolderPath('Desktop')"],
+                                          check=True, capture_output=True, text=True, encoding="utf-8").stdout.strip())
+            assert (desktop / "Munword 本机排版.lnk").is_file(), sorted(p.name for p in desktop.glob("*.lnk"))
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Munword") as key:
+                assert winreg.QueryValueEx(key, "DisplayName")[0] == "Munword 本机排版"
             smoke(executable, report, args.browser_module, args.browser)
             # Reinstall while the old program holds its bundled DLLs open.
             # The installer must stop only our instance before replacing files.
