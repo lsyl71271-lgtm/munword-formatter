@@ -6,13 +6,13 @@ from pathlib import Path
 import shutil
 import zipfile
 
-SOURCE_SHA = "05bf3b9ee360b69fb486afbb6f3693da807c9e7a"
-RUN_ID = 37433489421
+SOURCE_SHA = "8f7a3a98319e35a1c8534ae991d455a46f9431de"
+RUN_ID = 37464684956
 PACKAGES = {
-    "Munword-macos-14-arm64": ("Munword-1.8.5-macOS-arm64.dmg", "08bece5860820a1dc442d697ed261a92f865638ebb3b53d715cbbb799aee39c1"),
-    "Munword-macos-15-intel-x64": ("Munword-1.8.5-macOS-x64.dmg", "decc67d5a9c835f4bb7c6a8f26d7665f6f5831641b5a4c72a4dfbdd2a43380e8"),
-    "Munword-windows-2022-x64": ("Munword-1.8.5-Windows-x64-Setup.exe", "6f07c7ea2ba62d7acac5cf2fafde919103009608a61ca10ba9bb0b4f2b6e04c8"),
-    "Munword-windows-2022-x86": ("Munword-1.8.5-Windows-x86-Setup.exe", "a8f2884806c0d0a2b28cfadf4ec7714fff40e038fb4ee266d4ad5ea41408bffd"),
+    "Munword-macos-14-arm64": ("Munword-1.8.5-macOS-arm64.dmg", "60693bd1d404ceaf5d96533388ffd5bd49c15c57a4caa7184a50eccb8b564386"),
+    "Munword-macos-15-intel-x64": ("Munword-1.8.5-macOS-x64.dmg", "747610fcdc59282d29962007a034c6cc99c04e2adae0e866a01db0ac1a118621"),
+    "Munword-windows-2022-x64": ("Munword-1.8.5-Windows-x64-Setup.exe", "399d68dc82d8ef4158e95516696383ec5f35ecc256489f225bb040bbe912cba1"),
+    "Munword-windows-2022-x86": ("Munword-1.8.5-Windows-x86-Setup.exe", "44029499778a82fb5430915c04c50a0090b2b2389f675ce3a8137b8b35a891df"),
 }
 
 
@@ -47,6 +47,16 @@ def main():
             rows = json.loads(unique(folder, "macos-binary-minimums.json").read_text())
             if len(rows) != 45 or any(tuple(map(int, v.split(".")[:2])) > (11, 0) for row in rows for v in row["minimum"]):
                 raise ValueError("macOS deployment floor differs from the accepted build")
+            required = {"installed-copy-signature-flags-and-library-team-consistency", "launchservices-default-browser-start-and-quit"}
+            if not required.issubset(report["installation_checks"]):
+                raise ValueError("Missing installed signature or LaunchServices acceptance")
+            for metadata in ("macos-signature-policy.json", "macos-installed-signature-policy.json"):
+                policy = json.loads(unique(folder, metadata).read_text())
+                if policy.get("identity_mode") != "ad-hoc" or len(policy.get("binaries", [])) != 45:
+                    raise ValueError("Unexpected macOS signing policy")
+                for signature in [policy["main"], *policy["binaries"]]:
+                    if signature.get("hardened_runtime") or not signature.get("ad_hoc") or signature.get("team") != "not set":
+                        raise ValueError("Ad-hoc library-validation startup regression")
         reports[artifact] = report
         checksums.append(actual + "  " + name)
     arm = json.loads(unique(args.artifacts / "Munword-Windows-11-ARM-compatibility",

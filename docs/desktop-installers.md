@@ -33,7 +33,7 @@ Mac 打包修订版修复了临时签名错误启用 hardened runtime 的问题�
 pnpm install --frozen-lockfile
 pnpm build:local-tools
 python -m pip install -r desktop/requirements-build.txt
-python -m unittest discover -s desktop -p test_launcher.py -v
+python -m unittest discover -s desktop -p 'test_*.py' -v
 python desktop/build.py --arch x64
 ```
 
