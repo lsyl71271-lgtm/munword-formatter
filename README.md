@@ -24,7 +24,12 @@
   - 不想改任何设置：双击磁盘映像里的「直接用浏览器打开.html」，用浏览器打开同一个页面，不需要授权。
   - Windows SmartScreen：点「更多信息 → 仍要运行」。
   - 每台电脑只需一次。
-- 校验值见 [downloads/SHA256SUMS.txt](downloads/SHA256SUMS.txt)；安装包由 `pnpm build:desktop` 从同一提交可逐字节复现。构建方法见 [desktop/README.md](desktop/README.md)。
+- 校验值见 [downloads/SHA256SUMS.txt](downloads/SHA256SUMS.txt)。安装包由 `pnpm build:desktop` 从同一提交逐字节复现，GitHub Actions 每次都从源码重建并比对。
+- 每次改动后，[`offline-installers`](.github/workflows/offline-installers.yml) 工作流都会自动检查这两个安装包：
+  - 原生 Windows（Server 2022 x64、Windows 11 ARM）与 macOS（14、15 Apple 芯片，15 Intel）虚拟机上安装、启动、升级、卸载，用系统自带的 Edge/Chrome/Firefox/Safari 跑完全部样例；
+  - Wine 里的 32 位 Windows 7；
+  - 旧版 Chromium 98/99/109 的浏览器门槛实测。
+- 构建方法、验收范围和签名方式见 [desktop/README.md](desktop/README.md)。
 
 ### 另一套安装器：Munword（自带 Python 运行环境）
 

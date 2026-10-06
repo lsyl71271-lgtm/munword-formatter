@@ -12,6 +12,16 @@
 // Tools: macOS image → codesign + hdiutil (built into macOS), or on Linux rcodesign (apple-codesign) +
 // mkfs.hfsplus + hfsplus/dmg (libdmg-hfsplus, the route Firefox uses for its Linux-built macOS images).
 // Windows installer → makensis (NSIS 3).
+//
+// Optional release signing; the default build needs no certificate (ad-hoc signed app, unsigned EXE):
+//   macOS app   MUNWORD_MAC_SIGN_IDENTITY ("Developer ID Application: …", keychain identity, on a Mac)
+//               or MUNWORD_MAC_P12 + MUNWORD_MAC_P12_PASSWORD_FILE (rcodesign, on Linux; Apple's
+//               time-stamp server unless MUNWORD_MAC_TIMESTAMP_URL says otherwise, "none" for tests)
+//   notarize    MUNWORD_NOTARY_PROFILE (notarytool keychain profile, on a Mac)
+//               or MUNWORD_NOTARY_API_KEY (App Store Connect API key JSON for rcodesign, on Linux)
+//   Windows     MUNWORD_WIN_PFX + MUNWORD_WIN_PFX_PASSWORD_FILE (osslsigncode; launcher, installer and
+//               uninstaller are signed), MUNWORD_WIN_TIMESTAMP_URL optional
+// Signed builds carry signing times, so only unsigned builds are byte-for-byte reproducible.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, closeSync, copyFileSync, cpSync, existsSync, lstatSync, lutimesSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, symlinkSync, truncateSync, utimesSync, writeFileSync, writeSync } from "node:fs";
@@ -133,7 +143,7 @@ function buildMac(site) {
     writeFileSync(path.join(app, "Resources", lproj, "InfoPlist.strings"), `"CFBundleDisplayName" = "${APP_NAME}";\n"CFBundleName" = "${APP_NAME}";\n`);
   }
   cpSync(site, path.join(app, "Resources", "site"), { recursive: true });
-  signAdHoc(path.join(stage, "PKUNMUN2026.app"));
+  signApp(path.join(stage, "PKUNMUN2026.app"));
   copyFileSync(path.join(DESKTOP, "macos", "安装说明.txt"), path.join(stage, "安装说明.txt"));
   // Opens the same page in the default browser without launching the app, so no Gatekeeper approval is needed.
   copyFileSync(path.join(DESKTOP, "macos", BROWSER_PAGE), path.join(stage, BROWSER_PAGE));
@@ -145,6 +155,7 @@ function buildMac(site) {
   rmSync(dmg, { force: true });
   if (process.platform === "darwin") {
     run("hdiutil", ["create", "-volname", VOLUME_NAME, "-srcfolder", stage, "-fs", "HFS+", "-format", "UDZO", "-imagekey", "zlib-level=9", "-ov", dmg]);
+    notarize(dmg);
     return dmg;
   }
   const hfsplus = process.env.HFSPLUS_TOOL || "hfsplus", dmgTool = process.env.DMG_TOOL || "dmg";
@@ -167,25 +178,44 @@ function buildMac(site) {
   // Upstream hfsplus copies names byte by byte, which turns Chinese names into garbage in Finder.
   // The catalog key of a root-level file: parent folder 2, name length in UTF-16 units, UTF-16BE name.
   const readme = Buffer.from("安装说明.txt", "utf16le").swap16();
-  if (!readFileSync(img).includes(Buffer.concat([Buffer.from([0, 0, 0, 2, 0, readme.length / 2]), readme]))) throw new Error("hfsplus wrote the Chinese file names incorrectly; build it with desktop/macos/libdmg-hfsplus-utf8-names.patch");
+  if (!readFileSync(img).includes(Buffer.concat([Buffer.from([0, 0, 0, 2, 0, readme.length / 2]), readme]))) throw new Error("hfsplus wrote the Chinese file names incorrectly; build it with desktop/macos/libdmg-hfsplus.patch");
   run(dmgTool, ["--compression", "zlib", "--level", "9", "build", img, dmg], { env, stdio: ["ignore", "ignore", "inherit"] });
   rmSync(img, { force: true });
+  notarize(dmg);
   return dmg;
 }
 
 // Apple silicon runs only signed native code, and an app whose signature does not cover its resources is
-// reported as "damaged". An ad-hoc signature seals the whole bundle (Contents/_CodeSignature) without a
-// developer identity, so macOS shows only its usual first-open confirmation for apps from the internet.
-function signAdHoc(bundle) {
+// reported as "damaged". Without a certificate an ad-hoc signature seals the whole bundle
+// (Contents/_CodeSignature) without a developer identity, so macOS shows only its usual first-open
+// confirmation for apps from the internet. With a Developer ID the hardened runtime is enabled for notarization.
+function signApp(bundle) {
+  const identity = process.env.MUNWORD_MAC_SIGN_IDENTITY;
   if (process.platform === "darwin") {
-    run("codesign", ["--force", "--sign", "-", "--timestamp=none", bundle]);
+    run("codesign", ["--force", "--sign", identity || "-", ...(identity ? ["--options", "runtime", "--timestamp"] : ["--timestamp=none"]), bundle]);
     run("codesign", ["--verify", "--strict", "--verbose=2", bundle]);
     return;
   }
   const rcodesign = process.env.RCODESIGN || "rcodesign";
   if (!has(rcodesign) && !existsSync(rcodesign)) throw new Error("Signing the macOS app on Linux needs rcodesign (cargo install apple-codesign; set RCODESIGN=/path/to/rcodesign)");
-  run(rcodesign, ["sign", bundle], { stdio: ["ignore", "ignore", "inherit"] });
+  if (identity) throw new Error("MUNWORD_MAC_SIGN_IDENTITY names a keychain identity, which only exists on a Mac; on Linux use MUNWORD_MAC_P12");
+  const p12 = process.env.MUNWORD_MAC_P12;
+  const certificate = p12 ? ["--p12-file", p12, "--p12-password-file", process.env.MUNWORD_MAC_P12_PASSWORD_FILE || "", "--code-signature-flags", "runtime", ...(process.env.MUNWORD_MAC_TIMESTAMP_URL ? ["--timestamp-url", process.env.MUNWORD_MAC_TIMESTAMP_URL] : [])] : [];
+  run(rcodesign, ["sign", ...certificate, bundle], { stdio: ["ignore", "ignore", "inherit"] });
   if (!existsSync(path.join(bundle, "Contents", "_CodeSignature", "CodeResources"))) throw new Error("rcodesign did not seal the bundle resources");
+}
+
+// Notarization removes the first-open warning entirely; it needs a Developer ID signature.
+function notarize(dmg) {
+  if (process.platform === "darwin" && process.env.MUNWORD_NOTARY_PROFILE) {
+    if (!process.env.MUNWORD_MAC_SIGN_IDENTITY) throw new Error("Notarization needs MUNWORD_MAC_SIGN_IDENTITY (Developer ID Application)");
+    run("xcrun", ["notarytool", "submit", dmg, "--keychain-profile", process.env.MUNWORD_NOTARY_PROFILE, "--wait"]);
+    run("xcrun", ["stapler", "staple", dmg]);
+    run("xcrun", ["stapler", "validate", dmg]);
+  } else if (process.platform !== "darwin" && process.env.MUNWORD_NOTARY_API_KEY) {
+    if (!process.env.MUNWORD_MAC_P12) throw new Error("Notarization needs a Developer ID certificate (MUNWORD_MAC_P12)");
+    run(process.env.RCODESIGN || "rcodesign", ["notary-submit", "--api-key-file", process.env.MUNWORD_NOTARY_API_KEY, "--staple", dmg]);
+  }
 }
 
 function treeSize(dir) {
@@ -229,6 +259,10 @@ function buildWin(site) {
   stamp(stage);
   const version4 = `${VERSION.split(".").concat(["0", "0", "0"]).slice(0, 3).join(".")}.0`;
   const defs = [`-DVERSION=${VERSION}`, `-DVERSION4=${version4}`, "-INPUTCHARSET", "UTF8", "-V2"];
+  if (process.env.MUNWORD_WIN_PFX) {
+    if (!has("osslsigncode")) throw new Error("MUNWORD_WIN_PFX is set but osslsigncode is missing (apt install osslsigncode)");
+    defs.push(`-DSIGN=${path.join(DESKTOP, "windows", "sign.sh")}`);
+  }
   // makensis on Linux crashes on the Chinese readme name unless the locale is UTF-8.
   const env = { ...process.env, ...(process.platform === "linux" && !/UTF-?8/i.test(process.env.LC_ALL || process.env.LANG || "") ? { LC_ALL: "C.UTF-8" } : {}) };
   run("makensis", [...defs, "launcher.nsi"], { cwd: stage, env });

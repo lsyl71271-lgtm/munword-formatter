@@ -1,0 +1,171 @@
+name: PKUNMUN offline installers (DMG / EXE)
+
+# Checks the published downloads/PKUNMUN2026-Formatter-macOS.dmg and -Windows-Setup.exe:
+# - rebuilt from source on Linux, they must match downloads/SHA256SUMS.txt byte for byte;
+# - the offline page passes all acceptance inputs in Chromium and the oldest supported Chromium;
+# - the EXE installs, launches, upgrades and uninstalls on Windows 7 32-bit / Windows 10 (Wine),
+#   Windows Server 2022 x64 and Windows 11 ARM, with the full flow in the installed Edge, Chrome, Firefox;
+# - the DMG verifies, its app passes Apple's codesign and runs natively on Apple silicon and Intel
+#   (macOS 14 and 15), with the full flow in the installed Safari, Chrome, Firefox.
+
+on:
+  push:
+    paths:
+      - 'desktop/**'
+      - 'downloads/**'
+      - 'VERSION'
+      - '.github/workflows/offline-installers.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reproduce:
+    name: Rebuild from source and compare (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the build time stamp is the commit that set VERSION
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.19.0'
+      - name: Build tools (NSIS, hfsprogs, libfaketime, zsh)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis hfsprogs faketime zsh cmake libbz2-dev zlib1g-dev liblzma-dev libssl-dev
+      - name: libdmg-hfsplus with the repository's patch
+        run: |
+          git clone https://github.com/mozilla/libdmg-hfsplus "$RUNNER_TEMP/libdmg"
+          cd "$RUNNER_TEMP/libdmg"
+          git checkout ec239599c1f234a4e01ae3fe51214d0c77e5baa3
+          git apply "$GITHUB_WORKSPACE/desktop/macos/libdmg-hfsplus.patch"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j 4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/rcodesign
+          key: rcodesign-0.29.0-${{ runner.os }}
+      - name: rcodesign (apple-codesign 0.29.0)
+        run: test -x ~/.local/rcodesign/bin/rcodesign || cargo install apple-codesign --version 0.29.0 --locked --root ~/.local/rcodesign
+      - run: pnpm install --frozen-lockfile
+      - name: Desktop unit tests (bash and zsh)
+        run: MUNWORD_TEST_SHELLS=/bin/bash:/usr/bin/zsh node --test tests/desktop.test.mjs
+      - name: Rebuild both installers
+        env:
+          HFSPLUS_TOOL: ${{ runner.temp }}/libdmg/build/hfs/hfsplus
+          DMG_TOOL: ${{ runner.temp }}/libdmg/build/dmg/dmg
+        run: RCODESIGN="$HOME/.local/rcodesign/bin/rcodesign" node desktop/build-desktop.mjs
+      - name: Published installers are exactly what the source builds
+        run: |
+          cd dist/desktop
+          tail -n +2 ../../downloads/SHA256SUMS.txt | sha256sum --check
+      - name: Playwright with its Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund playwright@1.56.1
+          node "$RUNNER_TEMP/pw/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Offline page, all inputs, from file://
+        env:
+          MUNWORD_PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
+        run: node desktop/offline-smoke.mjs
+      - name: Oldest supported Chromium (98 refused, 99 and 109 complete)
+        env:
+          MUNWORD_PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
+        run: node desktop/acceptance/browser-floor.mjs dist/desktop/site "$RUNNER_TEMP/old-chromium"
+      - if: always()
+        run: mkdir -p output/acceptance && cp "$RUNNER_TEMP"/old-chromium/*.json "$RUNNER_TEMP"/old-chromium/*.png output/acceptance/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-rebuild-and-page
+          path: |
+            dist/desktop/*.dmg
+            dist/desktop/*.exe
+            output/desktop-smoke/
+            output/acceptance/
+          retention-days: 30
+
+  wine:
+    name: Windows 7 32-bit and Windows 10 in Wine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wine (32- and 64-bit), NSIS, Xvfb
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine64 wine32:i386 nsis xvfb
+      - name: Scenarios (browser choice, install paths, uninstall)
+        run: |
+          bash desktop/acceptance/wine/scenarios.sh "$RUNNER_TEMP/wine" win7 | tee win7.txt
+          bash desktop/acceptance/wine/scenarios.sh "$RUNNER_TEMP/wine" win10 | tee win10.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wine-scenarios
+          path: win*.txt
+          retention-days: 30
+
+  windows:
+    name: Native ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the 1.8.4 installer for the upgrade test comes from history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install selenium==4.50.0
+      - name: Install, launch, full flow in Edge / Chrome / Firefox, upgrade, uninstall
+        env:
+          PYTHONUTF8: '1'
+        run: python desktop/acceptance/windows.py --out output/acceptance
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-${{ matrix.os }}
+          path: output/acceptance/
+          retention-days: 30
+
+  macos:
+    name: Native ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install selenium==4.50.0
+      - name: Allow WebDriver in Safari
+        run: sudo safaridriver --enable
+      - name: Verify, codesign, Gatekeeper verdict, native launch, full flow in Safari / Chrome / Firefox
+        env:
+          PYTHONUTF8: '1'
+        run: python desktop/acceptance/macos.py --out output/acceptance
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-${{ matrix.os }}
+          path: output/acceptance/
+          retention-days: 30

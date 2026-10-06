@@ -15,6 +15,10 @@ SetCompressor /SOLID lzma
 !include "WordFunc.nsh"
 !include "browsers.nsh"
 
+!ifdef SIGN
+  !finalize '"${SIGN}" "%1"' = 0
+!endif
+
 Name "PKUNMUN 2026 文件排版系统"
 OutFile "PKUNMUN2026Formatter.exe"
 Icon "app.ico"

@@ -127,17 +127,39 @@ for (const shell of SHELLS) {
   });
 }
 
-test("macOS entry point is a universal arm64 + x86_64 program that runs Resources/launcher.sh", () => {
+// Deployment target of every slice of a Mach-O file, read from LC_VERSION_MIN_MACOSX / LC_BUILD_VERSION.
+function machoMinimums(bytes) {
+  const slices = bytes.readUInt32BE(0) === 0xcafebabe
+    ? Array.from({ length: bytes.readUInt32BE(4) }, (_, i) => ({ cpu: bytes.readUInt32BE(8 + i * 20), offset: bytes.readUInt32BE(16 + i * 20) }))
+    : [{ cpu: bytes.readUInt32LE(4), offset: 0 }];
+  const version = (v) => `${v >>> 16}.${(v >> 8) & 0xff}`;
+  return Object.fromEntries(slices.map(({ cpu, offset }) => {
+    assert.equal(bytes.readUInt32LE(offset), 0xfeedfacf, "64-bit Mach-O slice");
+    let at = offset + 32, minimum = null;
+    for (let i = 0; i < bytes.readUInt32LE(offset + 16); i++) {
+      const cmd = bytes.readUInt32LE(at), size = bytes.readUInt32LE(at + 4);
+      if (cmd === 0x24) minimum = version(bytes.readUInt32LE(at + 8));
+      if (cmd === 0x32) minimum = version(bytes.readUInt32LE(at + 12));
+      at += size;
+    }
+    return [{ 0x01000007: "x86_64", 0x0100000c: "arm64" }[cpu], minimum];
+  }));
+}
+
+test("macOS entry point is a universal program whose real deployment targets match Info.plist", () => {
   const stub = readFileSync(path.join(ROOT, "desktop", "macos", "launcher-stub"));
   assert.equal(stub.readUInt32BE(0), 0xcafebabe, "fat Mach-O");
-  const count = stub.readUInt32BE(4);
-  const cpus = Array.from({ length: count }, (_, i) => stub.readUInt32BE(8 + i * 20));
-  assert.deepEqual(cpus.sort(), [0x01000007, 0x0100000c], "x86_64 and arm64 slices");
+  // The minimum macOS is what the binaries need, not just what the plist claims.
+  const minimums = machoMinimums(stub);
+  assert.deepEqual(minimums, { x86_64: "10.11", arm64: "11.0" });
+  const plist = readFileSync(path.join(ROOT, "desktop", "macos", "Info.plist"), "utf8");
+  assert.equal(/LSMinimumSystemVersion<\/key>\s*<string>([\d.]+)</.exec(plist)[1], minimums.x86_64);
   assert.ok(stub.includes(Buffer.from("/../Resources/launcher.sh")) && stub.includes(Buffer.from("/bin/bash")));
   const source = readFileSync(path.join(ROOT, "desktop", "macos", "launcher-stub.c"), "utf8");
   assert.match(source, /_NSGetExecutablePath/);
   const script = readFileSync(path.join(ROOT, "desktop", "build-desktop.mjs"), "utf8");
-  assert.match(script, /signAdHoc\(/, "the bundle is sealed with an ad-hoc signature");
+  assert.match(script, /function signApp\(/, "the bundle is sealed with a signature");
+  for (const hook of ["MUNWORD_MAC_SIGN_IDENTITY", "MUNWORD_MAC_P12", "MUNWORD_NOTARY_PROFILE", "MUNWORD_NOTARY_API_KEY", "MUNWORD_WIN_PFX"]) assert.ok(script.includes(hook), hook);
 });
 
 test("the disk image's browser page opens the bundled or installed page without starting the app", () => {
@@ -153,7 +175,7 @@ test("macOS bundle template and Windows installer scripts keep the offline, per-
   for (const key of ["CFBundleExecutable</key>\n  <string>PKUNMUN2026", "CFBundleIconFile</key>\n  <string>AppIcon", "__VERSION__", "LSHasLocalizedDisplayName", "LSMinimumSystemVersion</key>\n  <string>10.11"]) assert.ok(plist.includes(key), key);
   assert.equal(readFileSync(path.join(ROOT, "desktop", "macos", "AppIcon.icns")).subarray(0, 4).toString(), "icns");
   const installer = readFileSync(path.join(ROOT, "desktop", "windows", "installer.nsi"), "utf8");
-  for (const needle of ["RequestExecutionLevel user", '$LOCALAPPDATA\\Programs\\', "WriteUninstaller", "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", "SimpChinese", "MUI_FINISHPAGE_RUN", '!include "browsers.nsh"', "ManifestDPIAware true", "FinishShow"]) assert.ok(installer.includes(needle), needle);
+  for (const needle of ["RequestExecutionLevel user", '$LOCALAPPDATA\\Programs\\', "WriteUninstaller", "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", "SimpChinese", "MUI_FINISHPAGE_RUN", '!include "browsers.nsh"', "ManifestDPIAware true", "FinishShow", "StrLen $0 \"$INSTDIR\"", "!uninstfinalize"]) assert.ok(installer.includes(needle), needle);
   assert.doesNotMatch(installer, /RequestExecutionLevel admin|HKLM|inetc|NSISdl/, "no admin rights and no downloads during install");
   const launcher = readFileSync(path.join(ROOT, "desktop", "windows", "launcher.nsi"), "utf8");
   for (const needle of ["SilentInstall silent", '!include "browsers.nsh"', "--app=", "--no-first-run", "-new-window", 'ExecShell "open"', "ManifestDPIAware true"]) assert.ok(launcher.includes(needle), needle);

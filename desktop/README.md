@@ -20,7 +20,7 @@
     - 有 Chrome、Edge、Brave、Vivaldi 或 Chromium 时，以 `--app` 独立窗口打开；
     - 否则用 Safari；Safari 早于 15.4（macOS 10.14 及以前）且装有 Firefox 时，改用 Firefox。
   - 不启动服务，不常驻后台，也不写用户目录。
-  - 整个 `.app` 做 ad-hoc 签名，封存全部资源（`Contents/_CodeSignature`）。原因有二：Apple 芯片只运行已签名的原生代码；签名没覆盖资源的程序会被报告为“已损坏”。ad-hoc 签名没有开发者身份，所以第一次打开时仍是 macOS 对网上下载程序的常规确认（见根目录 README）。
+  - 整个 `.app` 做 ad-hoc 签名，封存全部资源（`Contents/_CodeSignature`）。原因有二：Apple 芯片只运行已签名的原生代码；签名没覆盖资源的程序会被报告为“已损坏”。ad-hoc 签名没有开发者身份，所以第一次打开时仍是 macOS 对网上下载程序的常规确认（见根目录 README）。有证书时可改用 Developer ID 签名并公证，见下文“签名与公证”。
   - 磁盘映像里的 `直接用浏览器打开.html` 是一个普通网页，按顺序跳转到旁边程序包里的页面、`~/Applications` 或 `/Applications` 中已安装的页面。它不运行任何程序，所以不需要 Gatekeeper 授权。
   - 包文件夹名用 ASCII，Finder 通过 `InfoPlist.strings` 显示中文名。磁盘映像是 HFS+、zlib 压缩（UDZO），macOS 10.11 起都能直接打开。
 - **Windows**：NSIS 安装程序（`windows/installer.nsi`）按当前用户安装到 `%LOCALAPPDATA%\Programs\PKUNMUN2026Formatter`，无需管理员权限。
@@ -32,6 +32,7 @@
     - 读取浏览器文件版本，低于页面要求的只在别无选择时使用。
   - Chromium 系以 `--app` 窗口打开，并带 `--no-first-run`，未用过的 Edge/Chrome 不会先弹欢迎页；Firefox 开新窗口；都没有时交给默认浏览器。
   - 安装完成页同样检查一遍。没有找到够新的浏览器时，提示 Windows 7/8.1 可装 Chrome 109 或 Firefox ESR 115。
+  - 安装路径超过 200 个字符时拒绝安装，免得深层文件超出 Windows 的路径长度限制。
   - 安装和运行过程都不下载任何东西。
 
 ## 构建
@@ -57,14 +58,16 @@ pnpm build:desktop          # = node desktop/build-desktop.mjs --publish
 
 Linux 上构建 DMG 需要：
 
-- `rcodesign`（`cargo install apple-codesign`，用 `RCODESIGN=` 指定路径）：ad-hoc 签名。
+- `rcodesign`（`cargo install apple-codesign --version 0.29.0 --locked`，用 `RCODESIGN=` 指定路径）：签名。
 - `mkfs.hfsplus`（apt `hfsprogs`）：建 HFS+ 卷。
 - [libdmg-hfsplus](https://github.com/mozilla/libdmg-hfsplus) 的 `hfsplus` 与 `dmg`（用 `HFSPLUS_TOOL=`、`DMG_TOOL=` 指定路径）。Firefox 在 Linux 上制作 macOS 镜像也走这条路。
-  - 上游 `hfsplus` 逐字节复制文件名，中文名在 Finder 里会成乱码。先打 `macos/libdmg-hfsplus-utf8-names.patch`（针对 ec23959）再 `cmake -B build && cmake --build build`。
+  - 先在 ec23959 上打 `macos/libdmg-hfsplus.patch`，再 `cmake -B build && cmake --build build`。补丁修两处：
+    - 上游逐字节复制文件名，中文名在 Finder 里会成乱码；
+    - 上游按目录读取顺序写入，不同文件系统做出的镜像字节不同。
   - 构建脚本会检查卷里的中文名，没打补丁会直接报错。
 - `libfaketime`（apt `faketime`）：固定卷内时间戳；没有时镜像照样可用，只是不能逐字节复现。
 
-时间戳固定为最近一次修改 `VERSION` 的提交时间，HFS+ 卷标识由版本号派生，所以同一份源码可以逐字节复现同样的安装包；`downloads/SHA256SUMS.txt` 可用来核对。版本号变化后，`tests/desktop.test.mjs` 会提示重新运行 `pnpm build:desktop`。
+时间戳固定为最近一次修改 `VERSION` 的提交时间，HFS+ 卷标识由版本号派生，目录按名称排序，所以同一份源码在任何 Linux 机器上都做出同样字节的安装包。CI 每次都重建一遍，并与 `downloads/SHA256SUMS.txt` 逐字节比对。版本号变化后，`tests/desktop.test.mjs` 会提示重新运行 `pnpm build:desktop`。
 
 改动图标、安装程序侧边图或 macOS 入口程序后：
 
@@ -87,25 +90,70 @@ MUNWORD_TEST_SHELLS=/path/to/bash-3.2:/bin/zsh:/bin/bash node --test tests/deskt
   - 页面改写与 CSP；
   - 加载脚本：用 jsdom 模拟新旧浏览器，并检查旧浏览器能解析它的语法；
   - macOS 启动脚本：用替身命令检验浏览器选择、Safari 版本判断、含空格和中文路径的 URL 编码、各级回退与报错；
-  - 通用入口程序的两个架构；
-  - 安装脚本的关键设置；
+  - 通用入口程序：两个架构，以及从 Mach-O 读出的真实最低系统版本与 `Info.plist` 一致；
+  - 安装脚本的关键设置与签名接口；
   - 已发布安装包的校验和与版本号。
-- **离线冒烟测试**：真实浏览器从 `file://` 打开页面，走完整流程（选类型 → 上传 → 识别 → 预览 → 生成下载）。期间出现任何网络请求即失败，并确认页面自身的 CSP 会拒绝 fetch 和远程图片。
+- **离线冒烟测试**：真实浏览器从 `file://` 打开页面，11 份验收原稿（六种文书、中英文）逐份走完整流程，最后用模板新建一份：
+  - 流程：选类型 → 上传 → 识别 → 确认第三步可编辑（测试不代填）→ 生成下载并读回 ZIP → 原稿与成稿预览；
+  - 期间出现任何网络请求即失败，并确认页面自身的 CSP 会拒绝 fetch 和远程图片；
+  - 另外检查旧浏览器看到的说明，以及磁盘映像里网页入口的跳转。
 
-发布前的完整检查记录见提交说明。其中包括：
+### 原生系统验收（GitHub Actions）
 
-- 用 Wine（32 位 Windows 7 与 64 位 Windows 10 环境）安装、按多种浏览器组合启动、卸载 EXE；
-- 用 Apple 的 bash 3.2.57 源码编译出的 shell 运行 macOS 启动脚本；
-- 用独立脚本核对 ad-hoc 签名的每个哈希；
-- 用 `fsck.hfsplus` 和 7-Zip 检查 HFS+ 卷与中文文件名。
+`.github/workflows/offline-installers.yml` 在 GitHub 的托管虚拟机上检查 `downloads/` 里已发布的两个安装包，结果和截图保存为构建产物。仓库公开，托管机器不收费。
 
-## 未签名的说明
+| 作业 | 机器 | 检查内容 |
+|---|---|---|
+| 重建比对 | Ubuntu 24.04 | 从源码重建两个安装包，与 `SHA256SUMS.txt` 逐字节一致；Playwright Chromium 跑全部原稿；Chromium 98 必须看到说明，99 与 109（Win7 最后版本）必须完整跑通，成品与新版逐部件相同（`acceptance/browser-floor.mjs`） |
+| Wine | Ubuntu 24.04 | 32 位 Windows 7 与 64 位 Windows 10 前缀，31 项：静默安装、11 种浏览器组合、含空格/中文/#/% 的路径、卸载（`acceptance/wine/scenarios.sh`） |
+| Windows | Windows Server 2022 x64、Windows 11 ARM | 先装 1.8.4 再升级、快捷方式与卸载项、启动器真的拉起浏览器独立窗口且 URL 转义正确、系统自带的 Edge/Chrome/Firefox 跑全部原稿和模板、卸载（`acceptance/windows.py`） |
+| macOS | macOS 14 Apple 芯片、macOS 15 Apple 芯片、macOS 15 Intel | `hdiutil verify`；中文文件名；Apple `codesign --verify --deep --strict` 通过（即不会“已损坏”）；记录 Gatekeeper 在有无下载隔离属性时的判定；原生运行入口程序；通过 LaunchServices 真实打开；Safari/Chrome/Firefox 跑全部原稿和模板；Safari 经网页入口打开（`acceptance/macos.py`） |
 
-两个安装包都没有付费的代码签名（macOS 只有 ad-hoc 签名），第一次打开时系统会提示一次，处理方法见根目录 README。
+浏览器全流程由 `acceptance/browser_flow.py`（Selenium）驱动机器上真实安装的浏览器，不是测试工具自带的浏览器。各浏览器的文件选择框无法统一自动化，所以原稿通过 DataTransfer 交给页面，成品从下载链接背后的 Blob 读回。
 
-如果以后取得 Apple Developer ID 或 Windows 代码签名证书，可以在构建后签名，并对 DMG 做公证。公证后 macOS 不再提示：
+这些机器不能代表所有硬件和系统版本：
 
-- macOS：`codesign --force --options runtime --sign "Developer ID Application: …" PKUNMUN2026.app`，然后 `xcrun notarytool submit … --wait` 和 `xcrun stapler staple`；在 Linux 上可用 `rcodesign sign --p12-file …` 与 `rcodesign notary-submit --staple`。
-- Windows：`osslsigncode sign -pkcs12 … -t http://timestamp.digicert.com`，安装程序与启动器都要签。
+- 没有真正的 32 位 Windows 7 硬件，Win7 只在 Wine 里验证；
+- 也没有 macOS 10.11–13，旧 macOS 的支持依据二进制的最低版本和 Safari/Chrome 的版本门槛。
 
-签名不需要改动本目录的任何设计。
+## 两套安装器的比较
+
+仓库里另有一套由 `desktop/build.py` 构建的 Munword 安装器（见 [docs/desktop-installers.md](../docs/desktop-installers.md)）。两者用同一个页面和排版引擎，打包方式不同：
+
+| | 本目录（PKUNMUN 2026 文件排版系统） | Munword（`desktop/build.py`） |
+|---|---|---|
+| 运行方式 | 浏览器直接打开安装目录里的页面（`file://`），启动后程序立即退出 | 自带 Python，在 `127.0.0.1` 随机端口提供页面，后台驻留，空闲 30 分钟退出 |
+| 安装包 | 两个，各约 0.5 MB；macOS 一个通用 DMG，Windows 一个 EXE | 四个，按芯片/位数分包；自带 Python 运行环境（Actions 产物每个 6–12 MB） |
+| 系统 | Windows 7–11（32/64 位、ARM），macOS 10.11 起 | Windows 10/11，macOS 11 起 |
+| 浏览器门槛 | Chrome/Edge 99、Firefox 104、Safari 15.4（实测 Chromium 98/99/109） | Chrome/Edge 111、Firefox 128、Safari 16.4（按 Tailwind 官方声明） |
+| 窗口 | Edge/Chrome/Brave/Vivaldi 独立应用窗口 | 默认浏览器的标签页 |
+| 端口、防火墙、后台进程 | 无 | 本机回环端口，后台进程 |
+| 构建 | Linux 上可逐字节复现，CI 比对已发布文件 | 在各原生系统上构建 |
+
+从 Munword 方案借鉴并已加入本目录的做法：
+
+- 在原生 Windows/macOS 虚拟机上验收已发布的安装包；
+- 全部六种文书加模板新建的浏览器测试；
+- 检查 Mach-O 的真实最低版本；
+- Developer ID 签名与公证、Windows Authenticode 签名的构建接口；
+- 安装路径长度保护；
+- 把验收结果写成 JSON 并保存截图。
+
+## 签名与公证
+
+两个安装包默认没有付费的代码签名（macOS 只有 ad-hoc 签名），第一次打开时系统会提示一次，处理方法见根目录 README。
+
+取得证书后，构建时设置环境变量即可，不需要改动本目录的设计。证书、私钥和密码不要写进仓库或安装包。
+
+| 用途 | macOS 上构建 | Linux 上构建 |
+|---|---|---|
+| Developer ID 签名（开启 hardened runtime） | `MUNWORD_MAC_SIGN_IDENTITY="Developer ID Application: …"` | `MUNWORD_MAC_P12=… MUNWORD_MAC_P12_PASSWORD_FILE=…` |
+| 公证并装订（之后 macOS 不再提示） | `MUNWORD_NOTARY_PROFILE=<notarytool 钥匙串配置>` | `MUNWORD_NOTARY_API_KEY=<App Store Connect API 密钥 JSON>` |
+| Windows Authenticode（启动器、安装程序、卸载程序） | — | `MUNWORD_WIN_PFX=… MUNWORD_WIN_PFX_PASSWORD_FILE=…`，可选 `MUNWORD_WIN_TIMESTAMP_URL`；需要 `osslsigncode` |
+
+签名过的安装包带签名时间，不再逐字节可复现。Linux 上的两条签名路径已用自签名测试证书验证：
+
+- `osslsigncode verify` 通过；
+- rcodesign 写入了 hardened runtime 和证书签名。
+
+公证需要真实的 Apple 账号，没有验证过。

@@ -1,3 +1,13 @@
+Patch for https://github.com/mozilla/libdmg-hfsplus at ec239599c1f234a4e01ae3fe51214d0c77e5baa3, used to build
+the macOS disk image on Linux (desktop/build-desktop.mjs):
+
+- hfs/catalog.c, hfs/utility.c: file names are UTF-8 on Linux and UTF-16 in HFS+; upstream copies them
+  byte by byte, so Chinese names show up as garbage in Finder.
+- hfs/hfslib.c: addall adds directory entries in byte-wise name order instead of readdir order, so the
+  image is the same on every file system (ext4 hash order, tmpfs creation order, ...).
+
+Apply with: git apply libdmg-hfsplus.patch
+
 diff --git a/hfs/catalog.c b/hfs/catalog.c
 index 7844761..ce4d239 100644
 --- a/hfs/catalog.c
@@ -62,6 +72,57 @@ index 7844761..ce4d239 100644
    }
  
    destKey.keyLength = sizeof(uint32_t) + sizeof(uint16_t) + (sizeof(uint16_t) * destKey.nodeName.length);
+diff --git a/hfs/hfslib.c b/hfs/hfslib.c
+index 530e9a9..3ce19fa 100644
+--- a/hfs/hfslib.c
++++ b/hfs/hfslib.c
+@@ -292,6 +292,10 @@ void removeAllInFolder(HFSCatalogNodeID folderID, Volume* volume, const char* pa
+ 	}
+ }
+ 
++static int compareEntryNames(const struct dirent** left, const struct dirent** right) {
++	return strcmp((*left)->d_name, (*right)->d_name);
++}
++
+ void addAllInFolder(HFSCatalogNodeID folderID, Volume* volume, const char* parentName) {
+ 	addAllInFolderWithPolicies(folderID, volume, parentName, kIncomingSymlinksTraverse, TRUE);
+ }
+@@ -311,14 +315,17 @@ void addAllInFolderWithPolicies(
+ 	ASSERT(getcwd(cwd, 1024) != NULL, "cannot get current working directory");
+ 
+ 	CatalogRecordList* theList = getFolderContents(folderID, volume);
+-	DIR* dir = opendir(cwd);
+-	ASSERT(dir, "addAllInFolder: cannot opendir CWD");
++	/* Byte-wise name order, so the image does not depend on the file system's directory order. */
++	struct dirent** entries;
++	int nEntries = scandir(cwd, &entries, NULL, compareEntryNames);
++	ASSERT(nEntries >= 0, "addAllInFolder: cannot scan CWD");
+ 
+ 	printf(
+ 		"info: addAllInFolderWithPolicies: running in %s with symlink policy %d and permission setting %d\n",
+ 		cwd, symlinkPolicy, assignSpecialPermissions);
+ 
+-	for (struct dirent* ent = readdir(dir); ent; ent = readdir(dir)) {
++	for (int entryIndex = 0; entryIndex < nEntries; entryIndex++) {
++		struct dirent* ent = entries[entryIndex];
+ 		/* Skip `.` and `..` */
+ 		if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
+ 			continue;
+@@ -439,9 +446,12 @@ void addAllInFolderWithPolicies(
+ 		} else {
+ 			ASSERT(0, "addAllInFolder: cannot handle special file objects");
+ 		}  /* if (S_IS<something>(st.st_mode) */
+-	}  /* for (... ent = readdir(dir)) */
++	}  /* for (... entries) */
+ 
+-	closedir(dir);
++	for (int entryIndex = 0; entryIndex < nEntries; entryIndex++) {
++		free(entries[entryIndex]);
++	}
++	free(entries);
+ 
+ 	releaseCatalogRecordList(theList);
+ }
 diff --git a/hfs/utility.c b/hfs/utility.c
 index 01c3bb4..baffb4e 100644
 --- a/hfs/utility.c

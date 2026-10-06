@@ -14,6 +14,11 @@ SetCompressor /SOLID lzma
 !include "FileFunc.nsh"
 !include "browsers.nsh"
 
+!ifdef SIGN
+  !finalize '"${SIGN}" "%1"' = 0
+  !uninstfinalize '"${SIGN}" "%1"' = 0
+!endif
+
 !define APP_NAME "PKUNMUN 2026 文件排版系统"
 !define APP_ID "PKUNMUN2026Formatter"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
@@ -70,6 +75,13 @@ Function FinishShow
 FunctionEnd
 
 Section "Install"
+  ; Leaves room under the 260-character Windows path limit for the deepest file (site\licenses\…).
+  StrLen $0 "$INSTDIR"
+  ${If} $0 > 200
+    MessageBox MB_OK|MB_ICONSTOP "安装位置的路径太长（超过 200 个字符），请换一个较短的位置后重新安装。" /SD IDOK
+    SetErrorLevel 2
+    Abort
+  ${EndIf}
   SetOutPath "$INSTDIR"
   ; An update replaces the previous page completely; nothing from the old version is kept.
   RMDir /r "$INSTDIR\site"
