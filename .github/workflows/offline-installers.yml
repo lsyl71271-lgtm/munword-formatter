@@ -192,10 +192,19 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/artifacts
+      - name: Earlier Munword releases of this version (v<VERSION>-desktop, -desktop.1, ...)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat VERSION)
+          gh release list --limit 100 --json tagName --jq '.[].tagName' \
+            | grep -E "^v${version//./\\.}-desktop(\.[0-9]+)?$" | grep -vx "v${version}-desktop.2" | sort -V > "$RUNNER_TEMP/previous.txt" || true
+          cat "$RUNNER_TEMP/previous.txt"
       - name: Stage installers, checksums, evidence and notes (refuses unless everything passed)
         run: >
           python3 desktop/acceptance/stage_release.py --artifacts "$RUNNER_TEMP/artifacts" --out "$RUNNER_TEMP/release"
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --commit "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+          --previous "$(paste -sd, "$RUNNER_TEMP/previous.txt")"
       - name: Create or update the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -217,20 +226,29 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag
           fi
           gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --title "$title" --notes-file notes.md --latest
-      - name: Point the superseded Munword release at this one
+      - name: Point the superseded Munword releases at this one
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           version=$(cat VERSION)
-          old="v${version}-desktop"
           new="v${version}-desktop.2"
-          gh release view "$old" >/dev/null 2>&1 || exit 0
-          gh release view "$old" --json body --jq .body > old.md
-          grep -q "$new" old.md && exit 0
-          {
-            printf '> **有更新版本：[%s](%s/%s/releases/tag/%s)**，推荐下载。它用一个 DMG、一个 EXE 支持更多系统（Windows 7 起，macOS 10.11 起，Intel 与 Apple 芯片通用），每个不到 1 MB。\n' "$new" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$new"
-            printf '> 已知问题：本页的 Windows 安装包在桌面快捷方式、开始菜单和“应用和功能”里的中文名称显示为乱码（构建时未按 UTF-8 读取安装脚本；源码已修复）。\n\n'
-            cat old.md
-          } > old-updated.md
-          gh release edit "$old" --notes-file old-updated.md
+          while read -r old; do
+            [ -n "$old" ] || continue
+            gh release view "$old" --json body --jq .body > old.md
+            grep -q "$new" old.md && continue
+            # The garbled-names warning only where that release's own source lacks the UTF-8 fix in desktop/build.py.
+            git fetch -q --depth=1 origin "refs/tags/$old:refs/tags/$old"
+            garbled=""
+            git show "$old:desktop/build.py" 2>/dev/null | grep -q 'INPUTCHARSET' || garbled=1
+            {
+              printf '> **有更新版本：[%s](%s/%s/releases/tag/%s)**，推荐下载。它用一个 DMG、一个 EXE 支持更多系统（Windows 7 起，macOS 10.11 起，Intel 与 Apple 芯片通用），每个不到 1 MB。\n' "$new" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$new"
+              if [ -n "$garbled" ]; then
+                printf '> 已知问题：本页的 Windows 安装包在桌面快捷方式、开始菜单和“应用和功能”里的中文名称显示为乱码（构建时未按 UTF-8 读取安装脚本；源码已修复）。\n'
+              fi
+              printf '\n'
+              cat old.md
+            } > old-updated.md
+            gh release edit "$old" --notes-file old-updated.md
+            echo "updated $old (garbled-names warning: ${garbled:-no})"
+          done < "$RUNNER_TEMP/previous.txt"

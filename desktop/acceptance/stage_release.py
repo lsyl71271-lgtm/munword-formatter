@@ -41,6 +41,7 @@ def main() -> int:
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--repo", required=True, help="owner/name, for links to other releases")
+    parser.add_argument("--previous", default="", help="comma-separated tags of the earlier Munword releases of this version")
     args = parser.parse_args()
     problems = []
 
@@ -97,6 +98,8 @@ def main() -> int:
                 for name, data in (report.get("browsers") or {}).items() if data.get("passed")]
         return "、".join(rows) or "—"
 
+    tags = [t for t in args.previous.split(",") if t] or [f"v{VERSION}-desktop"]
+    previous = "、".join(f"[{t}](https://github.com/{args.repo}/releases/tag/{t})" for t in tags)
     native_rows = "\n".join(f"| {label} | {browsers(report)} |" for label, report in native.items())
     floor_rows = "；".join(f"Chromium {row['milestone']} {'显示升级说明' if row['expect'] == 'notice' else '完整跑通'}" for row in floor)
     notes = f"""## 下载
@@ -114,9 +117,9 @@ DMG 约 0.8 MB，EXE 约 0.5 MB。排版完全在本机浏览器里完成：不�
 - 不想改任何设置：双击磁盘映像里的「直接用浏览器打开.html」，不需要任何授权。它就是完整的排版页面（单个网页文件），可拖到桌面长期使用。
 - Windows SmartScreen：点「更多信息 → 仍要运行」。
 
-## 相对上一版 v1.8.5-desktop 的更新
+## 相对上一版 Munword 安装包的更新
 
-上一版是另一套自带 Python 运行环境的 Munword 安装包，仍可在 [v1.8.5-desktop](https://github.com/{args.repo}/releases/tag/v1.8.5-desktop) 下载。本版：
+上一版是另一套自带 Python 运行环境的 Munword 安装包，仍可下载：{previous}。本版：
 - **一个包通用**：macOS 不再分 Apple 芯片/Intel，Windows 不再分 x64/x86；每个不到 1 MB（上一版 5.9–10.2 MB）。
 - **兼容更多系统**：Windows 7、8.1 和 32 位系统可用；macOS 从 10.11 起可用（上一版要求 Windows 10、macOS 11）。
 - **浏览器门槛按实测**：Chrome/Edge 99 起可用（上一版要求 111，会拒绝 Windows 7 上能装的最后版本 Chrome 109）。
