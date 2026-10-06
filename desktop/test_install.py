@@ -35,8 +35,12 @@ def main():
         folder = Path(temporary)
         install = folder / "中文 空格 Applications"
         if sys.platform == "win32":
-            command = [str(artifact), "/S", "/D=" + str(install)]  # NSIS /D must be last, unquoted in its argument.
-            run(*command, timeout=120)
+            # NSIS parses /D as the unquoted *remainder* of its command line.
+            # list2cmdline([..., '/D=path with spaces']) quotes the entire option
+            # and NSIS silently falls back to its default directory. Pass the
+            # native command line directly (shell=False; no cmd.exe execution).
+            command = subprocess.list2cmdline([str(artifact), "/S"]) + " /D=" + str(install)
+            subprocess.run(command, check=True, timeout=120)
             executable = install / "app/Munword.exe"
             assert executable.is_file()
             smoke(executable, report, args.browser_module, args.browser)
@@ -50,7 +54,7 @@ def main():
                 while not state.exists() and time.monotonic() < deadline:
                     time.sleep(0.1)
                 assert state.exists(), "Installed old copy did not start"
-                run(*command, timeout=120, env=env)
+                subprocess.run(command, check=True, timeout=120, env=env)
                 assert old.wait(timeout=15) == 0, "Installer failed to stop old app"
             finally:
                 if old.poll() is None:
