@@ -11,6 +11,8 @@
 | macOS 10.11 及以上，Intel 与 Apple 芯片通用 | [PKUNMUN2026-Formatter-macOS.dmg](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Formatter-macOS.dmg) | 双击打开，把「PKUNMUN 2026 文件排版系统」拖进「应用程序」 |
 | Windows 7 / 8.1 / 10 / 11，32 位与 64 位 | [PKUNMUN2026-Formatter-Windows-Setup.exe](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Formatter-Windows-Setup.exe) | 双击运行，点「安装」；桌面出现快捷方式 |
 
+第一次安装请先看 **[安装教程（PKUNMUN2026-Install-Guide.txt）](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Install-Guide.txt)**：苹果电脑与 Windows 的手把手步骤、弹窗处理、系统和浏览器过旧时怎么更新。
+
 同样的文件也在仓库的 [downloads/](downloads/) 目录里。
 
 - 打开后是一个独立窗口（借用本机 Edge、Chrome、Brave 或 Vivaldi 的应用窗口；没有时用 Safari、Firefox 或默认浏览器）。界面和排版引擎与网页版完全相同。

@@ -210,7 +210,7 @@ jobs:
           tag="v${version}-desktop.2"
           title="v${version} · 离线桌面安装包（通用版：一个 DMG、一个 EXE，兼容 Windows 7 与 macOS 10.11 起）"
           cd "$RUNNER_TEMP/release"
-          assets=(PKUNMUN2026-Formatter-macOS.dmg PKUNMUN2026-Formatter-Windows-Setup.exe SHA256SUMS.txt PKUNMUN2026-*-Verification.zip)
+          assets=(PKUNMUN2026-Formatter-macOS.dmg PKUNMUN2026-Formatter-Windows-Setup.exe "PKUNMUN2026-Install-Guide.txt#安装教程（先看这个）.txt" SHA256SUMS.txt PKUNMUN2026-*-Verification.zip)
           if gh release view "$tag" >/dev/null 2>&1; then
             # Same version, rebuilt installers: move the tag to the verified commit by recreating the release.
             gh release download "$tag" --pattern SHA256SUMS.txt --dir previous
