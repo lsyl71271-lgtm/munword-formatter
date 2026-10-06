@@ -32,8 +32,12 @@ def main():
             deadline = time.monotonic() + 30
             while not state_file.exists() and time.monotonic() < deadline:
                 if process.poll() is not None:
-                    raise RuntimeError("Packaged app exited during startup")
+                    error = state_file.parent / "startup-error.txt"
+                    raise RuntimeError("Packaged app exited during startup: " + (error.read_text(encoding="utf-8") if error.exists() else str(process.returncode)))
                 time.sleep(0.1)
+            if not state_file.exists():
+                error = state_file.parent / "startup-error.txt"
+                raise RuntimeError("Startup timed out: " + (error.read_text(encoding="utf-8") if error.exists() else "no startup error file"))
             state = json.loads(state_file.read_text(encoding="utf-8"))
             origin = "http://127.0.0.1:%d" % state["port"]
             conn = http.client.HTTPConnection("127.0.0.1", state["port"], timeout=5)

@@ -299,5 +299,12 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except Exception as exc:
         logging.exception("Desktop launch failed")
-        message("程序无法启动：%s\n\n请重新安装完整版本；运行记录位于本机 Munword/runtime 目录。" % exc)
+        try:
+            directory = state_root()
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "startup-error.txt").write_text("%s: %s" % (type(exc).__name__, exc), encoding="utf-8")
+        except OSError:
+            pass
+        if not any(flag in sys.argv for flag in ("--no-browser", "--self-test", "--quit")):
+            message("程序无法启动：%s\n\n请重新安装完整版本；运行记录位于本机 Munword/runtime 目录。" % exc)
         raise SystemExit(1)
