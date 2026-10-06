@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -105,6 +106,47 @@ def check_macos_floor(app: Path, minimum="11.0"):
     (DIST / "macos-binary-minimums.json").write_text(json.dumps(binaries, indent=2), encoding="utf-8")
 
 
+def validate_macos_signature(text: str, identity: str, expected_team=None):
+    """Reject signatures that verify structurally but cannot load bundled Python."""
+    flags = re.search(r"\bflags=0x([0-9a-fA-F]+)", text)
+    team = re.search(r"^TeamIdentifier=(.+)$", text, re.MULTILINE)
+    if not flags or not team:
+        raise ValueError("Incomplete macOS code-signature metadata")
+    flags = int(flags.group(1), 16)
+    team = team.group(1).strip()
+    hardened = bool(flags & 0x10000)
+    adhoc = bool(flags & 0x2)
+    if identity == "-":
+        # Ad-hoc code has no Apple-issued Team ID. Library Validation under
+        # hardened runtime rejects its bundled Python even after Open Anyway.
+        if hardened or not adhoc or team != "not set":
+            raise ValueError("Ad-hoc builds must not enable hardened runtime / Team ID library validation")
+    elif not hardened or adhoc or team == "not set" or (expected_team and team != expected_team):
+        raise ValueError("Developer ID binaries must use hardened runtime and the same Team ID")
+    return {"flags": flags, "hardened_runtime": hardened, "ad_hoc": adhoc, "team": team}
+
+
+def check_macos_signatures(app: Path, identity="-"):
+    def inspect(path, expected_team=None):
+        result = subprocess.run(["/usr/bin/codesign", "--display", "--verbose=4", str(path)],
+                                check=True, capture_output=True, text=True)
+        return validate_macos_signature(result.stdout + result.stderr, identity, expected_team)
+
+    main = inspect(app)
+    binaries = []
+    for path in app.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        with path.open("rb") as stream:
+            magic = stream.read(4)
+        if magic not in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca"):
+            continue
+        binaries.append({"file": str(path.relative_to(app)), **inspect(path, main["team"])})
+    if not binaries:
+        raise ValueError("No signed native binaries in macOS application")
+    return {"identity_mode": "ad-hoc" if identity == "-" else "Developer ID", "main": main, "binaries": binaries}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arch", choices=("x64", "x86", "arm64"), required=True)
@@ -126,7 +168,7 @@ def main():
     if sys.platform == "darwin":
         flags += ["--osx-bundle-identifier", "org.pkunmun.munword.desktop", "--target-architecture", "x86_64" if args.arch == "x64" else "arm64"]
         identity = os.environ.get("MUNWORD_MAC_SIGN_IDENTITY")
-        if identity:
+        if identity and identity != "-":
             flags += ["--codesign-identity", identity]
     elif sys.platform == "win32":
         flags += ["--icon", str(ROOT / "windows/app.ico")]
@@ -143,8 +185,13 @@ def main():
         plist_path.write_bytes(plistlib.dumps(info))
         check_macos_floor(app)
         identity = os.environ.get("MUNWORD_MAC_SIGN_IDENTITY", "-")
-        run("codesign", "--force", "--deep", "--options", "runtime", "--sign", identity, app)
+        # Match PyInstaller's policy: hardened runtime requires an Apple-issued
+        # signing identity. Enabling it with ad-hoc signing prevents Python dlopen.
+        options = "0" if identity == "-" else "runtime"
+        run("codesign", "--force", "--deep", "--options", options, "--sign", identity, app)
         run("codesign", "--verify", "--deep", "--strict", "--verbose=2", app)
+        signatures = check_macos_signatures(app, identity)
+        (DIST / "macos-signature-policy.json").write_text(json.dumps(signatures, indent=2), encoding="utf-8")
         folder = WORK / "dmg"
         if folder.exists():
             shutil.rmtree(folder)

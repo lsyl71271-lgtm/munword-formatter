@@ -21,6 +21,8 @@ macOS 不申请辅助功能、屏幕录制、自动化控制其他应用或全�
 
 正确 DMG 容器、完整应用复制、原生代码签名校验与 SHA-256 可排除一类真正的打包损坏；临时签名不能替代 Developer ID 或 Apple 公证。没有开发者证书的 DMG 仍可能被 Gatekeeper 拦截，不能保证不出现“未经验证的开发者”等提示。不要删除隔离属性或关闭 Gatekeeper 来宣称通过验收。
 
+Mac 打包修订版修复了临时签名错误启用 hardened runtime 的问题：这种组合没有 Apple-issued Team ID，会在普通用户的 Mac 上导致内置 Python 库加载失败，错误包含 `mapping process and mapped file have different Team IDs`，即使点击“仍要打开”也无法启动。临时签名包使用标准 ad-hoc 签名；仅真实 Developer ID 签名构建启用 hardened runtime，并逐个校验全部原生文件的签名标志和 Team ID。安装后复制的应用再次检查同一策略，避免只通过结构签名验证而遗漏此故障。构建修复不更改用户电脑的 Gatekeeper、SIP 或其他全局安全设置。
+
 `desktop/build.py` 可接收 `MUNWORD_MAC_SIGN_IDENTITY`（构建机钥匙串中的 Developer ID Application）与 `MUNWORD_NOTARY_PROFILE`（已经配置的 notarytool profile），执行签名、公证、staple 与校验。证书/私钥/密码不得写入源码或安装包。CI 默认无证书，因此会明确产出未公证版本。Windows 默认没有 Authenticode 证书，SmartScreen 也可能提示未知发布者；没有伪造签名或声称免安全提示。
 
 ## 构建与验收

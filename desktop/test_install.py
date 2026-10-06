@@ -1,5 +1,6 @@
 """Native installer acceptance in disposable CI VMs; never modifies real documents."""
 import argparse
+import http.client
 import json
 import os
 from pathlib import Path
@@ -79,10 +80,39 @@ def main():
                 app = install / "Munword.app"
                 run("ditto", mount / "Munword.app", app)
                 run("codesign", "--verify", "--deep", "--strict", app)
+                from build import check_macos_signatures
+                signatures = check_macos_signatures(app, os.environ.get("MUNWORD_MAC_SIGN_IDENTITY", "-"))
+                (ROOT / "dist/desktop/macos-installed-signature-policy.json").write_text(json.dumps(signatures, indent=2), encoding="utf-8")
             finally:
                 run("hdiutil", "detach", mount)
             executable = app / "Contents/MacOS/Munword"
             smoke(executable, report, args.browser_module, args.browser)
+            # LaunchServices entry point used by Finder, including the default
+            # browser launch (the other frozen smoke explicitly suppresses it).
+            directory = folder / "系统入口 首次启动"
+            state = directory / "instance.json"
+            env = {**os.environ, "MUNWORD_STATE_DIR": str(directory)}
+            try:
+                run("/usr/bin/open", "-n", "--env", "MUNWORD_STATE_DIR=" + str(directory), app, timeout=30)
+                deadline = time.monotonic() + 30
+                while not state.exists() and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                assert state.exists(), "LaunchServices did not start the installed app"
+                info = json.loads(state.read_text(encoding="utf-8"))
+                conn = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=5)
+                conn.request("GET", "/api/health")
+                response = conn.getresponse()
+                assert response.status == 200 and json.loads(response.read())["offline"] is True
+                conn.close()
+                # Allow the default-browser command to finish before shutdown.
+                time.sleep(2)
+                assert state.exists() and not (directory / "startup-error.txt").exists(), "Default browser launch failed"
+            finally:
+                run(executable, "--quit", env=env, timeout=15)
+            deadline = time.monotonic() + 15
+            while state.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            assert not state.exists(), "LaunchServices copy did not stop"
             shutil.rmtree(app)
             assert not app.exists()
         else:
@@ -92,6 +122,9 @@ def main():
     record["installation_checks"] = ["native-install", "installed-copy-launch", "unicode-space-location", "uninstall"]
     if sys.platform == "win32":
         record["installation_checks"].append("reinstall-upgrade-while-old-app-running")
+    if sys.platform == "darwin":
+        record["installation_checks"].append("installed-copy-signature-flags-and-library-team-consistency")
+        record["installation_checks"].append("launchservices-default-browser-start-and-quit")
     record["limitations"] = ["Automated tests do not prove every hardware/OS version or user security-dialog experience", "No Developer ID certificate/notarization unless configured separately"]
     report.write_text(json.dumps(record, indent=2), encoding="utf-8")
 
