@@ -1,14 +1,39 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.8.5**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。新桌面安装器自带运行环境；源码开发与旧脚本安装方式另外保留。
+当前版本 **v1.8.5**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。普通用户请直接下载下面的桌面安装包；源码开发与旧脚本安装方式另外保留。
 
-### macOS / Windows 离线安装器
+## 下载桌面版（一键安装，纯本机离线）
 
-[一键下载安装包（GitHub Releases）](https://github.com/lsyl71271-lgtm/munword-formatter/releases/tag/v1.8.5-desktop.1)：在 Assets 中选择 Apple 芯片 Mac 的 `macOS-arm64.dmg`、Intel Mac 的 `macOS-x64.dmg`，或 Windows 的 `Windows-x64-Setup.exe`（常见电脑）/`Windows-x86-Setup.exe`（32 位 Windows 10）。同时提供 SHA-256 和原生验收记录；不必从 Actions 下载整个构建 ZIP。
+**[打开下载页（GitHub Releases）](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest)**，在 Assets 里选对应系统的文件即可：
 
-`desktop/` 实现自带运行环境的应用，`.github/workflows/desktop-installers.yml` 在两种系统的虚拟机中构建并验收。macOS 下载对应芯片的 DMG，拖动 Munword 到 Applications 后打开；Windows 下载 EXE，安装到当前用户目录并生成快捷方式，无需管理员、Python、Node、账号或首次联网下载。网页、规则、国家表、DOCX 引擎、预览与模板组件全部随包提供；运行时只监听随机的 `127.0.0.1` 端口，页面禁止外部网络请求。详情及实际验收范围见 [离线桌面安装说明](docs/desktop-installers.md)。
+| 系统 | 下载 | 安装 |
+|---|---|---|
+| macOS 10.11 及以上，Intel 与 Apple 芯片通用 | [PKUNMUN2026-Formatter-macOS.dmg](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Formatter-macOS.dmg) | 双击打开，把「PKUNMUN 2026 文件排版系统」拖进「应用程序」 |
+| Windows 7 / 8.1 / 10 / 11，32 位与 64 位 | [PKUNMUN2026-Formatter-Windows-Setup.exe](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Formatter-Windows-Setup.exe) | 双击运行，点「安装」；桌面出现快捷方式 |
 
-目标范围为 Windows 10/11（x64；另有 x86 包用于 32 位系统）和 macOS 11+（Intel/Apple 芯片分包）。浏览器需 Edge/Chrome 111+、Firefox 128+ 或 Safari 16.4+；使用系统浏览器避免内置浏览器增加硬件门槛。最低系统版本是构建目标，不代表已在每一旧系统和硬件上验收。macOS 构建检查每个 Mach-O 的真实最低版本，不只修改 plist。正式免“未经验证的开发者”拦截仍需有效 Developer ID 签名及 Apple 公证；没有证书的构建明确标为未公证。
+同样的文件也在仓库的 [downloads/](downloads/) 目录里。
+
+- 打开后是一个独立窗口（借用本机 Edge、Chrome、Brave 或 Vivaldi 的应用窗口；没有时用 Safari、Firefox 或默认浏览器）。界面和排版引擎与网页版完全相同。
+- **浏览器要求**：Edge / Chrome 99+、Firefox 104+ 或 Safari 15.4+。
+  - Windows 7 / 8.1 可用 Chrome 109 或 Firefox ESR 115；
+  - macOS 10.11–10.14 请装 Chrome 或 Firefox；
+  - 浏览器过旧时，页面会说明该装哪个，不会白屏。
+- **纯本机**：页面从本机文件打开，安全策略禁止一切网络连接；不需要 Python、账号或网络，不常驻后台。生成的 DOCX 保存在「下载」文件夹。
+- 安装包都不到 1 MB。
+  - Windows：安装到当前用户，不需要管理员权限，可在“设置 → 应用”中卸载；
+  - macOS：程序是原生通用版，Apple 芯片不需要 Rosetta。
+- **首次打开提示**：安装包没有付费的开发者签名。
+  - macOS 15 及以后：先双击一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。
+  - macOS 14 及以前：按住 Control 点按应用 → 打开。
+  - 不想改任何设置：双击磁盘映像里的「直接用浏览器打开.html」。它就是完整的排版页面（单个网页文件），不需要授权，可拖到桌面长期使用。
+  - Windows SmartScreen：点「更多信息 → 仍要运行」。
+  - 每台电脑只需一次。
+- 校验值见 [downloads/SHA256SUMS.txt](downloads/SHA256SUMS.txt)。安装包由 `pnpm build:desktop` 从同一提交逐字节复现，GitHub Actions 每次都从源码重建并比对。
+- 每次改动后，[`offline-installers`](.github/workflows/offline-installers.yml) 工作流都会自动检查这两个安装包：
+  - 原生 Windows（Server 2022 x64、Windows 11 ARM）与 macOS（14、15 Apple 芯片，15 Intel）虚拟机上安装、启动、升级、卸载，用系统自带的 Edge/Chrome/Firefox/Safari 跑完全部样例；
+  - Wine 里的 32 位 Windows 7；
+  - 旧版 Chromium 98/99/109 的浏览器门槛实测。
+- 构建方法、验收范围和签名方式见 [desktop/README.md](desktop/README.md)。
 
 ## 功能与运行模式
 

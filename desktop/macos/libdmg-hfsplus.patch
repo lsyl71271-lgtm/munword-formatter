@@ -1,0 +1,171 @@
+Patch for https://github.com/mozilla/libdmg-hfsplus at ec239599c1f234a4e01ae3fe51214d0c77e5baa3, used to build
+the macOS disk image on Linux (desktop/build-desktop.mjs):
+
+- hfs/catalog.c, hfs/utility.c: file names are UTF-8 on Linux and UTF-16 in HFS+; upstream copies them
+  byte by byte, so Chinese names show up as garbage in Finder.
+- hfs/hfslib.c: addall adds directory entries in byte-wise name order instead of readdir order, so the
+  image is the same on every file system (ext4 hash order, tmpfs creation order, ...).
+
+Apply with: git apply libdmg-hfsplus.patch
+
+diff --git a/hfs/catalog.c b/hfs/catalog.c
+index 7844761..ce4d239 100644
+--- a/hfs/catalog.c
++++ b/hfs/catalog.c
+@@ -322,13 +322,34 @@ static BTKey* catalogDataRead(off_t offset, io_func* io) {
+   return (BTKey*)record;
+ }
+ 
++/* Names arrive as UTF-8 (Linux file names); HFS+ stores UTF-16. Invalid bytes are kept as U+FFFD. */
+ void ASCIIToUnicode(const char* ascii, HFSUniStr255* unistr) {
+-  int count;
+-
+-  count = 0;
+-  while(ascii[count] != '\0') {
+-    unistr->unicode[count] = ascii[count];
+-    count++;
++  const unsigned char* s = (const unsigned char*) ascii;
++  int count = 0;
++
++  while(*s != '\0' && count < 255) {
++    uint32_t cp;
++    int extra;
++    if(*s < 0x80) { cp = *s; extra = 0; }
++    else if((*s & 0xE0) == 0xC0) { cp = *s & 0x1F; extra = 1; }
++    else if((*s & 0xF0) == 0xE0) { cp = *s & 0x0F; extra = 2; }
++    else if((*s & 0xF8) == 0xF0) { cp = *s & 0x07; extra = 3; }
++    else { cp = 0xFFFD; extra = 0; }
++    s++;
++    while(extra > 0) {
++      if((*s & 0xC0) != 0x80) { cp = 0xFFFD; break; }
++      cp = (cp << 6) | (*s & 0x3F);
++      s++;
++      extra--;
++    }
++    if(cp >= 0x10000) {
++      if(count + 2 > 255) break;
++      cp -= 0x10000;
++      unistr->unicode[count++] = 0xD800 | (cp >> 10);
++      unistr->unicode[count++] = 0xDC00 | (cp & 0x3FF);
++    } else {
++      unistr->unicode[count++] = cp;
++    }
+   }
+ 
+   unistr->length = count;
+@@ -783,7 +804,7 @@ int move(const char* source, const char* dest, Volume* volume) {
+ 
+   removeFromBTree(volume->catalogTree, (BTKey*)(&srcKey));
+ 
+-  destKey.nodeName.length = strlen(destName);
++  ASCIIToUnicode(destName, &destKey.nodeName);
+ 
+   threadLength = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t) + (sizeof(uint16_t) * destKey.nodeName.length);
+   thread = (HFSPlusCatalogThread*) malloc(threadLength);
+@@ -792,8 +813,7 @@ int move(const char* source, const char* dest, Volume* volume) {
+   thread->parentID = destKey.parentID;
+   thread->nodeName.length = destKey.nodeName.length;
+   for(i = 0; i < destKey.nodeName.length; i++) {
+-    destKey.nodeName.unicode[i] = destName[i];
+-    thread->nodeName.unicode[i] = destName[i];
++    thread->nodeName.unicode[i] = destKey.nodeName.unicode[i];
+   }
+ 
+   destKey.keyLength = sizeof(uint32_t) + sizeof(uint16_t) + (sizeof(uint16_t) * destKey.nodeName.length);
+diff --git a/hfs/hfslib.c b/hfs/hfslib.c
+index 530e9a9..3ce19fa 100644
+--- a/hfs/hfslib.c
++++ b/hfs/hfslib.c
+@@ -292,6 +292,10 @@ void removeAllInFolder(HFSCatalogNodeID folderID, Volume* volume, const char* pa
+ 	}
+ }
+ 
++static int compareEntryNames(const struct dirent** left, const struct dirent** right) {
++	return strcmp((*left)->d_name, (*right)->d_name);
++}
++
+ void addAllInFolder(HFSCatalogNodeID folderID, Volume* volume, const char* parentName) {
+ 	addAllInFolderWithPolicies(folderID, volume, parentName, kIncomingSymlinksTraverse, TRUE);
+ }
+@@ -311,14 +315,17 @@ void addAllInFolderWithPolicies(
+ 	ASSERT(getcwd(cwd, 1024) != NULL, "cannot get current working directory");
+ 
+ 	CatalogRecordList* theList = getFolderContents(folderID, volume);
+-	DIR* dir = opendir(cwd);
+-	ASSERT(dir, "addAllInFolder: cannot opendir CWD");
++	/* Byte-wise name order, so the image does not depend on the file system's directory order. */
++	struct dirent** entries;
++	int nEntries = scandir(cwd, &entries, NULL, compareEntryNames);
++	ASSERT(nEntries >= 0, "addAllInFolder: cannot scan CWD");
+ 
+ 	printf(
+ 		"info: addAllInFolderWithPolicies: running in %s with symlink policy %d and permission setting %d\n",
+ 		cwd, symlinkPolicy, assignSpecialPermissions);
+ 
+-	for (struct dirent* ent = readdir(dir); ent; ent = readdir(dir)) {
++	for (int entryIndex = 0; entryIndex < nEntries; entryIndex++) {
++		struct dirent* ent = entries[entryIndex];
+ 		/* Skip `.` and `..` */
+ 		if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
+ 			continue;
+@@ -439,9 +446,12 @@ void addAllInFolderWithPolicies(
+ 		} else {
+ 			ASSERT(0, "addAllInFolder: cannot handle special file objects");
+ 		}  /* if (S_IS<something>(st.st_mode) */
+-	}  /* for (... ent = readdir(dir)) */
++	}  /* for (... entries) */
+ 
+-	closedir(dir);
++	for (int entryIndex = 0; entryIndex < nEntries; entryIndex++) {
++		free(entries[entryIndex]);
++	}
++	free(entries);
+ 
+ 	releaseCatalogRecordList(theList);
+ }
+diff --git a/hfs/utility.c b/hfs/utility.c
+index 01c3bb4..baffb4e 100644
+--- a/hfs/utility.c
++++ b/hfs/utility.c
+@@ -15,16 +15,38 @@ void printUnicode(HFSUniStr255* str) {
+   }
+ }
+ 
++/* UTF-16 name to UTF-8 (the inverse of ASCIIToUnicode). */
+ char* unicodeToAscii(HFSUniStr255* str) {
+   int i;
+   char* toReturn;
++  unsigned char* out;
+   
+-  toReturn = (char*) malloc(sizeof(char) * (str->length + 1));
++  toReturn = (char*) malloc(sizeof(char) * (str->length * 3 + 1));
++  out = (unsigned char*) toReturn;
+   
+   for(i = 0; i < str->length; i++) {
+-    toReturn[i] = (char)(str->unicode[i] & 0xff);
++    uint32_t cp = str->unicode[i];
++    if(cp >= 0xD800 && cp < 0xDC00 && i + 1 < str->length && str->unicode[i + 1] >= 0xDC00 && str->unicode[i + 1] < 0xE000) {
++      cp = 0x10000 + ((cp - 0xD800) << 10) + (str->unicode[i + 1] - 0xDC00);
++      i++;
++    }
++    if(cp < 0x80) {
++      *out++ = cp;
++    } else if(cp < 0x800) {
++      *out++ = 0xC0 | (cp >> 6);
++      *out++ = 0x80 | (cp & 0x3F);
++    } else if(cp < 0x10000) {
++      *out++ = 0xE0 | (cp >> 12);
++      *out++ = 0x80 | ((cp >> 6) & 0x3F);
++      *out++ = 0x80 | (cp & 0x3F);
++    } else {
++      *out++ = 0xF0 | (cp >> 18);
++      *out++ = 0x80 | ((cp >> 12) & 0x3F);
++      *out++ = 0x80 | ((cp >> 6) & 0x3F);
++      *out++ = 0x80 | (cp & 0x3F);
++    }
+   }
+-  toReturn[i] = '\0';
++  *out = '\0';
+   
+   return toReturn;
+ }

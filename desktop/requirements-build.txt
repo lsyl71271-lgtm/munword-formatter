@@ -1,2 +1,0 @@
-# Packaging only. The installed application needs no third-party Python packages.
-pyinstaller==6.22.3
