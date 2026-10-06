@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import shutil
+import platform
 import tempfile
 import time
 
@@ -68,7 +69,8 @@ def main():
                 process.terminate()
                 process.wait(timeout=10)
         args.report.parent.mkdir(parents=True, exist_ok=True)
-        args.report.write_text(json.dumps({"executable": executable.name, "version": health["version"], "platform": os.name,
+        args.report.write_text(json.dumps({"executable": executable.name, "version": health["version"], "platform": platform.platform(),
+            "runtime_python": health["runtime_python"], "runtime_bits": health["runtime_bits"],
             "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(), "passed": True,
             "checks": ["bundled-asset-integrity", "clean-user-state", "chinese-and-space-paths", "dynamic-loopback-port", "repeat-launch", "authenticated-quit", "relaunch"] + (["browser-upload-recognition-export-preview-template-no-external-network"] if args.browser_module else [])}, indent=2), encoding="utf-8")
 

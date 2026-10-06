@@ -18,6 +18,7 @@ import secrets
 import socket
 import subprocess
 import sys
+import struct
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -144,7 +145,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(403, b'{"error":"host"}')
         route = urlsplit(self.path).path
         if route == "/api/health":
-            info = {"service": SERVICE, "status": "ok", "version": self.server.manifest["version"], "instance": self.server.instance, "offline": True}
+            info = {"service": SERVICE, "status": "ok", "version": self.server.manifest["version"], "instance": self.server.instance,
+                    "offline": True, "runtime_python": sys.version.split()[0], "runtime_bits": struct.calcsize("P") * 8}
             return self.send(200, json.dumps(info).encode())
         if route == "/__desktop/ping":
             if self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):

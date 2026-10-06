@@ -39,6 +39,6 @@ Apple 芯片使用 `--arch arm64`；32 位 Windows 需要 32 位 Python 并使�
 
 自动化验证包括源代码回归、安装文件哈希、原生安装/DMG 挂载后复制、中文及空格目录、无系统 Python/Node 的应用 PATH、随机端口、重复启动、认证退出和重启；Windows 额外验收重新安装/升级与卸载。真实浏览器针对七份合成文稿执行六文种及英文决议草案的上传、自动识别、保持第三步人工编辑入口、生成下载、ZIP 回读、原稿与成稿预览及独立模板新建，并阻断/记录外部请求。
 
-GitHub Actions 使用 Windows Server 2022 x64 虚拟机（分别运行 x64/x86 包）、macOS 14 Apple 芯片、macOS 15 Intel 原生运行器；这不等价于所有 Windows 10/11、32 位硬件、macOS 11 或真机测试。安装器对最低系统的限制、静态二进制检查、现代浏览器需求和当前运行器验收必须分别报告。Windows 的标准托管运行器默认是管理员且 UAC 关闭，`RequestExecutionLevel user` 的静态检查不应被写成已在标准用户账户验收。
+GitHub Actions 使用 Windows Server 2022 x64 虚拟机（分别运行 x64/x86 包）、macOS 14 Apple 芯片、macOS 15 Intel 原生运行器，并安排同一 x64 EXE 在 Windows 11 ARM 虚拟机中经系统仿真再验收；这不等价于所有 Windows 10/11、32 位硬件、macOS 11 或真机测试。安装器对最低系统的限制、静态二进制检查、现代浏览器需求和当前运行器验收必须分别报告。Windows 的标准托管运行器默认是管理员且 UAC 关闭，`RequestExecutionLevel user` 的静态检查不应被写成已在标准用户账户验收。
 
 每个作业保存安装包、SHA-256、安装/运行验收 JSON、macOS 二进制最低版本清单和浏览器截图；失败作业不能据此宣称产物已通过。若后续某一工作流因平台授权无法执行，应直接报告未构建/未验收，不用源码检查替代原生系统结果。

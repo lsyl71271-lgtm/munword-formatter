@@ -39,6 +39,9 @@ jobs:
       - run: python -m unittest discover -s desktop -p 'test_launcher.py' -v
       - run: pnpm test:unit
       - run: python -m unittest discover -s backend/tests -v
+      - run: cp .openai/hosting.example.json .openai/hosting.json
+      - run: pnpm build
+      - run: node --test tests/rendered-html.test.mjs
       - run: pnpm typecheck
       - run: pnpm lint
       - run: python scripts/audit-source.py
@@ -110,4 +113,48 @@ jobs:
             dist/desktop/
             output/desktop-browser/
           if-no-files-found: error
+          retention-days: 30
+
+  windows-11-arm-compatibility:
+    needs: native-installers
+    runs-on: windows-11-arm
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: x64
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.19.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: Munword-windows-2022-x64
+          path: work/windows-x64-artifact
+      - run: |
+          npm install --prefix work/browser --no-audit --no-fund playwright@1.56.1
+          node work/browser/node_modules/playwright/cli.js install chromium
+      - name: Test the x64 installer under Windows 11 ARM emulation
+        env:
+          MUNWORD_ACCEPTANCE_SUFFIX: '.Windows-11-ARM'
+        run: |
+          artifact=$(find work/windows-x64-artifact -type f -name '*Setup.exe' | head -1)
+          module=$(node -e 'console.log(require("node:path").resolve("work/browser/node_modules/playwright/index.mjs"))')
+          python desktop/test_install.py --installer "$artifact" --browser-module "$module" --browser chromium
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Munword-Windows-11-ARM-compatibility
+          path: |
+            dist/desktop/
+            output/desktop-browser/
           retention-days: 30

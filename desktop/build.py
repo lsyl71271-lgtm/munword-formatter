@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+from importlib.metadata import distribution
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import sysconfig
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "work" / "desktop"
@@ -60,6 +62,12 @@ def prepare_site() -> Path:
     data = source.read_bytes()
     (site / target).write_bytes(data)
     manifest["assets"]["/" + target] = {"file": target, "mime": "text/plain; charset=utf-8", "sha256": hashlib.sha256(data).hexdigest()}
+    package = distribution("pyinstaller")
+    license_file = next(file for file in package.files if str(file).endswith("licenses/COPYING.txt"))
+    data = package.locate_file(license_file).read_bytes()
+    target = "licenses/pyinstaller.txt"
+    (site / target).write_bytes(data)
+    manifest["assets"]["/" + target] = {"file": target, "mime": "text/plain; charset=utf-8", "sha256": hashlib.sha256(data).hexdigest()}
     (site / "desktop-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return site
 
@@ -102,6 +110,10 @@ def main():
     parser.add_argument("--arch", choices=("x64", "x86", "arm64"), required=True)
     parser.add_argument("--site-only", action="store_true")
     args = parser.parse_args()
+    if sys.platform == "win32" and (args.arch not in ("x64", "x86") or struct.calcsize("P") * 8 != (64 if args.arch == "x64" else 32)):
+        raise ValueError("Windows package architecture must match the build Python (x64 or x86)")
+    if sys.platform == "darwin" and args.arch not in ("x64", "arm64"):
+        raise ValueError("macOS packages support x64/arm64 only")
     site = prepare_site()
     if args.site_only:
         print(site)

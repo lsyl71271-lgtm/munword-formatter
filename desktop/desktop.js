@@ -4,6 +4,11 @@
   var supported = window.CSS && CSS.supports("color", "oklch(50% 0.1 120)") &&
     window.TextEncoder && window.TextDecoder && window.Promise && window.fetch &&
     window.Blob && Blob.prototype.arrayBuffer && window.URL && URL.createObjectURL;
+  var firefox = /Firefox\/(\d+)/.exec(navigator.userAgent);
+  var chromium = /(?:Chrome|Edg)\/(\d+)/.exec(navigator.userAgent);
+  var safari = /Version\/(\d+)\.(\d+).*Safari\//.exec(navigator.userAgent);
+  if ((firefox && Number(firefox[1]) < 128) || (chromium && Number(chromium[1]) < 111) ||
+      (!chromium && safari && (Number(safari[1]) < 16 || (Number(safari[1]) === 16 && Number(safari[2]) < 4)))) supported = false;
   if (!supported) {
     document.getElementById("root").textContent = "浏览器版本较旧，无法完整运行排版和预览。请使用 Edge/Chrome 111+、Firefox 128+ 或 Safari 16.4+，在该浏览器中打开当前地址。Windows 不支持 Internet Explorer。安装包已包含全部排版组件，不需要安装 Python 或 Node。";
     return;
