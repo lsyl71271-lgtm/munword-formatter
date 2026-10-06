@@ -9,11 +9,12 @@
 //   dist/desktop/PKUNMUN2026-Formatter-Windows-Setup.exe per-user installer (no admin rights)
 //   --publish copies both into downloads/ with SHA256SUMS.txt
 //
-// Tools: macOS image → hdiutil (built into macOS), or on Linux xorrisofs + dmg (libdmg-hfsplus,
-// the route Bitcoin Core uses for its Linux-built macOS images). Windows installer → makensis (NSIS 3).
+// Tools: macOS image → codesign + hdiutil (built into macOS), or on Linux rcodesign (apple-codesign) +
+// mkfs.hfsplus + hfsplus/dmg (libdmg-hfsplus, the route Firefox uses for its Linux-built macOS images).
+// Windows installer → makensis (NSIS 3).
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, cpSync, existsSync, lutimesSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, copyFileSync, cpSync, existsSync, lstatSync, lutimesSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, symlinkSync, truncateSync, utimesSync, writeFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +28,8 @@ const VERSION = readFileSync(path.join(ROOT, "VERSION"), "utf8").trim();
 const APP_NAME = "PKUNMUN 2026 文件排版系统";
 const DMG_NAME = "PKUNMUN2026-Formatter-macOS.dmg";
 const EXE_NAME = "PKUNMUN2026-Formatter-Windows-Setup.exe";
+const VOLUME_NAME = "PKUNMUN 2026";
+export const BROWSER_PAGE = "直接用浏览器打开.html";
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const run = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { stdio: "inherit", ...opts });
 const has = (cmd) => { try { execFileSync("sh", ["-c", `command -v ${cmd}`], { stdio: "ignore" }); return true; } catch { return false; } };
@@ -37,16 +40,43 @@ const EPOCH = Number(process.env.SOURCE_DATE_EPOCH || execFileSync("git", ["log"
 // Scripts and styles keep the browser default so the bundle loads identically in Safari, Chrome and Edge.
 export const DESKTOP_CSP = "connect-src 'none'; img-src file: data: blob:; font-src file: data: blob:; media-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
 
+// Oldest browsers that run the bundle and its styles: Array.prototype.findLast (Chrome/Edge 97, Safari 15.4,
+// Firefox 104) and CSS cascade layers (Chrome/Edge 99, Safari 15.4, Firefox 97). An older browser (IE, Chrome
+// on an unpatched Windows 7, Safari on macOS 10.14) would show a blank or unstyled page, so this ES3 loader
+// explains which browser to install instead of loading app.js.
+export const OUTDATED_BROWSER_MESSAGE = "这个浏览器版本太旧，无法运行排版系统。";
+const COMPAT_LOADER = `<script>
+    (function () {
+      var root = document.getElementById("root");
+      var box = '<div style="max-width:560px;margin:48px auto;padding:24px 28px;border:1px solid #d0d5dd;border-radius:12px;background:#fff;color:#1d2939;font:15px/1.75 sans-serif">';
+      if (typeof Array.prototype.findLast === "function" && typeof window.CSSLayerBlockRule !== "undefined") {
+        var script = document.createElement("script");
+        script.src = "app.js";
+        script.onerror = function () {
+          root.innerHTML = box + "<b>程序文件不完整。</b><br>请重新运行安装程序（macOS 请重新把程序拖进「应用程序」）。</div>";
+        };
+        document.body.appendChild(script);
+        return;
+      }
+      root.innerHTML = box + "<b>${OUTDATED_BROWSER_MESSAGE}</b><br>" +
+        "请安装或更新以下任一浏览器，然后重新打开本程序（程序本身不联网，排版仍在本机完成）：<br>" +
+        "· Windows 10 / 11：Microsoft Edge 或 Google Chrome 最新版<br>" +
+        "· Windows 7 / 8.1：Google Chrome 109 或 Firefox ESR 115<br>" +
+        "· macOS 10.15 及以上：系统更新后的 Safari（15.4 或更高）<br>" +
+        "· macOS 10.11–10.14：Google Chrome 或 Firefox</div>";
+    })();
+  </script>`;
+
 export function offlineIndex(html) {
   let out = html
     .replace(/href="\/favicon\.svg"/, 'href="favicon.svg"')
     .replace(/href="\/styles\.css(\?v=[0-9a-f]+)?"/, 'href="styles.css"')
-    .replace(/src="\/app\.js(\?v=[0-9a-f]+)?"/, 'src="app.js"')
+    .replace(/<script src="\/app\.js(\?v=[0-9a-f]+)?" defer><\/script>/, () => COMPAT_LOADER)
     .replace("本站与本机版使用同一界面", "本机离线版与网页版使用同一界面")
     .replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  <meta http-equiv="Content-Security-Policy" content="${DESKTOP_CSP}">`);
   // Any root-absolute reference left would point at the disk root under file://.
   if (/(src|href)="\//.test(out)) throw new Error("Offline page still has a root-absolute asset reference");
-  for (const needle of ['href="styles.css"', 'src="app.js"', "Content-Security-Policy"]) if (!out.includes(needle)) throw new Error(`Offline page is missing ${needle}`);
+  for (const needle of ['href="styles.css"', 'script.src = "app.js"', "Content-Security-Policy"]) if (!out.includes(needle)) throw new Error(`Offline page is missing ${needle}`);
   return out;
 }
 
@@ -79,6 +109,10 @@ function stamp(dir) {
   utimesSync(dir, EPOCH, EPOCH);
 }
 
+// Disk image as Finder makes it: HFS+ with the drag-to-Applications layout, zlib-compressed (UDZO) so
+// every macOS from 10.11 mounts it without a "damaged" warning. On Linux the volume is written with
+// mkfs.hfsplus (hfsprogs) and the hfsplus/dmg tools of libdmg-hfsplus, the route Firefox's macOS builds
+// take; libfaketime pins the volume dates so the image is reproducible.
 function buildMac(site) {
   const stage = path.join(OUT, "mac");
   rmSync(stage, { recursive: true, force: true });
@@ -88,15 +122,21 @@ function buildMac(site) {
   mkdirSync(path.join(app, "Resources"), { recursive: true });
   writeFileSync(path.join(app, "Info.plist"), readFileSync(path.join(DESKTOP, "macos", "Info.plist"), "utf8").replaceAll("__VERSION__", VERSION));
   writeFileSync(path.join(app, "PkgInfo"), "APPL????");
-  copyFileSync(path.join(DESKTOP, "macos", "launcher.sh"), path.join(app, "MacOS", "PKUNMUN2026"));
+  // Native universal entry point (no Rosetta prompt on Apple silicon) that runs Resources/launcher.sh.
+  copyFileSync(path.join(DESKTOP, "macos", "launcher-stub"), path.join(app, "MacOS", "PKUNMUN2026"));
   chmodSync(path.join(app, "MacOS", "PKUNMUN2026"), 0o755);
+  copyFileSync(path.join(DESKTOP, "macos", "launcher.sh"), path.join(app, "Resources", "launcher.sh"));
+  chmodSync(path.join(app, "Resources", "launcher.sh"), 0o755);
   copyFileSync(path.join(DESKTOP, "macos", "AppIcon.icns"), path.join(app, "Resources", "AppIcon.icns"));
   for (const lproj of ["Base.lproj", "en.lproj", "zh-Hans.lproj", "zh_CN.lproj"]) {
     mkdirSync(path.join(app, "Resources", lproj), { recursive: true });
     writeFileSync(path.join(app, "Resources", lproj, "InfoPlist.strings"), `"CFBundleDisplayName" = "${APP_NAME}";\n"CFBundleName" = "${APP_NAME}";\n`);
   }
   cpSync(site, path.join(app, "Resources", "site"), { recursive: true });
+  signAdHoc(path.join(stage, "PKUNMUN2026.app"));
   copyFileSync(path.join(DESKTOP, "macos", "安装说明.txt"), path.join(stage, "安装说明.txt"));
+  // Opens the same page in the default browser without launching the app, so no Gatekeeper approval is needed.
+  copyFileSync(path.join(DESKTOP, "macos", BROWSER_PAGE), path.join(stage, BROWSER_PAGE));
   symlinkSync("/Applications", path.join(stage, "Applications"));
   // Finder layout of the mounted image: app left, Applications right (desktop/macos/make-dmg-layout.py).
   copyFileSync(path.join(DESKTOP, "macos", "dmg-layout.DS_Store"), path.join(stage, ".DS_Store"));
@@ -104,17 +144,75 @@ function buildMac(site) {
   const dmg = path.join(OUT, DMG_NAME);
   rmSync(dmg, { force: true });
   if (process.platform === "darwin") {
-    run("hdiutil", ["create", "-volname", "PKUNMUN 2026", "-srcfolder", stage, "-format", "UDZO", "-imagekey", "zlib-level=9", "-ov", dmg]);
-  } else {
-    const dmgTool = process.env.DMG_TOOL || "dmg";
-    if (!has("xorrisofs") || !(has(dmgTool) || existsSync(dmgTool))) throw new Error("Linux DMG build needs xorrisofs and the dmg tool from libdmg-hfsplus (set DMG_TOOL=/path/to/dmg)");
-    const iso = path.join(OUT, "macOS-uncompressed.iso");
-    // Rock Ridge keeps the launcher's execute bit and the Applications symlink.
-    run("xorrisofs", ["-D", "-l", "-V", "PKUNMUN 2026", "-no-pad", "-r", "-dir-mode", "0755", "-o", iso, stage], { env: { ...process.env, SOURCE_DATE_EPOCH: String(EPOCH) } });
-    run(dmgTool, [iso, dmg]);
-    rmSync(iso, { force: true });
+    run("hdiutil", ["create", "-volname", VOLUME_NAME, "-srcfolder", stage, "-fs", "HFS+", "-format", "UDZO", "-imagekey", "zlib-level=9", "-ov", dmg]);
+    return dmg;
   }
+  const hfsplus = process.env.HFSPLUS_TOOL || "hfsplus", dmgTool = process.env.DMG_TOOL || "dmg";
+  for (const tool of ["mkfs.hfsplus", hfsplus, dmgTool]) {
+    if (!has(tool) && !existsSync(tool)) throw new Error(`Linux DMG build needs mkfs.hfsplus (apt hfsprogs) and the hfsplus and dmg tools of libdmg-hfsplus (set HFSPLUS_TOOL= and DMG_TOOL=); missing ${tool}`);
+  }
+  const faketime = ["/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1", "/usr/lib/aarch64-linux-gnu/faketime/libfaketime.so.1", "/usr/lib/faketime/libfaketime.so.1"].find(existsSync);
+  if (!faketime) console.warn("libfaketime not found (apt faketime): the DMG works but is not byte-for-byte reproducible");
+  const env = { ...process.env, TZ: "UTC", ...(faketime ? { LD_PRELOAD: faketime, FAKETIME: new Date(EPOCH * 1000).toISOString().slice(0, 19).replace("T", " ") } : {}) };
+  const img = path.join(OUT, "macOS-uncompressed.hfs");
+  // Room for the files, their 4 KiB blocks and the catalog; free space compresses to nothing.
+  const MiB = 1048576;
+  writeFileSync(img, "");
+  truncateSync(img, Math.ceil((treeSize(stage) * 1.25 + 8 * MiB) / MiB) * MiB);
+  run("mkfs.hfsplus", ["-v", VOLUME_NAME, img], { env, stdio: ["ignore", "ignore", "inherit"] });
+  pinVolumeId(img);
+  // HFS+ stores names as decomposed UTF-16; these names have no decomposable characters.
+  for (const name of readdirSync(stage, { recursive: true })) if (name.normalize("NFD") !== name) throw new Error(`${name}: use a name without accented letters on the disk image`);
+  run(hfsplus, [img, "addall", stage, "/", "--symlinks", "clone_link"], { env, stdio: ["ignore", "ignore", "inherit"] });
+  // Upstream hfsplus copies names byte by byte, which turns Chinese names into garbage in Finder.
+  // The catalog key of a root-level file: parent folder 2, name length in UTF-16 units, UTF-16BE name.
+  const readme = Buffer.from("安装说明.txt", "utf16le").swap16();
+  if (!readFileSync(img).includes(Buffer.concat([Buffer.from([0, 0, 0, 2, 0, readme.length / 2]), readme]))) throw new Error("hfsplus wrote the Chinese file names incorrectly; build it with desktop/macos/libdmg-hfsplus-utf8-names.patch");
+  run(dmgTool, ["--compression", "zlib", "--level", "9", "build", img, dmg], { env, stdio: ["ignore", "ignore", "inherit"] });
+  rmSync(img, { force: true });
   return dmg;
+}
+
+// Apple silicon runs only signed native code, and an app whose signature does not cover its resources is
+// reported as "damaged". An ad-hoc signature seals the whole bundle (Contents/_CodeSignature) without a
+// developer identity, so macOS shows only its usual first-open confirmation for apps from the internet.
+function signAdHoc(bundle) {
+  if (process.platform === "darwin") {
+    run("codesign", ["--force", "--sign", "-", "--timestamp=none", bundle]);
+    run("codesign", ["--verify", "--strict", "--verbose=2", bundle]);
+    return;
+  }
+  const rcodesign = process.env.RCODESIGN || "rcodesign";
+  if (!has(rcodesign) && !existsSync(rcodesign)) throw new Error("Signing the macOS app on Linux needs rcodesign (cargo install apple-codesign; set RCODESIGN=/path/to/rcodesign)");
+  run(rcodesign, ["sign", bundle], { stdio: ["ignore", "ignore", "inherit"] });
+  if (!existsSync(path.join(bundle, "Contents", "_CodeSignature", "CodeResources"))) throw new Error("rcodesign did not seal the bundle resources");
+}
+
+function treeSize(dir) {
+  let total = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    total += entry.isDirectory() ? treeSize(full) + 4096 : Math.ceil(lstatSync(full).size / 4096) * 4096 + 4096;
+  }
+  return total;
+}
+
+// mkfs.hfsplus writes a random 64-bit volume identifier (Finder info words 6–7) into the volume header
+// and its backup copy; a value derived from the version keeps the image reproducible.
+function pinVolumeId(img) {
+  const id = createHash("sha256").update(`PKUNMUN2026 ${VERSION}`).digest().subarray(0, 8);
+  const size = statSync(img).size;
+  const fd = openSync(img, "r+");
+  try {
+    for (const header of [1024, size - 1024]) {
+      const signature = Buffer.alloc(2);
+      readSync(fd, signature, 0, 2, header);
+      if (signature.toString("latin1") !== "H+") throw new Error("mkfs.hfsplus did not write an HFS+ volume header");
+      writeSync(fd, id, 0, 8, header + 104);
+    }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function buildWin(site) {
@@ -127,7 +225,7 @@ function buildWin(site) {
   copyFileSync(path.join(DESKTOP, "windows", "sidebar.bmp"), path.join(stage, "sidebar.bmp"));
   // Windows Notepad reads the readme correctly with a UTF-8 BOM and CRLF.
   writeFileSync(path.join(stage, "使用说明.txt"), "﻿" + readFileSync(path.join(DESKTOP, "windows", "使用说明.txt"), "utf8").replace(/\r?\n/g, "\r\n"));
-  for (const nsi of ["launcher.nsi", "installer.nsi"]) copyFileSync(path.join(DESKTOP, "windows", nsi), path.join(stage, nsi));
+  for (const nsi of ["browsers.nsh", "launcher.nsi", "installer.nsi"]) copyFileSync(path.join(DESKTOP, "windows", nsi), path.join(stage, nsi));
   stamp(stage);
   const version4 = `${VERSION.split(".").concat(["0", "0", "0"]).slice(0, 3).join(".")}.0`;
   const defs = [`-DVERSION=${VERSION}`, `-DVERSION4=${version4}`, "-INPUTCHARSET", "UTF8", "-V2"];

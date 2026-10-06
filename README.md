@@ -6,15 +6,22 @@
 
 | 系统 | 下载 | 安装 |
 |---|---|---|
-| macOS 11 及以上（Safari 15.4+，或已装 Chrome / Edge） | [PKUNMUN2026-Formatter-macOS.dmg](downloads/PKUNMUN2026-Formatter-macOS.dmg) | 双击打开，把「PKUNMUN 2026 文件排版系统」拖进「应用程序」 |
-| Windows 10 / 11 | [PKUNMUN2026-Formatter-Windows-Setup.exe](downloads/PKUNMUN2026-Formatter-Windows-Setup.exe) | 双击运行，点「安装」；桌面出现快捷方式 |
+| macOS 10.11 及以上，Intel 与 Apple 芯片通用 | [PKUNMUN2026-Formatter-macOS.dmg](downloads/PKUNMUN2026-Formatter-macOS.dmg) | 双击打开，把「PKUNMUN 2026 文件排版系统」拖进「应用程序」 |
+| Windows 7 / 8.1 / 10 / 11，32 位与 64 位 | [PKUNMUN2026-Formatter-Windows-Setup.exe](downloads/PKUNMUN2026-Formatter-Windows-Setup.exe) | 双击运行，点「安装」；桌面出现快捷方式 |
 
-- 打开后是一个独立窗口（借用本机 Chrome / Edge 的应用窗口；都没有时用 Safari 或默认浏览器）。界面和排版引擎与网页版完全相同。
+- 打开后是一个独立窗口（借用本机 Edge、Chrome、Brave 或 Vivaldi 的应用窗口；没有时用 Safari、Firefox 或默认浏览器）。界面和排版引擎与网页版完全相同。
+- **浏览器要求**：Edge / Chrome 99+、Firefox 104+ 或 Safari 15.4+。
+  - Windows 7 / 8.1 可用 Chrome 109 或 Firefox ESR 115；
+  - macOS 10.11–10.14 请装 Chrome 或 Firefox；
+  - 浏览器过旧时，页面会说明该装哪个，不会白屏。
 - **纯本机**：页面从本机文件打开，安全策略禁止一切网络连接；不需要 Python、账号或网络，不常驻后台。生成的 DOCX 保存在「下载」文件夹。
-- 安装包都不到 1 MB；Windows 安装到当前用户，不需要管理员权限，可在“设置 → 应用”中卸载。
+- 安装包都不到 1 MB。
+  - Windows：安装到当前用户，不需要管理员权限，可在“设置 → 应用”中卸载；
+  - macOS：程序是原生通用版，Apple 芯片不需要 Rosetta。
 - **首次打开提示**：安装包没有付费的开发者签名。
   - macOS 15 及以后：先双击一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。
   - macOS 14 及以前：按住 Control 点按应用 → 打开。
+  - 不想改任何设置：双击磁盘映像里的「直接用浏览器打开.html」，用浏览器打开同一个页面，不需要授权。
   - Windows SmartScreen：点「更多信息 → 仍要运行」。
   - 每台电脑只需一次。
 - 校验值见 [downloads/SHA256SUMS.txt](downloads/SHA256SUMS.txt)；安装包由 `pnpm build:desktop` 从同一提交可逐字节复现。构建方法见 [desktop/README.md](desktop/README.md)。

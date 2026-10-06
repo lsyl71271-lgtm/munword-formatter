@@ -2,13 +2,17 @@
 ; Per-user install (no administrator rights, no UAC prompt) into %LOCALAPPDATA%\Programs, desktop and
 ; Start-menu shortcuts, an entry in “应用和功能” for uninstalling. Nothing is downloaded while
 ; installing and the installed program never goes online. Silent install: setup.exe /S
+; 32-bit and Unicode: runs on 32- and 64-bit Windows 7 to 11 and on ARM (x86 emulation); sharp at any display scaling.
 ; Built by desktop/build-desktop.mjs after launcher.nsi (needs PKUNMUN2026Formatter.exe, app.ico, site\).
 Unicode true
 RequestExecutionLevel user
+ManifestDPIAware true
+ManifestDPIAwareness "PerMonitorV2,System"
 SetCompressor /SOLID lzma
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "browsers.nsh"
 
 !define APP_NAME "PKUNMUN 2026 文件排版系统"
 !define APP_ID "PKUNMUN2026Formatter"
@@ -45,6 +49,7 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "PKUNMUN 2026"
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\使用说明.txt"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "查看使用说明"
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW FinishShow
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
@@ -54,6 +59,14 @@ Function WelcomeShow
   ; One click: the welcome page's button installs directly.
   GetDlgItem $0 $HWNDPARENT 1
   SendMessage $0 ${WM_SETTEXT} 0 "STR:安装"
+FunctionEnd
+
+Function FinishShow
+  ; An old PC with only Internet Explorer or an outdated browser: say what to install before first use.
+  Call FindBrowser
+  ${If} $BrowserCurrent != 1
+    SendMessage $mui.FinishPage.Text ${WM_SETTEXT} 0 "STR:注意：这台电脑上没有新版 Edge、Chrome 或 Firefox，请先安装其中一个再打开本程序。$\r$\n$\r$\nWindows 7 / 8.1 可用 Chrome 109 或 Firefox ESR 115。"
+  ${EndIf}
 FunctionEnd
 
 Section "Install"

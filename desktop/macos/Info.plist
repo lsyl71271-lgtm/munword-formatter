@@ -27,7 +27,7 @@
   <key>LSHasLocalizedDisplayName</key>
   <true/>
   <key>LSMinimumSystemVersion</key>
-  <string>11.0</string>
+  <string>10.11</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHumanReadableCopyright</key>

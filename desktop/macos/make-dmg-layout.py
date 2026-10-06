@@ -1,5 +1,6 @@
 """Regenerate desktop/macos/dmg-layout.DS_Store: the Finder window of the mounted disk image shows the app
-on the left and the Applications folder on the right (drag to install), readme below, no toolbar.
+on the left and the Applications folder on the right (drag to install); below them the page that opens the
+program in the browser without any approval, and the readme. No toolbar.
 
     python3 -m pip install ds_store && python3 desktop/macos/make-dmg-layout.py
 
@@ -23,7 +24,8 @@ with DSStore.open(str(OUT), "w+") as store:
         "gridOffsetX": 0.0, "gridOffsetY": 0.0, "scrollPositionX": 0.0, "scrollPositionY": 0.0,
     }
     store["."]["vSrn"] = ("long", 1)
-    store["PKUNMUN2026.app"]["Iloc"] = (170, 180)
-    store["Applications"]["Iloc"] = (470, 180)
-    store["安装说明.txt"]["Iloc"] = (320, 350)
+    store["PKUNMUN2026.app"]["Iloc"] = (170, 170)
+    store["Applications"]["Iloc"] = (470, 170)
+    store["直接用浏览器打开.html"]["Iloc"] = (170, 345)
+    store["安装说明.txt"]["Iloc"] = (470, 345)
 print("wrote", OUT.name, OUT.stat().st_size, "bytes")

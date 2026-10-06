@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PKUNMUN 2026 文件排版系统</title>
+  <style>
+    body { margin: 0; padding: 48px 20px; background: #f5f5f7; color: #1d1d1f; font: 15px/1.75 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+    main { max-width: 560px; margin: 0 auto; padding: 24px 28px; border: 1px solid #d2d2d7; border-radius: 12px; background: #fff; }
+    h1 { margin: 0 0 8px; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>PKUNMUN 2026 文件排版系统</h1>
+    <p id="status">正在用浏览器打开……</p>
+  </main>
+  <script>
+    // Opens the offline page in this browser without starting the app, so macOS asks for no approval.
+    // A page is only a document: no code from the disk image runs outside the browser, nothing goes online.
+    // Order: the copy next to this file (on the disk image), then the installed app in ~/Applications
+    // or /Applications. The favicon is probed first because a missing file:// page cannot be detected.
+    (function () {
+      var site = "PKUNMUN2026.app/Contents/Resources/site/";
+      var here = location.href.replace(/[?#].*$/, "").replace(/[^\/]*$/, "");
+      var home = location.pathname.match(/^\/Users\/[^\/]+\//);
+      var candidates = [here + site];
+      if (home) candidates.push("file://" + home[0] + "Applications/" + site);
+      candidates.push("file:///Applications/" + site);
+      function attempt(i) {
+        if (i >= candidates.length) {
+          document.getElementById("status").innerHTML = "没有找到程序文件。请先把「PKUNMUN 2026 文件排版系统」拖进「应用程序」文件夹，再双击本文件。";
+          return;
+        }
+        var probe = new Image();
+        probe.onload = function () { location.replace(candidates[i] + "index.html"); };
+        probe.onerror = function () { attempt(i + 1); };
+        probe.src = candidates[i] + "favicon.svg";
+      }
+      attempt(0);
+    })();
+  </script>
+</body>
+</html>
