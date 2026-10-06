@@ -39,7 +39,7 @@ from ..semantic_policy import OPERATIVE_EN, OPERATIVE_ZH, PREAMBLE_EN, PREAMBLE_
 from . import handbook
 from .handbook import HandbookSpec, spec_for
 from ..numbering import apply_native_rules, marker_of, marker_text, native_family, native_level, native_range_reason, plan_hierarchy, numbering_profile, valid_marker_change, sequence_issues
-from ..content_guard import signature
+from ..content_guard import is_whitespace, signature
 
 HEADER_ROLES = ("title", "committee", "topic", "country", "delegate", "sponsors", "signatories", "header")
 BODY_ROLES = ("preamble", "item", "prose", "reference")
@@ -785,7 +785,9 @@ class HandbookPassMixin:
             # A content control keeps at least one paragraph.
             if container is not body and len(container) == 1:
                 continue
-            if not visible_text(paragraph).strip() and not carries_hidden_structure(paragraph):
+            if (not visible_text(paragraph).strip() and not carries_hidden_structure(paragraph)
+                    and active_num_id(paragraph) is None and not carries_semantic_marks(paragraph)
+                    and is_whitespace(signature(element))):
                 # Logged so the content check can confirm it held only
                 # whitespace, tabs or line breaks.
                 if element not in self._edit_log:

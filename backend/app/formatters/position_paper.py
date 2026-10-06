@@ -43,6 +43,8 @@ class PositionPaperFormatter(BaseFormatter):
         self._format_sources(document, body_start, model.language)
 
     def _format_visible_numbered(self, paragraph, text: str, language: str) -> bool:
+        if re.match(r"\s*[0-9]+[.．][0-9]", text):
+            return False
         match = self._VISIBLE_DECIMAL_RE.match(text)
         if not match:
             return False

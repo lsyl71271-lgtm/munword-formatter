@@ -44,6 +44,9 @@ function romanValue(text: string): number | null {
   return null;
 }
 export function markerOf(text: string, romanContext = false): Marker | null {
+  // A decimal quantity or a compound outline (1.5 / 1.2.3) is not the
+  // single-level ordinal 1. Never rewrite only its first component.
+  if (/^\s*[0-9]+[.．][0-9]/.test(text)) return null;
   const article = /^\s*第([零一二三四五六七八九十]+)条/.exec(text);
   if (article) { const value = chineseValue(article[1]); return value ? {family:"article",value,length:article[0].length} : null; }
   const match = /^\s*(?:[（(]([^（）()\s]+)[）)]|([0-9]+|[a-zA-Z]+)[.．、)）])/.exec(text);

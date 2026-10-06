@@ -19,6 +19,8 @@ const eslintConfig = defineConfig([
     "qa/**",
     "public/studio-tools.js",
     "public/local-app.js",
+    "static-site/**",
+    ".static-site-*/**",
   ]),
 ]);
 

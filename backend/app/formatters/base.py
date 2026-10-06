@@ -345,7 +345,14 @@ class BaseFormatter(HandbookPassMixin):
             # The complex-script slot too, as the browser engine writes it:
             # paragraph marks take their font from these styles.
             self._house_fonts(style.element.get_or_add_rPr().get_or_add_rFonts(), language, complex_script=True)
-        normal = document.styles["Normal"]
+        # Localized/minimal Word files may have no style named "Normal".
+        normal = document.styles.default(WD_STYLE_TYPE.PARAGRAPH)
+        if normal is None:
+            normal = document.styles["Normal"] if "Normal" in document.styles else document.styles.add_style("Normal", WD_STYLE_TYPE.PARAGRAPH, builtin=True)
+            normal.element.set(qn("w:default"), "1")
+        normal.font.name = LATIN_FONT
+        normal.font.size = body_size
+        self._house_fonts(normal.element.get_or_add_rPr().get_or_add_rFonts(), language, complex_script=True)
         normal.font.bold = False
         normal.font.italic = False
         normal.font.underline = False
@@ -431,7 +438,7 @@ class BaseFormatter(HandbookPassMixin):
         # ``paragraph.style = document.styles["Normal"]`` re-resolves the
         # default style (a full scan of styles.xml) for every paragraph.
         # Resolve the id once and assign it directly.
-        normal_style_id = document.part.get_style_id(document.styles["Normal"], WD_STYLE_TYPE.PARAGRAPH)
+        normal_style_id = document.part.get_style_id(document.styles.default(WD_STYLE_TYPE.PARAGRAPH), WD_STYLE_TYPE.PARAGRAPH)
         for paragraph in body_paragraphs(document):
             paragraph._p.style = normal_style_id
             ppr = paragraph._p.pPr

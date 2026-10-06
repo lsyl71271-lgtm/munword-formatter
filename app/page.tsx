@@ -152,6 +152,11 @@ export default function Home() {
     const operation = ++operationRef.current;
     setBusy(true);
     setError("");
+    setModel(null);
+    setFormatted(null);
+    setValidations([]);
+    setStage("upload");
+    setShowPages(false);
     try {
       let body: Model;
       if (API_URL) {
@@ -237,6 +242,7 @@ export default function Home() {
         const copy = response.clone();
         let body: { detail?: { validations?: Validation[] } } | null = null;
         try { body = await copy.json() as { detail?: { validations?: Validation[] } }; } catch { /* response was not JSON */ }
+        if (operation !== operationRef.current) return;
         if (body?.detail?.validations) setValidations(body.detail.validations);
         throw new Error(await readError(response, "格式化失败，请重试；若仍失败，请保留原文件并反馈。"));
       }

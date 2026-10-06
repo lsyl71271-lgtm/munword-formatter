@@ -52,6 +52,9 @@ def _value(text, renderer, limit=99):
 
 
 def marker_of(text, roman_context=False):
+    # Decimal quantities and compound outlines are not single-level ordinals.
+    if re.match(r'\s*[0-9]+[.．][0-9]', text):
+        return None
     article = re.match(r'\s*第([零一二三四五六七八九十]+)条', text)
     if article:
         value = _value(article[1], chinese)
@@ -62,7 +65,11 @@ def marker_of(text, roman_context=False):
     token, paren = match[1] or match[2], bool(match[1])
     value, family = None, ''
     if token.isascii() and token.isdigit():
-        family, value = ('paren-decimal' if paren else 'decimal'), int(token)
+        # Avoid Python's integer-string limit (and needless large integers).
+        digits = token.lstrip('0') or '0'
+        if len(digits) > 2:
+            return None
+        family, value = ('paren-decimal' if paren else 'decimal'), int(digits)
     else:
         for name, renderer, limit in [('chinese',chinese,99),('zodiac',lambda n:_series(n,POLICY['zodiac']),156),('stem',lambda n:_series(n,POLICY['stems']),110)]:
             value = _value(token, renderer, limit)

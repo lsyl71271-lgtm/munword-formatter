@@ -180,16 +180,25 @@ def _materialize_style_list_format(document) -> bool:
         return [item for _, item in style_chain(styles, style_id)]
 
     changed = False
-    for paragraph in body_paragraphs(document):
+    for paragraph in all_paragraphs(document):
         ppr = paragraph._p.pPr
         style = ppr.find(qn("w:pStyle")) if ppr is not None else None
         if style is None:
             continue
-        numbering = next((item.find(f"{qn('w:pPr')}/{qn('w:numPr')}") for item in chain(style.get(qn("w:val")))
-                          if item.find(f"{qn('w:pPr')}/{qn('w:numPr')}") is not None), None)
-        if numbering is None or ppr.numPr is not None or numbering.find(qn("w:numId")) is None:
+        inherited = [num for item in chain(style.get(qn("w:val")))
+                     if (num := item.find(f"{qn('w:pPr')}/{qn('w:numPr')}")) is not None]
+        if not inherited:
             continue
-        num_pr = deepcopy(numbering)
+        own_num = ppr.numPr
+        num_pr = deepcopy(own_num) if own_num is not None else OxmlElement("w:numPr")
+        # Merge properties individually, nearest first; an ilvl-only direct
+        # override or derived style must not erase the inherited numId.
+        for numbering in inherited:
+            for node in numbering:
+                if num_pr.find(node.tag) is None:
+                    num_pr.append(deepcopy(node))
+        if num_pr.find(qn("w:numId")) is None:
+            continue
         level = num_pr.find(qn("w:ilvl"))
         if level is None:
             level = OxmlElement("w:ilvl")
@@ -197,10 +206,14 @@ def _materialize_style_list_format(document) -> bool:
             num_pr.insert(0, level)
         # ECMA-376 §17.9.23: a level that names the paragraph style is that
         # style's level, whatever the style's own numPr says.
-        linked = _linked_level(definitions, numbering.find(qn("w:numId")).get(qn("w:val")),
+        linked = _linked_level(definitions, num_pr.find(qn("w:numId")).get(qn("w:val")),
                                [style_id for style_id, _ in style_chain(styles, style.get(qn("w:val")))])
-        if linked is not None:
+        if linked is not None and (own_num is None or own_num.find(qn("w:ilvl")) is None):
             level.set(qn("w:val"), linked)
+        order = [qn('w:' + name) for name in ('ilvl', 'numId', 'numberingChange', 'ins')]
+        num_pr[:] = sorted(num_pr, key=lambda node: order.index(node.tag) if node.tag in order else len(order))
+        if own_num is not None:
+            ppr.remove(own_num)
         ppr._insert_numPr(num_pr)
         if ppr.find(qn("w:ind")) is None:
             indent = next((item.find(f"{qn('w:pPr')}/{qn('w:ind')}") for item in chain(style.get(qn("w:val")))

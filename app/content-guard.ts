@@ -98,7 +98,7 @@ function structureOnly(sig: Token[]): Token[] {
 }
 const isPlain = (sig: Token[]) => sig.every(t => t[0] === "t");
 const WHITESPACE_NODES = new Set(["tab", "br", "cr"].flatMap(tag => [JSON.stringify(["s", `{${W_NS}}${tag}`, "[]"]), JSON.stringify(["e", `{${W_NS}}${tag}`])]));
-const isWhitespace = (sig: Token[]) => sig.every(t => (t[0] === "t" && /\s/.test(t[1])) || WHITESPACE_NODES.has(JSON.stringify(t)));
+export const isWhitespace = (sig: Token[]) => sig.every(t => (t[0] === "t" && /\s/.test(t[1])) || WHITESPACE_NODES.has(JSON.stringify(t)));
 
 const WRAPPERS = new Set(["sdt", "sdtContent", "customXml"]);
 const blocksIn = (container: Element): Element[] => Array.from(container.children).flatMap(c =>

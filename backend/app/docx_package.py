@@ -66,6 +66,10 @@ def validate_docx_package(content: bytes) -> None:
                 flags, method = struct.unpack_from("<HH", content, offset + 6)
                 if flags != info.flag_bits or method != info.compress_type:
                     raise InvalidDocxError("ZIP 本地与中央目录标记不一致。")
+                if not flags & 8:
+                    local_crc, compressed, expanded = struct.unpack_from("<III", content, offset + 14)
+                    if (local_crc, compressed, expanded) != (info.CRC, info.compress_size, info.file_size):
+                        raise InvalidDocxError("ZIP 本地与中央目录大小或 CRC 不一致。")
                 if info.flag_bits & 1:
                     raise InvalidDocxError("不支持加密的 DOCX 部件。")
                 if (info.filename == "__proto__" or re.search(r"[\x00-\x1f\\]", info.filename)

@@ -22,9 +22,11 @@ function entryChecksums(data: Uint8Array): number[] {
   const count = view.getUint16(end + 10, true);
   if (view.getUint32(end + 4, true) !== 0 || count !== view.getUint16(end + 8, true) || count > limits.maxParts) throw new Error("不支持分卷或 ZIP64 文件");
   let offset = view.getUint32(end + 16, true);
+  const directoryStart = offset;
   const directoryEnd = offset + view.getUint32(end + 12, true);
   if (directoryEnd !== end) throw new Error("ZIP 目录边界异常");
   const checksums: number[] = [];
+  const ranges: [number, number][] = [];
   for (let index = 0; index < count; index++) {
     if (offset + 46 > directoryEnd || view.getUint32(offset, true) !== 0x02014b50) throw new Error("ZIP 部件目录损坏");
     if (view.getUint16(offset + 8, true) & 1) throw new Error("不支持加密的 DOCX 部件");
@@ -32,10 +34,25 @@ function entryChecksums(data: Uint8Array): number[] {
     if (local + 30 > view.getUint32(end + 16, true) || view.getUint32(local, true) !== 0x04034b50) throw new Error("ZIP 本地部件目录损坏");
     if (view.getUint16(local + 6, true) !== view.getUint16(offset + 8, true)
       || view.getUint16(local + 8, true) !== view.getUint16(offset + 10, true)) throw new Error("ZIP 本地与中央目录标记不一致");
+    const nameLength = view.getUint16(offset + 28, true), localNameLength = view.getUint16(local + 26, true);
+    const dataStart = local + 30 + localNameLength + view.getUint16(local + 28, true);
+    const dataEnd = dataStart + view.getUint32(offset + 20, true);
+    if (offset + 46 + nameLength > directoryEnd || dataEnd > directoryStart
+      || nameLength !== localNameLength || view.getUint16(offset + 34, true) !== 0) throw new Error("ZIP 部件边界或路径长度异常");
+    for (let i = 0; i < nameLength; i++) if (data[local + 30 + i] !== data[offset + 46 + i]) throw new Error("ZIP 本地与中央目录路径不一致");
+    // Streaming ZIPs (bit 3) put these values in a later data descriptor.
+    if (!(view.getUint16(offset + 8, true) & 8)) {
+      for (const [localField, centralField] of [[14, 16], [18, 20], [22, 24]]) {
+        if (view.getUint32(local + localField, true) !== view.getUint32(offset + centralField, true)) throw new Error("ZIP 本地与中央目录大小或 CRC 不一致");
+      }
+    }
+    ranges.push([local, dataEnd]);
     checksums.push(view.getUint32(offset + 16, true));
     offset += 46 + view.getUint16(offset + 28, true) + view.getUint16(offset + 30, true) + view.getUint16(offset + 32, true);
   }
   if (offset !== directoryEnd) throw new Error("ZIP 部件数量异常");
+  ranges.sort((a, b) => a[0] - b[0]);
+  if (ranges.some((range, i) => i > 0 && range[0] < ranges[i - 1][1])) throw new Error("ZIP 部件数据重叠");
   return checksums;
 }
 

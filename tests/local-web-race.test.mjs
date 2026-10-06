@@ -23,15 +23,15 @@ function change(window,element,value) {
   Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value").set.call(element,value);
   element.dispatchEvent(new window.Event("input",{bubbles:true}));
 }
-async function page() {
+async function page(customScript = script, fetchResponse) {
   const dom=new JSDOM(html,{runScripts:"outside-only",url:"http://127.0.0.1:8000/"});
   const {window}=dom, downloads=[], requests=[];
   window.TextEncoder=TextEncoder; window.TextDecoder=TextDecoder;
   window.URL.createObjectURL=()=>{downloads.push(1);return "blob:example";}; window.URL.revokeObjectURL=()=>{};
   window.HTMLElement.prototype.scrollIntoView=()=>{}; window.HTMLAnchorElement.prototype.click=()=>{};
-  window.fetch=async (...args)=>{ requests.push(args);throw new Error("No network required by the shared browser engine"); };
+  window.fetch=fetchResponse || (async (...args)=>{ requests.push(args);throw new Error("No network required by the shared browser engine"); });
   window.File.prototype.arrayBuffer=async()=>source.slice(0);
-  window.eval(script); await waitFor(()=>window.document.querySelector('input[type="file"]'),"shared UI mounted");
+  window.eval(customScript); await waitFor(()=>window.document.querySelector('input[type="file"]'),"shared UI mounted");
   const choose=name=>{
     const picker=window.document.querySelector('input[type="file"]');
     Object.defineProperty(picker,"files",{configurable:true,value:[new window.File(["PK"],name)]});
@@ -70,5 +70,41 @@ test("desktop uses the same browser engine, expands names without requests, and 
   assert.ok(window.document.body.textContent.includes("UN-M49-156"),window.document.querySelector(".validationSection")?.textContent);
   window.document.querySelector('input[type="checkbox"]').click();await settle();
   assert.ok(!window.document.body.textContent.includes("DOCX 包结构"),"old validation results must clear");
+  window.close();
+});
+
+test("recognizing the original again clears the previous output and validations before reading", async () => {
+  const {window} = await page();
+  change(window, input(window, "议题"), "已确认的新议题"); await settle();
+  button(window, "生成").click();
+  await waitFor(() => window.document.querySelector(".validationSection"), "first result is shown");
+  let release;
+  window.File.prototype.arrayBuffer = () => new Promise(resolve => { release = resolve; });
+  button(window, "识别文件结构").click(); await settle();
+  assert.equal(window.document.querySelector(".validationSection"), null);
+  assert.equal(window.document.querySelector(".reviewSection"), null);
+  release(source.slice(0));
+  await waitFor(() => input(window, "议题"), "original was recognized again");
+  assert.equal(input(window, "议题").value, "旧议题");
+  assert.equal(window.document.querySelector(".validationSection"), null);
+  assert.equal(window.document.querySelectorAll(".docxPreview").length, 0);
+  window.close();
+});
+
+test("a delayed API error cannot restore validations for a replaced file", async () => {
+  const apiBundle = await build({entryPoints:["local_web/main.tsx"],bundle:true,write:false,format:"iife",platform:"browser",jsx:"automatic",define:{"process.env.NODE_ENV":'"production"',"process.env.NEXT_PUBLIC_API_URL":'"http://127.0.0.1:8000"'}});
+  const model = {document_type:"draft-resolution",language:"zh",title:"决议草案",committee:"联合国大会",topic:"旧议题",country:"",delegate:"",sponsors:["中国"],signatories:[],preambulatory_clauses:[],operative_clauses:[],body_clauses:[],max_numbering_level:0,warnings:[],paragraphs:[]};
+  let releaseError;
+  const {window, choose} = await page(apiBundle.outputFiles[0].text, async url => {
+    if (url.includes("/parse/")) return {ok:true, json:async () => model};
+    return {ok:false, clone:() => ({json:() => new Promise(resolve => {releaseError = resolve;})}), json:async () => ({detail:"旧请求失败"})};
+  });
+  button(window, "生成").click();
+  await waitFor(() => releaseError, "error response is pending");
+  choose("replacement.docx"); await settle();
+  releaseError({detail:{validations:[{code:"stale",label:"旧请求校验",status:"error"}]}});
+  await settle();
+  assert.equal(window.document.querySelector(".validationSection"), null);
+  assert.equal(window.document.querySelector('[role="alert"]'), null);
   window.close();
 });

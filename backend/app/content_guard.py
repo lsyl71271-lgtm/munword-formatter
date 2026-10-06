@@ -148,7 +148,7 @@ _WHITESPACE_NODES = frozenset({("s", _W + "tab", ()), ("e", _W + "tab"), ("s", _
                                ("s", _W + "cr", ()), ("e", _W + "cr")})
 
 
-def _is_whitespace(sig: tuple) -> bool:
+def is_whitespace(sig: tuple) -> bool:
     """Only spaces, tabs and line breaks: an empty line, not content."""
 
     return all((token[0] == "t" and token[1].isspace()) or token in _WHITESPACE_NODES for token in sig)
@@ -257,7 +257,7 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
                 group["after"].append(el)
         if el not in after_set:
             removable = (edit and edit.kind == "countries") or (
-                edit and edit.kind == "empty-line" and _is_whitespace(before.signatures[el])
+                edit and edit.kind == "empty-line" and is_whitespace(before.signatures[el])
             )
             if before.signatures[el] and not removable:
                 problems.append(f"第 {number[el]} 段被删除：{before.texts[el][:30]}")

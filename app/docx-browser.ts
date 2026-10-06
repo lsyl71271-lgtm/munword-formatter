@@ -1,6 +1,6 @@
 import { zipSync } from "fflate";
 import { readPackage, visibleText, contentSignature, decodeXml, canCut, breakLineBefore, moveToNewParagraph, Unsplittable } from "./docx-safety.ts";
-import { documentTokens, marksKept, paragraphMarks, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
+import { documentTokens, isWhitespace, marksKept, paragraphMarks, rewriteKeepsStructure, semanticMarks, signature, takeSnapshot, verifyFormat, verifyMarks, verifyPackage, verifyRepair } from "./content-guard.ts";
 import { isPlainField } from "./field-policy.ts";
 import type { Edit } from "./content-guard.ts";
 import policyData from "../shared/document-policy.json" with { type: "json" };
@@ -88,13 +88,6 @@ function parsePackage(content: ArrayBuffer) {
     if (styles.getElementsByTagName("parsererror").length) throw new InvalidDocxError("DOCX 样式 XML 损坏。");
     const index = new Map(elements(styles, "style").map(s => [wordAttribute(s, "styleId"), s]));
     const chain = (id: string | null | undefined) => styleChain(index, id);
-    const inherit = (id: string | null | undefined, group: string, property: string): Element | null => {
-      for (const [, style] of chain(id)) {
-        const props = directChild(style, group), node = props && directChild(props, property);
-        if (node) return node;
-      }
-      return null;
-    };
     // The default paragraph style is not copied onto runs: a damaged bold
     // Normal style would otherwise turn a whole document bold (as in Python).
     // Chinese Word names it "a", not "Normal".
@@ -117,18 +110,29 @@ function parsePackage(content: ArrayBuffer) {
     for (const p of paragraphElements(document)) {
       const props = ensureChild(p,"pPr",true);
       const paragraphStyle = wordAttribute(directChild(props,"pStyle"),"val");
-      const num = !directChild(props,"numPr") && inherit(paragraphStyle || "Normal","pPr","numPr");
-      if (num) {
-        const copy = document.importNode(num, true) as Element;
+      const ownNum = directChild(props, "numPr");
+      const inheritedNums = chain(paragraphStyle || defaultParagraph).flatMap(([, style]) => {
+        const pPr = directChild(style, "pPr"), num = pPr && directChild(pPr, "numPr");
+        return num ? [num] : [];
+      });
+      if (inheritedNums.length) {
+        // numPr is a group of inheritable properties. A direct ilvl does
+        // not cancel the numId in the style (nor a derived style's base).
+        const copy = ownNum ? ownNum.cloneNode(true) as Element : document.createElementNS(WORD_NS, "w:numPr");
+        for (const num of inheritedNums) for (const node of Array.from(num.children)) {
+          if (node.namespaceURI === WORD_NS && !directChild(copy, node.localName)) copy.appendChild(document.importNode(node, true));
+        }
         // ECMA-376 §17.9.23: a level that names the paragraph style is that
         // style's level, whatever the style's own numPr says.
         const level = numbering && linkedLevel(numbering, wordAttribute(directChild(copy, "numId"), "val"), chain(paragraphStyle).map(([id]) => id));
-        if (level) {
+        if (level && !directChild(ownNum ?? props, "ilvl")) {
           let ilvl = directChild(copy, "ilvl");
           if (!ilvl) { ilvl = document.createElementNS(WORD_NS, "w:ilvl"); copy.insertBefore(ilvl, copy.firstChild); }
           setWordAttribute(ilvl, "val", level);
         }
-        props.appendChild(copy);
+        const order = ["ilvl", "numId", "numberingChange", "ins"];
+        for (const node of Array.from(copy.children).sort((a, b) => order.indexOf(a.localName) - order.indexOf(b.localName))) copy.appendChild(node);
+        if (ownNum) ownNum.replaceWith(copy); else props.appendChild(copy);
       }
       // A text box's paragraphs inherit from their own styles.
       for (const run of elements(p,"r").filter(run => ownParagraph(run) === p)) {
@@ -232,8 +236,7 @@ function setSize(properties: Element, sizePt: number) {
 }
 
 function hasAutomaticNumber(paragraph: Element) {
-  const num = directChild(paragraph, "pPr")?.getElementsByTagNameNS(WORD_NS, "numPr")[0];
-  return Boolean(num) && wordAttribute(num?.getElementsByTagNameNS(WORD_NS, "numId")[0], "val") !== "0";
+  return activeNumbering(paragraph) !== null;
 }
 
 function paragraphText(paragraph: Element): string {
@@ -1032,7 +1035,7 @@ function configureStyles(parts: Record<string, Uint8Array>, ctx: Ctx) {
   }
   for (const style of elements(styles, "style")) {
     const id = wordAttribute(style, "styleId") || "", name = wordAttribute(directChild(style, "name"), "val") || "";
-    const isNormal = id === "Normal" || (wordAttribute(style, "type") === "paragraph" && wordAttribute(style, "default") === "1");
+    const isNormal = id === "Normal" || (wordAttribute(style, "type") === "paragraph" && ON.includes(wordAttribute(style, "default") || ""));
     const note = /^(footnote|endnote) text$/i.test(name);
     if (!isNormal && !note && !["Title", "Subtitle", "Heading1", "Heading2", "Heading3"].includes(id)) continue;
     const rPr = ensureChild(style, "rPr");
@@ -1222,6 +1225,7 @@ function suspectedMissingListItems(document: Document, type: BrowserDocumentType
 function positionPaperMarkers(ctx: Ctx, paragraphs: Element[], bodyStart: number) {
   for (const p of paragraphs.slice(bodyStart)) {
     const text = paragraphText(p).trim();
+    if (/^\s*[0-9]+[.．][0-9]/.test(text)) continue;
     const match = text.match(/^\s*(\d+)[.、)]\s*(?:\t\s*)?([\s\S]*)$/);
     if (!match) continue;
     if (activeNumbering(p)) { protect(ctx, p, "该段同时含手动标记和原生编号，已保留原条号，请人工确认"); continue; }
@@ -1753,7 +1757,8 @@ function blankLines(ctx: Ctx, blocks: Block[]) {
   for (const p of flowParagraphs(ctx.document)) {
     // A content control keeps at least one paragraph.
     if (p.parentElement !== body && p.parentElement?.children.length === 1) continue;
-    if (paragraphText(p).trim() || carriesHiddenStructure(p)) continue;
+    if (paragraphText(p).trim() || carriesHiddenStructure(p) || activeNumbering(p)
+      || carriesSemanticMarks(p) || !isWhitespace(signature(p))) continue;
     if (!ctx.editLog.has(p)) logEdit(ctx, p, "empty-line");
     p.remove();
   }

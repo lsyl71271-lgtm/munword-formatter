@@ -1,6 +1,6 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.8.4**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
+当前版本 **v1.8.5**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
 
 ## 功能与运行模式
 
@@ -118,7 +118,7 @@ python3 scripts/import-country-names.py --unterm-export /path/to/unterm-countrie
 ```sh
 pnpm build:local-tools
 .venv/bin/python scripts/verify-local-build.py
-.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.8.4-desktop-source.zip
+.venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.8.5-desktop-source.zip
 ```
 
 包内包含校验清单及依赖许可证，不包含 `.env`、部署账号配置、缓存或用户文档。仍需 Python 和首次安装联网下载依赖，不是无需运行时的 EXE。
@@ -132,7 +132,7 @@ docker compose -f deploy/visual-qa.compose.yaml up -d
 
 无 Docker 时改用 `--renderer /path/to/render_docx.py`。可设置 `MUNWORD_PDF_RASTERIZER` 指向 `pdftocairo` 或 `pdftoppm`；macOS 的部分 Poppler 后端会丢失 CJK 字形，建议 Cairo。`--reference-pages` 只接受同正文、同字体、同渲染环境的基线，失败返回非零状态。报告记录字号、斜体与像素差异，不代表所有学标要求自动验收完成。此服务不部署到公网网站，不自动上传文件。
 
-第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明与核查记录见 [v1.8.4](docs/release-1.8.4.md)，此前版本见 [v1.8.3](docs/release-1.8.3.md)、[v1.8.2](docs/release-1.8.2.md)、[v1.8.1](docs/release-1.8.1.md)、[v1.8.0](docs/release-1.8.0.md)、[v1.7.2](docs/release-1.7.2.md)、[v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
+第三方许可与使用范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，当前版本说明与核查记录见 [v1.8.5](docs/release-1.8.5.md)，此前版本见 [v1.8.4](docs/release-1.8.4.md)、[v1.8.3](docs/release-1.8.3.md)、[v1.8.2](docs/release-1.8.2.md)、[v1.8.1](docs/release-1.8.1.md)、[v1.8.0](docs/release-1.8.0.md)、[v1.7.2](docs/release-1.7.2.md)、[v1.7.1](docs/release-1.7.1.md) 与工具集成 [v1.7.0](docs/release-1.7.0.md)。
 
 六种文种全部执行各自的编号策略检查，策略集中在 `shared/numbering-profiles.json`。只转换能够确认的编号表示法，保留序号数值、跳号、重启和原生列表归属；编号冲突、受保护内容和不可表示的范围提示人工确认。立场文件的章节编号、工作文件的 PART、参考文献及修正案引用/嵌套的目标条款不被套用 DR 格式。样例未覆盖的更深层工作文件/立场文件列表属于项目统一延伸，不能称为手册明文要求。
 
@@ -207,4 +207,4 @@ VERSION                 本机后端版本；网页/离线界面统一读 packag
 - 包安全预算统一来自 `shared/package-policy.json`：上传 20 MiB、展开 100 MiB、单 XML 16 MiB、最多 5000 个部件、压缩比 250、XML 深度 256；兼容 API 在 multipart 解析前限制请求合计 21 MiB。不支持加密或非 STORE/DEFLATE 压缩部件。
 - 当前完整依赖审计仍有一项开发工具链 `braces` 公告，官方无已发布修复版；DOCX 原文不进入 glob 模式。详见版本核查记录，不将此风险伪称为已修复。建议 Python 3.12+；Python 3.9 仅保留旧环境兼容，其可用的 multipart/Starlette 等依赖和安装工具仍有无法升级消除的公告，不应作为新安装的安全默认。
 
-本仓库不新增开源许可证或改变授权范围，默认按 Private 仓库管理。不要提交真实用户文档、秘密、生成产物或账号专属部署配置。
+本仓库不新增开源许可证或改变授权范围；当前 GitHub 仓库为公开仓库。不要提交真实用户文档、秘密、生成产物或账号专属部署配置。
