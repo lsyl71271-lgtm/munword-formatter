@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("desktop_launcher", Path(__file__).with_name("launcher.py"))
 launcher = importlib.util.module_from_spec(SPEC)
@@ -82,6 +83,15 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(self.server.server_address[0], "127.0.0.1")
         finally:
             other.server_close()
+
+    def test_startup_never_uses_a_dns_resolver(self):
+        with patch("socket.getfqdn", side_effect=RuntimeError("Offline DNS must not be invoked")) as resolver:
+            other = launcher.OfflineServer(self.root)
+            try:
+                self.assertEqual(other.server_name, "127.0.0.1")
+                resolver.assert_not_called()
+            finally:
+                other.server_close()
 
     def test_tampered_asset_is_not_started(self):
         (self.root / "app.js").write_text("tampered")

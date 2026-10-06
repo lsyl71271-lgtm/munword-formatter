@@ -15,7 +15,7 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import secrets
-import socket
+import socketserver
 import subprocess
 import sys
 import struct
@@ -104,6 +104,14 @@ def load_assets(root: Path) -> tuple[dict, dict[str, bytes]]:
 class OfflineServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
+
+    def server_bind(self):
+        # HTTPServer.server_bind performs a reverse DNS lookup even for the
+        # literal 127.0.0.1 address. Some macOS resolver configurations stall
+        # here without networking. This host never needs a resolvable name.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
 
     def __init__(self, root: Path, port: int = 0):
         self.manifest, self.assets = load_assets(root)
@@ -264,8 +272,10 @@ def main(argv=None) -> int:
                 open_browser("http://127.0.0.1:%d/" % state["port"])
             return 0
         handler = RotatingFileHandler(directory / "launcher.log", maxBytes=1_000_000, backupCount=1, encoding="utf-8")
-        logging.basicConfig(handlers=[handler], level=logging.WARNING)
+        logging.basicConfig(handlers=[handler], level=logging.INFO)
+        logging.info("Instance lock acquired; creating offline loopback server")
         server = OfflineServer(resource_root())
+        logging.info("Offline loopback server created without DNS resolution")
         state = {"port": server.server_address[1], "instance": server.instance, "token": server.token,
                  "pid": os.getpid(), "version": manifest["version"]}
         temporary = directory / ("instance-" + server.instance + ".tmp")
@@ -273,6 +283,7 @@ def main(argv=None) -> int:
         if sys.platform != "win32":
             temporary.chmod(0o600)
         os.replace(temporary, directory / "instance.json")
+        logging.info("Instance state written; starting offline UI host")
         running = threading.Thread(target=server.serve_forever, daemon=True)
         running.start()
         try:

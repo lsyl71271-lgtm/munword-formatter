@@ -37,7 +37,9 @@ def main():
                 time.sleep(0.1)
             if not state_file.exists():
                 error = state_file.parent / "startup-error.txt"
-                raise RuntimeError("Startup timed out: " + (error.read_text(encoding="utf-8") if error.exists() else "no startup error file"))
+                log = state_file.parent / "launcher.log"
+                diagnostic = error.read_text(encoding="utf-8") if error.exists() else (log.read_text(encoding="utf-8")[-4000:] if log.exists() else "no startup log")
+                raise RuntimeError("Startup timed out: " + diagnostic)
             state = json.loads(state_file.read_text(encoding="utf-8"))
             origin = "http://127.0.0.1:%d" % state["port"]
             conn = http.client.HTTPConnection("127.0.0.1", state["port"], timeout=5)
