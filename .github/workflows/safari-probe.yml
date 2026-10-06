@@ -14,12 +14,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-14]
+        os: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pyobjc-framework-ApplicationServices
       - name: Probe
-        env:
-          PROBE_SHOTS: ${{ matrix.os == 'macos-15' && '1' || '0' }}
-        run: python3 -u .github/safari-probe/probe.py
+        run: python -u .github/safari-probe/probe.py
