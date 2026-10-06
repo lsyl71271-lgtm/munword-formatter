@@ -37,7 +37,7 @@
 
 ### 另一套安装器：Munword（自带 Python 运行环境）
 
-`desktop/build.py` 与 `.github/workflows/desktop-installers.yml` 构建另一套按芯片/位数分包的安装器（Windows 10/11 x64/x86、macOS 11+ arm64/x64）。它在本机 `127.0.0.1` 随机端口提供同一页面，由 GitHub Actions 在原生 Windows 与 macOS 虚拟机里构建和验收，发布在 [v1.8.5-desktop](https://github.com/lsyl71271-lgtm/munword-formatter/releases/tag/v1.8.5-desktop)。详见 [离线桌面安装说明](docs/desktop-installers.md)。两套安装器的比较见 [desktop/README.md](desktop/README.md#两套安装器的比较)。
+`desktop/build.py` 与 `.github/workflows/desktop-installers.yml` 构建另一套按芯片/位数分包的安装器（Windows 10/11 x64/x86、macOS 11+ arm64/x64）。它在本机 `127.0.0.1` 随机端口提供同一页面，由 GitHub Actions 在原生 Windows 与 macOS 虚拟机里构建和验收（`.github/workflows/publish-desktop-release.yml` 发布）。详见 [离线桌面安装说明](docs/desktop-installers.md)。两套安装器的比较见 [desktop/README.md](desktop/README.md#两套安装器的比较)。
 
 ## 功能与运行模式
 

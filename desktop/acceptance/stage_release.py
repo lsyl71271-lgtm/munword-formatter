@@ -98,8 +98,10 @@ def main() -> int:
                 for name, data in (report.get("browsers") or {}).items() if data.get("passed")]
         return "、".join(rows) or "—"
 
-    tags = [t for t in args.previous.split(",") if t] or [f"v{VERSION}-desktop"]
-    previous = "、".join(f"[{t}](https://github.com/{args.repo}/releases/tag/{t})" for t in tags)
+    # Only releases that still exist are linked; none left means no download links.
+    tags = [t for t in args.previous.split(",") if t]
+    previous = "上一版是另一套自带 Python 运行环境的 Munword 安装包" + (
+        "，仍可下载：" + "、".join(f"[{t}](https://github.com/{args.repo}/releases/tag/{t})" for t in tags) if tags else "") + "。"
     native_rows = "\n".join(f"| {label} | {browsers(report)} |" for label, report in native.items())
     floor_rows = "；".join(f"Chromium {row['milestone']} {'显示升级说明' if row['expect'] == 'notice' else '完整跑通'}" for row in floor)
     notes = f"""## 下载
@@ -119,7 +121,7 @@ DMG 约 0.8 MB，EXE 约 0.5 MB。排版完全在本机浏览器里完成：不�
 
 ## 相对上一版 Munword 安装包的更新
 
-上一版是另一套自带 Python 运行环境的 Munword 安装包，仍可下载：{previous}。本版：
+{previous}本版：
 - **一个包通用**：macOS 不再分 Apple 芯片/Intel，Windows 不再分 x64/x86；每个不到 1 MB（上一版 5.9–10.2 MB）。
 - **兼容更多系统**：Windows 7、8.1 和 32 位系统可用；macOS 从 10.11 起可用（上一版要求 Windows 10、macOS 11）。
 - **浏览器门槛按实测**：Chrome/Edge 99 起可用（上一版要求 111，会拒绝 Windows 7 上能装的最后版本 Chrome 109）。
