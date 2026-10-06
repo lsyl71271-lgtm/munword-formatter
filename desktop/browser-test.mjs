@@ -27,7 +27,7 @@ try {
     ["决议草案", "08_English_Draft_Resolution"],
   ];
   for (const [type, source] of cases) {
-    await page.goto(origin, {waitUntil:"networkidle"});
+    await page.goto(origin, {waitUntil:"domcontentloaded"});
     await page.locator(".typeCard").filter({has:page.locator("b", {hasText:new RegExp("^" + type + "$")})}).click();
     await page.locator('input[type="file"]').setInputFiles("examples/acceptance-inputs/" + source + ".docx");
     await page.getByRole("button", {name:/识别文件结构/}).click();
