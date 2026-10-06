@@ -1,6 +1,6 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.8.5**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。普通用户请直接下载下面的桌面安装包；源码仓库本身不是免安装程序。
+当前版本 **v1.8.5**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。普通用户请直接下载下面的桌面安装包；源码开发与旧脚本安装方式另外保留。
 
 ## 下载桌面版（一键安装，纯本机离线）
 
@@ -25,6 +25,10 @@
   - Windows SmartScreen：点「更多信息 → 仍要运行」。
   - 每台电脑只需一次。
 - 校验值见 [downloads/SHA256SUMS.txt](downloads/SHA256SUMS.txt)；安装包由 `pnpm build:desktop` 从同一提交可逐字节复现。构建方法见 [desktop/README.md](desktop/README.md)。
+
+### 另一套安装器：Munword（自带 Python 运行环境）
+
+`desktop/build.py` 与 `.github/workflows/desktop-installers.yml` 构建另一套按芯片/位数分包的安装器（Windows 10/11 x64/x86、macOS 11+ arm64/x64）。它在本机 `127.0.0.1` 随机端口提供同一页面，由 GitHub Actions 在原生 Windows 与 macOS 虚拟机里构建和验收，产物在 Actions 页面下载。详见 [离线桌面安装说明](docs/desktop-installers.md)。两套安装器的比较见 [desktop/README.md](desktop/README.md#两套安装器的比较)。
 
 ## 功能与运行模式
 
