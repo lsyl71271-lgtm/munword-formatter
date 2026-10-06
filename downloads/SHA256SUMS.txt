@@ -1,0 +1,3 @@
+# PKUNMUN 2026 文件排版系统 1.8.4 — offline desktop installers
+19bc73f3ab26e5fb3124dc2f89c8d699ad85d31645eac31fec78dff8e5e202af  PKUNMUN2026-Formatter-macOS.dmg
+364ce956ff54e049cb69ce51fe7121b773458006bdd346ba76bc9779ab85b21c  PKUNMUN2026-Formatter-Windows-Setup.exe

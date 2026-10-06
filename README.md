@@ -1,6 +1,23 @@
 # Munword — PKUNMUN 2026 DOCX Formatter
 
-当前版本 **v1.8.5**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。本源码仓库不是包含运行时的免安装程序。
+当前版本 **v1.8.5**。将内容已完成、格式混乱的模拟联合国 DOCX 转换为可继续编辑的标准化文档。提供实际页面预览、结构诊断、独立模板新建、本机批处理，以及明确国家字段的正式全称展开。本机日常界面与网页版共用同一组件、样式和浏览器引擎，Python API/批处理保留兼容。普通用户请直接下载下面的桌面安装包；源码仓库本身不是免安装程序。
+
+## 下载桌面版（一键安装，纯本机离线）
+
+| 系统 | 下载 | 安装 |
+|---|---|---|
+| macOS 11 及以上（Safari 15.4+，或已装 Chrome / Edge） | [PKUNMUN2026-Formatter-macOS.dmg](downloads/PKUNMUN2026-Formatter-macOS.dmg) | 双击打开，把「PKUNMUN 2026 文件排版系统」拖进「应用程序」 |
+| Windows 10 / 11 | [PKUNMUN2026-Formatter-Windows-Setup.exe](downloads/PKUNMUN2026-Formatter-Windows-Setup.exe) | 双击运行，点「安装」；桌面出现快捷方式 |
+
+- 打开后是一个独立窗口（借用本机 Chrome / Edge 的应用窗口；都没有时用 Safari 或默认浏览器）。界面和排版引擎与网页版完全相同。
+- **纯本机**：页面从本机文件打开，安全策略禁止一切网络连接；不需要 Python、账号或网络，不常驻后台。生成的 DOCX 保存在「下载」文件夹。
+- 安装包都不到 1 MB；Windows 安装到当前用户，不需要管理员权限，可在“设置 → 应用”中卸载。
+- **首次打开提示**：安装包没有付费的开发者签名。
+  - macOS 15 及以后：先双击一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。
+  - macOS 14 及以前：按住 Control 点按应用 → 打开。
+  - Windows SmartScreen：点「更多信息 → 仍要运行」。
+  - 每台电脑只需一次。
+- 校验值见 [downloads/SHA256SUMS.txt](downloads/SHA256SUMS.txt)；安装包由 `pnpm build:desktop` 从同一提交可逐字节复现。构建方法见 [desktop/README.md](desktop/README.md)。
 
 ## 功能与运行模式
 

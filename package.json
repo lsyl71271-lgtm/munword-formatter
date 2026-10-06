@@ -12,13 +12,15 @@
     "start": "node scripts/run-web.mjs start",
     "build:local-tools": "node scripts/build-local-tools.mjs",
     "build:static": "node scripts/build-static.mjs",
+    "build:desktop": "node desktop/build-desktop.mjs --publish",
+    "test:desktop": "node --test tests/desktop.test.mjs && node desktop/offline-smoke.mjs",
     "deploy:cloudflare": "wrangler deploy --config wrangler.static.json",
     "test:static": "node --test tests/static-deployment.test.mjs",
     "test": "pnpm test:unit && pnpm build && node --test tests/rendered-html.test.mjs",
-    "test:unit": "node --test tests/docx-safety.test.mjs tests/engine-parity.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs tests/studio-tools.test.mjs tests/review-regressions.test.mjs tests/local-web-race.test.mjs tests/audit-regressions.test.mjs tests/countries.test.mjs tests/final-audit.test.mjs tests/template-race.test.mjs tests/dr-numbering.test.mjs tests/all-numbering.test.mjs tests/edge-cases.test.mjs",
+    "test:unit": "node --test tests/docx-safety.test.mjs tests/engine-parity.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs tests/studio-tools.test.mjs tests/review-regressions.test.mjs tests/local-web-race.test.mjs tests/audit-regressions.test.mjs tests/countries.test.mjs tests/final-audit.test.mjs tests/template-race.test.mjs tests/dr-numbering.test.mjs tests/all-numbering.test.mjs tests/edge-cases.test.mjs tests/desktop.test.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test:docx-browser": "node --test tests/docx-safety.test.mjs tests/handbook.test.mjs tests/merge-gate.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern static-site",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
