@@ -123,7 +123,7 @@ MUNWORD_TEST_SHELLS=/path/to/bash-3.2:/bin/zsh:/bin/bash node --test tests/deskt
 | | 本目录（PKUNMUN 2026 文件排版系统） | Munword（`desktop/build.py`） |
 |---|---|---|
 | 运行方式 | 浏览器直接打开安装目录里的页面（`file://`），启动后程序立即退出 | 自带 Python，在 `127.0.0.1` 随机端口提供页面，后台驻留，空闲 30 分钟退出 |
-| 安装包 | 两个，各约 0.5 MB；macOS 一个通用 DMG，Windows 一个 EXE | 四个，按芯片/位数分包；自带 Python 运行环境（Actions 产物每个 6–12 MB） |
+| 安装包 | 两个，各约 0.5 MB；macOS 一个通用 DMG，Windows 一个 EXE | 四个，按芯片/位数分包；自带 Python 运行环境，每个 5.9–10.2 MB |
 | 系统 | Windows 7–11（32/64 位、ARM），macOS 10.11 起 | Windows 10/11，macOS 11 起 |
 | 浏览器门槛 | Chrome/Edge 99、Firefox 104、Safari 15.4（实测 Chromium 98/99/109） | Chrome/Edge 111、Firefox 128、Safari 16.4（按 Tailwind 官方声明） |
 | 窗口 | Edge/Chrome/Brave/Vivaldi 独立应用窗口 | 默认浏览器的标签页 |

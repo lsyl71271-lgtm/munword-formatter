@@ -7,6 +7,8 @@ name: PKUNMUN offline installers (DMG / EXE)
 #   Windows Server 2022 x64 and Windows 11 ARM, with the full flow in the installed Edge, Chrome, Firefox;
 # - the DMG verifies, its app passes Apple's codesign and runs natively on Apple silicon and Intel
 #   (macOS 14 and 15), with the full flow in the installed Safari, Chrome, Firefox.
+# Only when all of that passes, pushes to main or the desktop branch publish the installers on the
+# GitHub Releases page (tag v<VERSION>-desktop.2, which supersedes the Munword release v<VERSION>-desktop).
 
 on:
   push:
@@ -169,3 +171,44 @@ jobs:
           name: acceptance-${{ matrix.os }}
           path: output/acceptance/
           retention-days: 30
+
+  release:
+    name: Publish on GitHub Releases
+    needs: [reproduce, wine, windows, macos]
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/munword-formatter-audit-e11sma'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: offline-installers-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/artifacts
+      - name: Stage installers, checksums, evidence and notes (refuses unless everything passed)
+        run: >
+          python3 desktop/acceptance/stage_release.py --artifacts "$RUNNER_TEMP/artifacts" --out "$RUNNER_TEMP/release"
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --commit "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat VERSION)
+          tag="v${version}-desktop.2"
+          title="v${version} · 离线桌面安装包（通用版：一个 DMG、一个 EXE，兼容 Windows 7 与 macOS 10.11 起）"
+          cd "$RUNNER_TEMP/release"
+          assets=(PKUNMUN2026-Formatter-macOS.dmg PKUNMUN2026-Formatter-Windows-Setup.exe SHA256SUMS.txt PKUNMUN2026-*-Verification.zip)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # Same version, rebuilt installers: move the tag to the verified commit by recreating the release.
+            gh release download "$tag" --pattern SHA256SUMS.txt --dir previous
+            if cmp -s previous/SHA256SUMS.txt SHA256SUMS.txt; then
+              gh release upload "$tag" "${assets[@]}" --clobber
+              gh release edit "$tag" --title "$title" --notes-file notes.md --latest
+              exit 0
+            fi
+            gh release delete "$tag" --yes --cleanup-tag
+          fi
+          gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --title "$title" --notes-file notes.md --latest
