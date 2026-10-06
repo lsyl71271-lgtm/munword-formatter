@@ -118,30 +118,6 @@ Safari 26 的自动化驱动（safaridriver）拒绝打开任何 file:// 网页�
 - 没有真正的 32 位 Windows 7 硬件，Win7 只在 Wine 里验证；
 - 也没有 macOS 10.11–13，旧 macOS 的支持依据二进制的最低版本和 Safari/Chrome 的版本门槛。
 
-## 两套安装器的比较
-
-仓库里另有一套由 `desktop/build.py` 构建的 Munword 安装器（见 [docs/desktop-installers.md](../docs/desktop-installers.md)）。两者用同一个页面和排版引擎，打包方式不同：
-
-| | 本目录（PKUNMUN 2026 文件排版系统） | Munword（`desktop/build.py`） |
-|---|---|---|
-| 运行方式 | 浏览器直接打开安装目录里的页面（`file://`），启动后程序立即退出 | 自带 Python，在 `127.0.0.1` 随机端口提供页面，后台驻留，空闲 30 分钟退出 |
-| 安装包 | 两个：macOS 一个通用 DMG（约 0.8 MB），Windows 一个 EXE（约 0.5 MB） | 四个，按芯片/位数分包；自带 Python 运行环境，每个 5.9–10.2 MB |
-| 系统 | Windows 7–11（32/64 位、ARM），macOS 10.11 起 | Windows 10/11，macOS 11 起 |
-| 浏览器门槛 | Chrome/Edge 99、Firefox 104、Safari 15.4（实测 Chromium 98/99/109） | Chrome/Edge 111、Firefox 128、Safari 16.4（按 Tailwind 官方声明） |
-| 窗口 | Edge/Chrome/Brave/Vivaldi 独立应用窗口 | 默认浏览器的标签页 |
-| 端口、防火墙、后台进程 | 无 | 本机回环端口，后台进程 |
-| 构建 | Linux 上可逐字节复现，CI 比对已发布文件 | 在各原生系统上构建 |
-| Windows 中文名称 | 快捷方式、开始菜单、卸载项均正常 | v1.8.5-desktop 与 desktop.1 发布版显示为乱码；原因是构建时未加 `/INPUTCHARSET UTF8`，源码已修复，验收也加了名称检查 |
-
-从 Munword 方案借鉴并已加入本目录的做法：
-
-- 在原生 Windows/macOS 虚拟机上验收已发布的安装包；
-- 全部六种文书加模板新建的浏览器测试；
-- 检查 Mach-O 的真实最低版本；
-- Developer ID 签名与公证、Windows Authenticode 签名的构建接口；
-- 安装路径长度保护；
-- 把验收结果写成 JSON 并保存截图。
-
 ## 签名与公证
 
 两个安装包默认没有付费的代码签名（macOS 只有 ad-hoc 签名），第一次打开时系统会提示一次，处理方法见根目录 README。

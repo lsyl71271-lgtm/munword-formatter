@@ -41,7 +41,6 @@ def main() -> int:
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--repo", required=True, help="owner/name, for links to other releases")
-    parser.add_argument("--previous", default="", help="comma-separated tags of the earlier Munword releases of this version")
     args = parser.parse_args()
     problems = []
 
@@ -98,10 +97,6 @@ def main() -> int:
                 for name, data in (report.get("browsers") or {}).items() if data.get("passed")]
         return "、".join(rows) or "—"
 
-    # Only releases that still exist are linked; none left means no download links.
-    tags = [t for t in args.previous.split(",") if t]
-    previous = "上一版是另一套自带 Python 运行环境的 Munword 安装包" + (
-        "，仍可下载：" + "、".join(f"[{t}](https://github.com/{args.repo}/releases/tag/{t})" for t in tags) if tags else "") + "。"
     native_rows = "\n".join(f"| {label} | {browsers(report)} |" for label, report in native.items())
     floor_rows = "；".join(f"Chromium {row['milestone']} {'显示升级说明' if row['expect'] == 'notice' else '完整跑通'}" for row in floor)
     notes = f"""## 下载
@@ -118,16 +113,6 @@ DMG 约 0.8 MB，EXE 约 0.5 MB。排版完全在本机浏览器里完成：不�
 - macOS 14 及以前：按住 Control 点按程序 → 打开。
 - 不想改任何设置：双击磁盘映像里的「直接用浏览器打开.html」，不需要任何授权。它就是完整的排版页面（单个网页文件），可拖到桌面长期使用。
 - Windows SmartScreen：点「更多信息 → 仍要运行」。
-
-## 相对上一版 Munword 安装包的更新
-
-{previous}本版：
-- **一个包通用**：macOS 不再分 Apple 芯片/Intel，Windows 不再分 x64/x86；每个不到 1 MB（上一版 5.9–10.2 MB）。
-- **兼容更多系统**：Windows 7、8.1 和 32 位系统可用；macOS 从 10.11 起可用（上一版要求 Windows 10、macOS 11）。
-- **浏览器门槛按实测**：Chrome/Edge 99 起可用（上一版要求 111，会拒绝 Windows 7 上能装的最后版本 Chrome 109）。
-- **打开即用**：在 Edge/Chrome 里以独立窗口打开，不占端口、不常驻后台、不触发防火墙。
-- **macOS 少弹窗**：原生通用程序，Apple 芯片不要求安装 Rosetta；签名覆盖全部资源，不会报“已损坏”；另附免授权的单文件网页，可拖到桌面长期使用。
-- **中文名称正常**：上一版 Windows 安装包的桌面快捷方式、开始菜单和“应用和功能”里的中文名称显示为乱码（构建时未按 UTF-8 读取安装脚本），本版没有这个问题；源码里的 Munword 构建脚本也已修复。
 
 ## 验收（本次构建）
 

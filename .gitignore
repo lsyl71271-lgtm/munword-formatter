@@ -88,6 +88,3 @@ worker-configuration.d.ts
 /examples/acceptance-outputs/
 /scripts/fixtures/
 /fixtures/
-*.dmg
-# Native desktop outputs belong in release artifacts, never in Git source.
-/desktop/site/

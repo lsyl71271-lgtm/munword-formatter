@@ -35,10 +35,6 @@
   - 旧版 Chromium 98/99/109 的浏览器门槛实测。
 - 构建方法、验收范围和签名方式见 [desktop/README.md](desktop/README.md)。
 
-### 另一套安装器：Munword（自带 Python 运行环境）
-
-`desktop/build.py` 与 `.github/workflows/desktop-installers.yml` 构建另一套按芯片/位数分包的安装器（Windows 10/11 x64/x86、macOS 11+ arm64/x64）。它在本机 `127.0.0.1` 随机端口提供同一页面，由 GitHub Actions 在原生 Windows 与 macOS 虚拟机里构建和验收（`.github/workflows/publish-desktop-release.yml` 发布）。详见 [离线桌面安装说明](docs/desktop-installers.md)。两套安装器的比较见 [desktop/README.md](desktop/README.md#两套安装器的比较)。
-
 ## 功能与运行模式
 
 - 六种文书：立场文件、工作文件、指令草案、决议草案、友好修正案、非友好修正案；支持中英文。
