@@ -90,6 +90,30 @@ export function offlineIndex(html) {
   return out;
 }
 
+// 直接用浏览器打开.html on the disk image: the same page with styles.css and app.js inlined, so it is one
+// self-contained file that works from wherever it is opened or copied, in any browser. Opened from Finder,
+// Safari's sandbox lets a page read only its own folder: a page that loaded the app's files from
+// /Applications would fail once copied to the Desktop.
+export function singleFilePage(site) {
+  const html = readFileSync(path.join(site, "index.html"), "utf8");
+  const css = readFileSync(path.join(site, "styles.css"), "utf8");
+  const js = readFileSync(path.join(site, "app.js"), "utf8");
+  if (/<\/style/i.test(css)) throw new Error("styles.css cannot be inlined: it contains </style");
+  // The bundle travels as a string literal with no "<" in it, so the HTML parser cannot end the script early.
+  const literal = JSON.stringify(js).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  const icon = `data:image/svg+xml;base64,${readFileSync(path.join(site, "favicon.svg")).toString("base64")}`;
+  const out = html
+    .replace('<link rel="icon" href="favicon.svg" type="image/svg+xml">', () => `<link rel="icon" href="${icon}" type="image/svg+xml">`)
+    .replace('<link rel="stylesheet" href="styles.css">', () => `<style>\n${css}\n</style>`)
+    .replace("  <script>\n    (function () {", () => `  <script>window.__munwordApp = ${literal};</script>\n  <script>\n    (function () {`)
+    .replace('script.src = "app.js";', () => "script.text = window.__munwordApp;\n        window.__munwordApp = null;");
+  for (const needle of ["window.__munwordApp = null", "<style>", "Content-Security-Policy", OUTDATED_BROWSER_MESSAGE, icon]) {
+    if (!out.includes(needle)) throw new Error(`Single-file page is missing ${needle.slice(0, 40)}`);
+  }
+  if (/(src|href)="(?!data:)[^"]*"/.test(out.replace(literal, ""))) throw new Error("Single-file page still references a file");
+  return out;
+}
+
 function buildSite() {
   if (!args.includes("--skip-static")) run(process.execPath, [path.join(ROOT, "scripts", "build-static.mjs")], { cwd: ROOT });
   const src = path.join(ROOT, "static-site");
@@ -145,8 +169,9 @@ function buildMac(site) {
   cpSync(site, path.join(app, "Resources", "site"), { recursive: true });
   signApp(path.join(stage, "PKUNMUN2026.app"));
   copyFileSync(path.join(DESKTOP, "macos", "安装说明.txt"), path.join(stage, "安装说明.txt"));
-  // Opens the same page in the default browser without launching the app, so no Gatekeeper approval is needed.
-  copyFileSync(path.join(DESKTOP, "macos", BROWSER_PAGE), path.join(stage, BROWSER_PAGE));
+  // The whole page in one file: opens in the default browser without launching the app, so no Gatekeeper
+  // approval is needed, and keeps working when copied to the Desktop.
+  writeFileSync(path.join(stage, BROWSER_PAGE), singleFilePage(site));
   symlinkSync("/Applications", path.join(stage, "Applications"));
   // Finder layout of the mounted image: app left, Applications right (desktop/macos/make-dmg-layout.py).
   copyFileSync(path.join(DESKTOP, "macos", "dmg-layout.DS_Store"), path.join(stage, ".DS_Store"));

@@ -21,7 +21,7 @@
     - 否则用 Safari；Safari 早于 15.4（macOS 10.14 及以前）且装有 Firefox 时，改用 Firefox。
   - 不启动服务，不常驻后台，也不写用户目录。
   - 整个 `.app` 做 ad-hoc 签名，封存全部资源（`Contents/_CodeSignature`）。原因有二：Apple 芯片只运行已签名的原生代码；签名没覆盖资源的程序会被报告为“已损坏”。ad-hoc 签名没有开发者身份，所以第一次打开时仍是 macOS 对网上下载程序的常规确认（见根目录 README）。有证书时可改用 Developer ID 签名并公证，见下文“签名与公证”。
-  - 磁盘映像里的 `直接用浏览器打开.html` 是一个普通网页，按顺序跳转到旁边程序包里的页面、`~/Applications` 或 `/Applications` 中已安装的页面。它不运行任何程序，所以不需要 Gatekeeper 授权。
+  - 磁盘映像里的 `直接用浏览器打开.html` 就是完整的排版页面：构建时把 `styles.css` 和 `app.js` 内嵌进同一个网页（`singleFilePage`），复制到桌面或任何文件夹都能直接用浏览器打开。它不运行任何程序，所以不需要 Gatekeeper 授权。它不再跳转到 `/Applications` 里的程序：从访达打开网页时，Safari 的沙盒只允许该网页读取它所在的文件夹，复制到桌面的跳转页在 Safari 里会找不到程序（macOS 15 + Safari 26.6.1 上实测）。
   - 包文件夹名用 ASCII，Finder 通过 `InfoPlist.strings` 显示中文名。磁盘映像是 HFS+、zlib 压缩（UDZO），macOS 10.11 起都能直接打开。
 - **Windows**：NSIS 安装程序（`windows/installer.nsi`）按当前用户安装到 `%LOCALAPPDATA%\Programs\PKUNMUN2026Formatter`，无需管理员权限。
   - 在桌面和开始菜单创建快捷方式，并在“应用和功能”中登记卸载项。支持 `/S` 静默安装。
@@ -107,9 +107,11 @@ MUNWORD_TEST_SHELLS=/path/to/bash-3.2:/bin/zsh:/bin/bash node --test tests/deskt
 | 重建比对 | Ubuntu 24.04 | 从源码重建两个安装包，与 `SHA256SUMS.txt` 逐字节一致；Playwright Chromium 跑全部原稿；Chromium 98 必须看到说明，99 与 109（Win7 最后版本）必须完整跑通，成品与新版逐部件相同（`acceptance/browser-floor.mjs`） |
 | Wine | Ubuntu 24.04 | 32 位 Windows 7 与 64 位 Windows 10 前缀，31 项：静默安装、11 种浏览器组合、含空格/中文/#/% 的路径、卸载（`acceptance/wine/scenarios.sh`） |
 | Windows | Windows Server 2022 x64、Windows 11 ARM | 先装 1.8.4 再升级、快捷方式与卸载项、启动器真的拉起浏览器独立窗口且 URL 转义正确、系统自带的 Edge/Chrome/Firefox 跑全部原稿和模板、卸载（`acceptance/windows.py`） |
-| macOS | macOS 14 Apple 芯片、macOS 15 Apple 芯片、macOS 15 Intel | `hdiutil verify`；中文文件名；Apple `codesign --verify --deep --strict` 通过（即不会“已损坏”）；记录 Gatekeeper 在有无下载隔离属性时的判定；原生运行入口程序；通过 LaunchServices 真实打开；Safari/Chrome/Firefox 跑全部原稿和模板；Safari 经网页入口打开（`acceptance/macos.py`） |
+| macOS | macOS 14 Apple 芯片、macOS 15 Apple 芯片、macOS 15 Intel | `hdiutil verify`；中文文件名；Apple `codesign --verify --deep --strict` 通过（即不会“已损坏”）；记录 Gatekeeper 在有无下载隔离属性时的判定；原生运行入口程序；通过 LaunchServices 真实打开；Chrome/Firefox 跑全部原稿和模板，再跑复制到桌面的单文件页面；Safari 跑全部原稿和模板（见下）；Safari 像用户那样从访达打开程序、磁盘映像里的网页和复制到桌面的网页，并通过辅助功能读取 Safari 实际显示的内容（`acceptance/macos.py`） |
 
 浏览器全流程由 `acceptance/browser_flow.py`（Selenium）驱动机器上真实安装的浏览器，不是测试工具自带的浏览器。各浏览器的文件选择框无法统一自动化，所以原稿通过 DataTransfer 交给页面，成品从下载链接背后的 Blob 读回。
+
+Safari 26 的自动化驱动（safaridriver）拒绝打开任何 file:// 网页（“outside the sandbox”），不论文件在临时文件夹还是 `/Applications`。所以 Safari 的全流程在同一份已安装页面上进行，页面经 `http://127.0.0.1` 提供；file:// 这条用户实际路径另由 LaunchServices 打开、辅助功能读回来验证（类型卡片已渲染、地址是对应的本机文件）。
 
 这些机器不能代表所有硬件和系统版本：
 
@@ -123,7 +125,7 @@ MUNWORD_TEST_SHELLS=/path/to/bash-3.2:/bin/zsh:/bin/bash node --test tests/deskt
 | | 本目录（PKUNMUN 2026 文件排版系统） | Munword（`desktop/build.py`） |
 |---|---|---|
 | 运行方式 | 浏览器直接打开安装目录里的页面（`file://`），启动后程序立即退出 | 自带 Python，在 `127.0.0.1` 随机端口提供页面，后台驻留，空闲 30 分钟退出 |
-| 安装包 | 两个，各约 0.5 MB；macOS 一个通用 DMG，Windows 一个 EXE | 四个，按芯片/位数分包；自带 Python 运行环境，每个 5.9–10.2 MB |
+| 安装包 | 两个：macOS 一个通用 DMG（约 0.8 MB），Windows 一个 EXE（约 0.5 MB） | 四个，按芯片/位数分包；自带 Python 运行环境，每个 5.9–10.2 MB |
 | 系统 | Windows 7–11（32/64 位、ARM），macOS 10.11 起 | Windows 10/11，macOS 11 起 |
 | 浏览器门槛 | Chrome/Edge 99、Firefox 104、Safari 15.4（实测 Chromium 98/99/109） | Chrome/Edge 111、Firefox 128、Safari 16.4（按 Tailwind 官方声明） |
 | 窗口 | Edge/Chrome/Brave/Vivaldi 独立应用窗口 | 默认浏览器的标签页 |

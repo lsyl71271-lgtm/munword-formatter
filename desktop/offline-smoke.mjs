@@ -3,10 +3,11 @@
 // the 11 acceptance inputs (six document types, Chinese and English): select type → upload → recognize →
 // editable step 03 present → generate/download (ZIP read back) → original and generated previews; then a
 // new file from the template panel. Also checks that an outdated browser gets the explanation instead of
-// the app, and that the disk image's browser page reaches the app page.
+// the app, and runs all inputs again on the disk image's single-file page copied on its own.
 //   node desktop/offline-smoke.mjs [site-dir]
 // MUNWORD_PLAYWRIGHT_MODULE / MUNWORD_CHROMIUM_EXECUTABLE as in scripts/studio-browser-smoke.mjs.
-import { cpSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { BROWSER_PAGE, singleFilePage } from "./build-desktop.mjs";
 import { unzipSync } from "fflate";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,6 +21,30 @@ const playwright = await import(process.env.MUNWORD_PLAYWRIGHT_MODULE || "playwr
 const { chromium } = playwright.chromium ? playwright : playwright.default;
 // Linux Chromium reads non-ASCII file names (the Chinese inputs) only under a UTF-8 locale.
 const env = { ...process.env, ...(/UTF-?8/i.test(process.env.LC_ALL || process.env.LANG || "") ? {} : { LC_ALL: "C.UTF-8", LANG: "C.UTF-8" }) };
+
+// One acceptance input through the whole flow on the page at url; the generated DOCX is saved as <name>.docx.
+async function runCase(page, url, type, input, name) {
+  await page.goto(url, { waitUntil: "load" });
+  await page.locator(".typeCard").filter({ has: page.locator("b", { hasText: new RegExp(`^${type}$`) }) }).click();
+  await page.locator('input[type="file"]').setInputFiles(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
+  await page.getByRole("button", { name: /识别文件结构/ }).click();
+  await page.getByRole("heading", { name: "确认识别结果" }).waitFor();
+  // Step 03 stays a real, editable review: the test never fills it in to make recognition pass.
+  if (!(await page.locator(".reviewSection input").count())) throw new Error(`${input}: step 03 has no editable fields`);
+  const generated = page.waitForEvent("download");
+  await page.getByRole("button", { name: /生成并下载 DOCX/ }).click();
+  const download = await generated;
+  const docx = path.join(out, `${name}.docx`);
+  await download.saveAs(docx);
+  const parts = unzipSync(new Uint8Array(readFileSync(docx)));
+  if (!(parts["word/document.xml"]?.length > 100)) throw new Error(`${input}: download is not a readable DOCX`);
+  await page.getByText("成品已下载").waitFor();
+  await page.getByRole("button", { name: "查看实际 DOCX 页面" }).click();
+  await page.frameLocator('iframe[title="原稿页面"]').locator("section.docx").first().waitFor();
+  await page.frameLocator('iframe[title="生成后的 DOCX 页面"]').locator("section.docx").first().waitFor();
+  return download.suggestedFilename();
+}
+
 const browser = await chromium.launch({ headless: true, env, ...(process.env.MUNWORD_CHROMIUM_EXECUTABLE ? { executablePath: process.env.MUNWORD_CHROMIUM_EXECUTABLE } : {}) });
 const network = [], errors = [], csp = [];
 try {
@@ -37,27 +62,7 @@ try {
     ["非友好修正案", "10_中文非友好修正案"], ["友好修正案", "11_English_Amendment"],
   ];
   const downloads = [];
-  for (const [type, input] of cases) {
-    await page.goto(pathToFileURL(path.join(site, "index.html")).href, { waitUntil: "load" });
-    await page.locator(".typeCard").filter({ has: page.locator("b", { hasText: new RegExp(`^${type}$`) }) }).click();
-    await page.locator('input[type="file"]').setInputFiles(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
-    await page.getByRole("button", { name: /识别文件结构/ }).click();
-    await page.getByRole("heading", { name: "确认识别结果" }).waitFor();
-    // Step 03 stays a real, editable review: the test never fills it in to make recognition pass.
-    if (!(await page.locator(".reviewSection input").count())) throw new Error(`${input}: step 03 has no editable fields`);
-    const generated = page.waitForEvent("download");
-    await page.getByRole("button", { name: /生成并下载 DOCX/ }).click();
-    const download = await generated;
-    const docx = path.join(out, `${input}.docx`);
-    await download.saveAs(docx);
-    const parts = unzipSync(new Uint8Array(readFileSync(docx)));
-    if (!(parts["word/document.xml"]?.length > 100)) throw new Error(`${input}: download is not a readable DOCX`);
-    await page.getByText("成品已下载").waitFor();
-    await page.getByRole("button", { name: "查看实际 DOCX 页面" }).click();
-    await page.frameLocator('iframe[title="原稿页面"]').locator("section.docx").first().waitFor();
-    await page.frameLocator('iframe[title="生成后的 DOCX 页面"]').locator("section.docx").first().waitFor();
-    downloads.push(download.suggestedFilename());
-  }
+  for (const [type, input] of cases) downloads.push(await runCase(page, pathToFileURL(path.join(site, "index.html")).href, type, input, input));
   // A new standard file from the template panel.
   await page.getByText("从规范模板新建文件", { exact: true }).click();
   const template = page.locator(".templatePanel");
@@ -93,23 +98,19 @@ try {
   if (oldScripts.length) throw new Error("An outdated browser still loaded app.js");
   await old.close();
 
-  // 直接用浏览器打开.html at the root of the disk image opens the page inside the app bundle.
-  const volume = mkdtempSync(path.join(tmpdir(), "munword-volume-"));
-  cpSync(path.join(ROOT, "desktop", "macos", "直接用浏览器打开.html"), path.join(volume, "直接用浏览器打开.html"));
-  cpSync(site, path.join(volume, "PKUNMUN2026.app", "Contents", "Resources", "site"), { recursive: true });
-  const opener = await context.newPage();
-  opener.on("pageerror", (error) => errors.push(error.message));
-  await opener.goto(pathToFileURL(path.join(volume, "直接用浏览器打开.html")).href);
-  await opener.waitForURL(/PKUNMUN2026\.app\/Contents\/Resources\/site\/index\.html$/);
-  await opener.getByRole("button", { name: /决议草案/ }).waitFor();
-  await opener.close();
-  // Copied somewhere without the app (and none installed): it says what to do.
-  const lone = mkdtempSync(path.join(tmpdir(), "munword-lone-"));
-  cpSync(path.join(ROOT, "desktop", "macos", "直接用浏览器打开.html"), path.join(lone, "直接用浏览器打开.html"));
-  const stray = await context.newPage();
-  await stray.goto(pathToFileURL(path.join(lone, "直接用浏览器打开.html")).href);
-  await stray.getByText("没有找到程序文件").waitFor();
-  await stray.close();
+  // 直接用浏览器打开.html on the disk image is the whole page in one file. Copied on its own to a folder with
+  // Chinese and spaces (as onto the Desktop), it runs every input with nothing next to it.
+  const lone = mkdtempSync(path.join(tmpdir(), "munword-单文件 "));
+  writeFileSync(path.join(lone, BROWSER_PAGE), singleFilePage(site));
+  const single = pathToFileURL(path.join(lone, BROWSER_PAGE)).href;
+  for (const [type, input] of cases) await runCase(page, single, type, input, `single-file ${input}`);
+  // An outdated browser gets the same explanation from it.
+  const oldSingle = await context.newPage();
+  await oldSingle.addInitScript(() => { delete Array.prototype.findLast; });
+  await oldSingle.goto(single, { waitUntil: "load" });
+  await oldSingle.getByText("这个浏览器版本太旧").waitFor();
+  if (await oldSingle.locator(".typeCard").count()) throw new Error("An outdated browser still ran the single-file page");
+  await oldSingle.close();
   console.log(JSON.stringify({ site, download: download.suggestedFilename(), header, network, errors, csp }));
 } finally {
   await browser.close();
@@ -118,4 +119,4 @@ if (network.length || errors.length || csp.length) {
   console.error("Offline page is not self-contained", { network, errors, csp });
   process.exit(1);
 }
-console.log("offline desktop page: all 11 inputs and a template passed from file:// with zero network requests; outdated-browser notice and disk-image browser page work");
+console.log("offline desktop page: all 11 inputs and a template passed from file:// with zero network requests; the single-file page passed them too; outdated-browser notice works");

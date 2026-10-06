@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { JSDOM } from "jsdom";
-import { BROWSER_PAGE, DESKTOP_CSP, OUTDATED_BROWSER_MESSAGE, offlineIndex } from "../desktop/build-desktop.mjs";
+import { BROWSER_PAGE, DESKTOP_CSP, OUTDATED_BROWSER_MESSAGE, offlineIndex, singleFilePage } from "../desktop/build-desktop.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const VERSION = readFileSync(path.join(ROOT, "VERSION"), "utf8").trim();
@@ -162,10 +162,30 @@ test("macOS entry point is a universal program whose real deployment targets mat
   for (const hook of ["MUNWORD_MAC_SIGN_IDENTITY", "MUNWORD_MAC_P12", "MUNWORD_NOTARY_PROFILE", "MUNWORD_NOTARY_API_KEY", "MUNWORD_WIN_PFX"]) assert.ok(script.includes(hook), hook);
 });
 
-test("the disk image's browser page opens the bundled or installed page without starting the app", () => {
-  const html = readFileSync(path.join(ROOT, "desktop", "macos", BROWSER_PAGE), "utf8");
-  for (const needle of ["PKUNMUN2026.app/Contents/Resources/site/", "file:///Applications/", "Applications/", "favicon.svg", "location.replace"]) assert.ok(html.includes(needle), needle);
-  assert.doesNotMatch(html, /https?:\/\/(?!www\.w3\.org)/, "nothing remote");
+test("the disk image's browser page is the whole app in one file, started only in a browser new enough for it", () => {
+  const site = mkdtempSync(path.join(tmpdir(), "munword-site-"));
+  writeFileSync(path.join(site, "index.html"), offlineIndex(sampleIndex()));
+  // Text the HTML parser or a replacement pattern would mangle if the bundle were pasted in as it is.
+  const tricky = ["ran", "</script>", "<!-- <script>", "$&", "$'", " "].join("|");
+  writeFileSync(path.join(site, "app.js"), `document.getElementById("root").textContent = ${JSON.stringify(tricky)};`);
+  writeFileSync(path.join(site, "styles.css"), "#root { color: rgb(1, 2, 3); }");
+  writeFileSync(path.join(site, "favicon.svg"), "<svg xmlns='http://www.w3.org/2000/svg'/>");
+  const page = singleFilePage(site);
+  assert.doesNotMatch(page, /(src|href)="(?!data:)/, "loads no other file");
+  assert.ok(page.includes(`content="${DESKTOP_CSP}"`));
+  assert.ok(page.includes("#root { color: rgb(1, 2, 3); }"));
+  const run = (modern) => {
+    const dom = new JSDOM(page, {
+      runScripts: "dangerously",
+      beforeParse(window) {
+        if (modern) window.CSSLayerBlockRule = function CSSLayerBlockRule() {};
+        else delete window.Array.prototype.findLast;
+      },
+    });
+    return dom.window.document.getElementById("root").textContent;
+  };
+  assert.equal(run(true), tricky);
+  assert.ok(run(false).includes(OUTDATED_BROWSER_MESSAGE), "an outdated browser gets the explanation instead");
   const layout = readFileSync(path.join(ROOT, "desktop", "macos", "make-dmg-layout.py"), "utf8");
   assert.ok(layout.includes(BROWSER_PAGE), "positioned in the Finder window");
 });

@@ -1,7 +1,7 @@
 """Full flow of the installed offline page in a real system browser (Edge, Chrome, Firefox, Safari).
 
-    python desktop/acceptance/browser_flow.py --browser edge --page <installed site/index.html> --out <dir>
-        [--opener <直接用浏览器打开.html> --expect <site directory the opener must reach>] [--quick]
+    python desktop/acceptance/browser_flow.py --browser edge (--page <site/index.html or 直接用浏览器打开.html> | --url <http URL>)
+        --out <dir> [--quick]
 
 Every acceptance input (six document types, Chinese and English) goes through select type → upload →
 recognize → editable step 03 present (never filled in by the test) → generate (ZIP read back) → original
@@ -213,8 +213,6 @@ def main() -> int:
     where.add_argument("--page", type=Path, help="installed site/index.html, opened from disk")
     where.add_argument("--url", help="the same page served over http (Safari's driver cannot open file:// pages)")
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--opener", type=Path)
-    parser.add_argument("--expect", type=Path, help="site directory the opener page must reach")
     parser.add_argument("--quick", action="store_true", help="only the English draft resolution")
     args = parser.parse_args()
     out = args.out / args.browser
@@ -250,12 +248,6 @@ def main() -> int:
         if report["http_requests"] or report["csp_probe"] != "refused":
             raise AssertionError(f"page reached the network: {report['http_requests']} csp={report['csp_probe']}")
         driver.save_screenshot(str(out / "final.png"))
-        if args.opener:
-            driver.get(args.opener.resolve().as_uri())
-            target = (args.expect.resolve().as_uri() + "/index.html") if args.expect else "/site/index.html"
-            wait(driver, lambda d: d.current_url.endswith(target) or d.current_url == target, seconds=30, what=f"the opener to reach {target}")
-            wait(driver, lambda d: d.find_elements(By.CSS_SELECTOR, ".typeCard"), what="the app behind the opener")
-            report["opener"] = {"from": args.opener.resolve().as_uri(), "reached": driver.current_url}
         report["passed"] = True
     except Exception as exc:  # noqa: BLE001 - reported, then exit 1
         report["error"] = f"{type(exc).__name__}: {exc}"

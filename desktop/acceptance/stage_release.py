@@ -93,7 +93,8 @@ def main() -> int:
 
     def browsers(report):
         names = {"edge": "Edge", "chrome": "Chrome", "firefox": "Firefox", "safari": "Safari"}
-        rows = [f"{names.get(name, name)} {data.get('version')}" for name, data in (report.get("browsers") or {}).items() if data.get("passed")]
+        rows = [f"{names.get(name, name)} {data.get('version')}" + ("（全流程经本机 http 地址）" if str(data.get("page_url", "")).startswith("http") else "")
+                for name, data in (report.get("browsers") or {}).items() if data.get("passed")]
         return "、".join(rows) or "—"
 
     native_rows = "\n".join(f"| {label} | {browsers(report)} |" for label, report in native.items())
@@ -105,22 +106,22 @@ def main() -> int:
 | macOS 10.11 及以上，Intel 与 Apple 芯片通用 | `{DMG}` | 双击打开，把「PKUNMUN 2026 文件排版系统」拖进「应用程序」 |
 | Windows 7 / 8.1 / 10 / 11，32 位、64 位与 ARM | `{EXE}` | 双击运行，点「安装」；桌面出现快捷方式 |
 
-每个安装包约 0.5 MB。排版完全在本机浏览器里完成：不联网、不上传文件，不需要 Python、账号或管理员权限，也没有后台进程。浏览器需要 Edge/Chrome 99、Firefox 104 或 Safari 15.4 以上（Windows 7/8.1 可用 Chrome 109 或 Firefox ESR 115）；浏览器过旧时页面会说明该装哪个。
+DMG 约 0.8 MB，EXE 约 0.5 MB。排版完全在本机浏览器里完成：不联网、不上传文件，不需要 Python、账号或管理员权限，也没有后台进程。浏览器需要 Edge/Chrome 99、Firefox 104 或 Safari 15.4 以上（Windows 7/8.1 可用 Chrome 109 或 Firefox ESR 115）；浏览器过旧时页面会说明该装哪个。
 
 **第一次打开**：安装包没有付费的开发者签名。
 - macOS 15 及以后：先双击一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。
 - macOS 14 及以前：按住 Control 点按程序 → 打开。
-- 不想改任何设置：双击磁盘映像里的「直接用浏览器打开.html」，不需要任何授权。
+- 不想改任何设置：双击磁盘映像里的「直接用浏览器打开.html」，不需要任何授权。它就是完整的排版页面（单个网页文件），可拖到桌面长期使用。
 - Windows SmartScreen：点「更多信息 → 仍要运行」。
 
 ## 相对上一版 v1.8.5-desktop 的更新
 
 上一版是另一套自带 Python 运行环境的 Munword 安装包，仍可在 [v1.8.5-desktop](https://github.com/{args.repo}/releases/tag/v1.8.5-desktop) 下载。本版：
-- **一个包通用**：macOS 不再分 Apple 芯片/Intel，Windows 不再分 x64/x86；每个约 0.5 MB（上一版 5.9–10.2 MB）。
+- **一个包通用**：macOS 不再分 Apple 芯片/Intel，Windows 不再分 x64/x86；每个不到 1 MB（上一版 5.9–10.2 MB）。
 - **兼容更多系统**：Windows 7、8.1 和 32 位系统可用；macOS 从 10.11 起可用（上一版要求 Windows 10、macOS 11）。
 - **浏览器门槛按实测**：Chrome/Edge 99 起可用（上一版要求 111，会拒绝 Windows 7 上能装的最后版本 Chrome 109）。
 - **打开即用**：在 Edge/Chrome 里以独立窗口打开，不占端口、不常驻后台、不触发防火墙。
-- **macOS 少弹窗**：原生通用程序，Apple 芯片不要求安装 Rosetta；签名覆盖全部资源，不会报“已损坏”；另附免授权的网页入口。
+- **macOS 少弹窗**：原生通用程序，Apple 芯片不要求安装 Rosetta；签名覆盖全部资源，不会报“已损坏”；另附免授权的单文件网页，可拖到桌面长期使用。
 - **中文名称正常**：上一版 Windows 安装包的桌面快捷方式、开始菜单和“应用和功能”里的中文名称显示为乱码（构建时未按 UTF-8 读取安装脚本），本版没有这个问题；源码里的 Munword 构建脚本也已修复。
 
 ## 验收（本次构建）
@@ -136,7 +137,7 @@ def main() -> int:
 |---|---|
 {native_rows}
 
-Windows 上还验证了从 1.8.4 升级、启动器拉起浏览器独立窗口、卸载。macOS 上还验证了 `hdiutil verify`、Apple `codesign --verify --deep --strict`、原生入口程序和 LaunchServices 打开。详细记录和截图见 `PKUNMUN2026-{VERSION}-Verification.zip`。
+Windows 上还验证了从 1.8.4 升级、启动器拉起浏览器独立窗口、卸载。macOS 上还验证了 `hdiutil verify`、Apple `codesign --verify --deep --strict`、原生入口程序和 LaunchServices 打开；单文件网页「直接用浏览器打开.html」单独复制后在 Chrome、Firefox 里跑通。Safari 的自动化驱动不允许打开本机文件，所以 Safari 的全流程经本机 http 地址进行；另外像用户那样从访达打开程序、磁盘映像里的网页和复制到桌面的网页，由辅助功能读回 Safari 实际显示的页面。详细记录和截图见 `PKUNMUN2026-{VERSION}-Verification.zip`。
 
 ## 校验值
 
