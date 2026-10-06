@@ -1,0 +1,25 @@
+name: Safari probe (temporary)
+
+on:
+  push:
+    paths:
+      - '.github/safari-probe/**'
+      - '.github/workflows/safari-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe
+        env:
+          PROBE_SHOTS: ${{ matrix.os == 'macos-15' && '1' || '0' }}
+        run: python3 -u .github/safari-probe/probe.py
