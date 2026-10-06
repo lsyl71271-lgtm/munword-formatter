@@ -21,6 +21,7 @@ const eslintConfig = defineConfig([
     "public/local-app.js",
     "static-site/**",
     ".static-site-*/**",
+    "work/**",
   ]),
 ]);
 
