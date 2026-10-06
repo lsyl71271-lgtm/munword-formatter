@@ -164,6 +164,14 @@ jobs:
           sudo safaridriver --enable
           defaults write com.apple.Safari AllowRemoteAutomation 1 || true
           defaults write com.apple.Safari IncludeDevelopMenu 1 || true
+      - name: Where Safari opens the page from (diagnostic only)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          prefs="$HOME/Library/Containers/com.apple.Safari/Data/Library/Preferences/com.apple.Safari"
+          defaults write "$prefs" IncludeDevelopMenu -bool true || true
+          defaults write "$prefs" AllowJavaScriptFromAppleEvents -bool true || true
+          python desktop/acceptance/safari_probe.py
       - name: Verify, codesign, Gatekeeper verdict, native launch, full flow in Safari / Chrome / Firefox
         env:
           PYTHONUTF8: '1'

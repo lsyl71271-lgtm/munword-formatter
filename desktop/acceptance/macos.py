@@ -10,9 +10,10 @@
 3. The universal entry point runs natively on this machine's architecture (and the other one if Rosetta is
    present) and hands over to the launcher script; the launcher's browser choice is recorded.
 4. LaunchServices opens the app for real; a browser must open the bundled page.
-5. The full flow (browser_flow.py) in every installed browser on the installed page; Safari also opens the
-   page through 直接用浏览器打开.html, both on the mounted image and copied to the Desktop next to an app in
-   ~/Applications.
+5. The full flow (browser_flow.py) in every installed browser on the installed page. Safari, whose sandbox
+   only lets it open files from places it may read (not the temporary folder), runs it on the app installed
+   in /Applications as the readme says, and also opens the page through 直接用浏览器打开.html, both on the
+   mounted image and copied to the Desktop next to an app in ~/Applications.
 Writes <out>/macos.json; exit code 1 when a check fails.
 """
 from __future__ import annotations
@@ -63,6 +64,8 @@ def main() -> int:
     work = Path(tempfile.mkdtemp(prefix="PKUNMUN 验收 "))
     mount = None
     user_app = Path.home() / "Applications" / "PKUNMUN2026.app"
+    system_app = Path("/Applications/PKUNMUN2026.app")
+    installs = []
     desktop_opener = Path.home() / "Desktop" / OPENER
     try:
         verify = run("hdiutil", "verify", DMG, check=False)
@@ -142,14 +145,18 @@ def main() -> int:
 
         # Full flow in each installed browser; Safari also walks through the opener page.
         user_app.parent.mkdir(exist_ok=True)
-        if user_app.exists():
-            shutil.rmtree(user_app)
-        run("ditto", target, user_app)
+        for installed in (user_app, system_app):
+            if installed.exists() and not os.environ.get("CI"):
+                raise AssertionError(f"{installed} exists; run on a CI machine or remove it first")
+            shutil.rmtree(installed, ignore_errors=True)
+            installs.append(installed)
+            run("ditto", target, installed)
         shutil.copy(mount / OPENER, desktop_opener)
         report["browsers"] = {}
         for browser in [b for b in args.browsers.split(",") if b]:
+            page = (system_app if browser == "safari" else target) / SITE / "index.html"
             command = [sys.executable, str(ROOT / "desktop/acceptance/browser_flow.py"), "--browser", browser,
-                       "--page", str(target / SITE / "index.html"), "--out", str(args.out)]
+                       "--page", str(page), "--out", str(args.out)]
             if browser == "safari":
                 command += ["--opener", str(mount / OPENER), "--expect", str(mount / "PKUNMUN2026.app" / SITE)]
             result = subprocess.run(command, timeout=1500)
@@ -172,7 +179,7 @@ def main() -> int:
     finally:
         if mount:
             run("hdiutil", "detach", mount, "-force", check=False)
-        for leftover in (user_app,):
+        for leftover in installs:
             shutil.rmtree(leftover, ignore_errors=True)
         desktop_opener.unlink(missing_ok=True)
     (args.out / "macos.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
