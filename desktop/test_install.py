@@ -70,10 +70,14 @@ def main():
             smoke(executable, report, args.browser_module, args.browser)
             uninstaller = install / "Uninstall.exe"
             run(uninstaller, "/S", timeout=120)
-            deadline = time.monotonic() + 15
-            while executable.exists() and time.monotonic() < deadline:
+            # NSIS runs the uninstaller from a copy in %TEMP% and returns at once; it is done when it has removed
+            # app\ and, last, Uninstall.exe. Leaving earlier raced it: the temporary folder's cleanup hit
+            # _internal\_ssl.pyd while the uninstaller was still deleting it (Access is denied).
+            deadline = time.monotonic() + 60
+            while ((install / "app").exists() or uninstaller.exists()) and time.monotonic() < deadline:
                 time.sleep(0.2)
-            assert not executable.exists(), "Uninstall did not remove app"
+            assert not (install / "app").exists(), "Uninstall did not remove app"
+            assert not uninstaller.exists(), "Uninstall did not finish"
         elif sys.platform == "darwin":
             run("hdiutil", "verify", artifact)
             result = subprocess.check_output(["hdiutil", "attach", "-readonly", "-nobrowse", "-plist", str(artifact)])

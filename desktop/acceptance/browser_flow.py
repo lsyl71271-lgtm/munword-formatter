@@ -86,7 +86,7 @@ button.scrollIntoView({ block: "center" }); button.click(); return true;
 """
 NETWORK = """
 return performance.getEntriesByType("resource").map(function (e) { return e.name; })
-  .filter(function (n) { return /^https?:/i.test(n); });
+  .filter(function (n) { return /^https?:/i.test(n) && n.indexOf(location.origin + "/") !== 0; });
 """
 CSP_PROBE = """
 const done = arguments[arguments.length - 1];
@@ -209,7 +209,9 @@ def run_template(driver, page_url: str, out: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--browser", required=True, choices=("edge", "chrome", "firefox", "safari", "webkitgtk"))
-    parser.add_argument("--page", type=Path, required=True)
+    where = parser.add_mutually_exclusive_group(required=True)
+    where.add_argument("--page", type=Path, help="installed site/index.html, opened from disk")
+    where.add_argument("--url", help="the same page served over http (Safari's driver cannot open file:// pages)")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--opener", type=Path)
     parser.add_argument("--expect", type=Path, help="site directory the opener page must reach")
@@ -217,7 +219,7 @@ def main() -> int:
     args = parser.parse_args()
     out = args.out / args.browser
     out.mkdir(parents=True, exist_ok=True)
-    report = {"browser": args.browser, "platform": platform.platform(), "page": str(args.page), "passed": False}
+    report = {"browser": args.browser, "platform": platform.platform(), "page": str(args.page or args.url), "passed": False}
     try:
         # safaridriver sometimes exits right after `safaridriver --enable` on fresh machines; retry briefly.
         for attempt in range(3):
@@ -238,7 +240,7 @@ def main() -> int:
     started = time.monotonic()
     try:
         driver.set_window_size(1440, 1000)
-        page_url = args.page.resolve().as_uri()
+        page_url = args.url or args.page.resolve().as_uri()
         report["page_url"] = page_url
         cases = [c for c in CASES if not args.quick or c[1] == "08_English_Draft_Resolution"]
         report["cases"] = [run_case(driver, page_url, doc_type, name, out) for doc_type, name in cases]
