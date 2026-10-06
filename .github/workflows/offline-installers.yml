@@ -160,8 +160,13 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install selenium==4.50.0 pyobjc-framework-ApplicationServices==12.2.2
-      - name: Allow WebDriver in Safari
+      - name: Allow WebDriver in Safari; browsers as a user has them
         run: |
+          # Homebrew installed the image's Chrome and Firefox with the download quarantine, so their first
+          # LaunchServices start waits on "downloaded from the Internet"; a user's browser was approved long ago.
+          for app in "/Applications/Google Chrome.app" "/Applications/Firefox.app" "/Applications/Microsoft Edge.app"; do
+            [ -d "$app" ] && sudo xattr -dr com.apple.quarantine "$app" || true
+          done
           sudo safaridriver --enable
           defaults write com.apple.Safari AllowRemoteAutomation 1 || true
           defaults write com.apple.Safari IncludeDevelopMenu 1 || true
