@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 DMG = "PKUNMUN2026-Formatter-macOS.dmg"
 EXE = "PKUNMUN2026-Formatter-Windows-Setup.exe"
+GUIDE = "PKUNMUN2026-Install-Guide.txt"  # step-by-step install guide for end users
 NATIVE = {
     "acceptance-windows-2022": ("windows.json", "Windows Server 2022 x64"),
     "acceptance-windows-11-arm": ("windows.json", "Windows 11 ARM"),
@@ -78,12 +79,16 @@ def main() -> int:
         if report.get("passed") is not True:
             problems.append(f"{label}: {report.get('error', 'no acceptance report')}")
 
+    guide = ROOT / "downloads" / GUIDE
+    if not guide.is_file() or VERSION not in guide.read_text(encoding="utf-8-sig") or any(d not in guide.read_text(encoding="utf-8-sig") for d in sums.values()):
+        problems.append(f"downloads/{GUIDE} is missing or does not name version {VERSION} and the current checksums")
+
     if problems:
         print("Not publishing:\n  " + "\n  ".join(problems))
         return 1
 
     args.out.mkdir(parents=True, exist_ok=True)
-    for name in (DMG, EXE, "SHA256SUMS.txt"):
+    for name in (DMG, EXE, "SHA256SUMS.txt", GUIDE):
         shutil.copyfile(ROOT / "downloads" / name, args.out / name)
     with zipfile.ZipFile(args.out / f"PKUNMUN2026-{VERSION}-Verification.zip", "w", zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted(args.artifacts.rglob("*")):
@@ -105,6 +110,7 @@ def main() -> int:
 |---|---|---|
 | macOS 10.11 及以上，Intel 与 Apple 芯片通用 | `{DMG}` | 双击打开，把「PKUNMUN 2026 文件排版系统」拖进「应用程序」 |
 | Windows 7 / 8.1 / 10 / 11，32 位、64 位与 ARM | `{EXE}` | 双击运行，点「安装」；桌面出现快捷方式 |
+| 安装教程（先看这个） | `{GUIDE}` | 苹果电脑与 Windows 的手把手安装步骤、弹窗处理、系统和浏览器过旧时怎么更新 |
 
 DMG 约 0.8 MB，EXE 约 0.5 MB。排版完全在本机浏览器里完成：不联网、不上传文件，不需要 Python、账号或管理员权限，也没有后台进程。浏览器需要 Edge/Chrome 99、Firefox 104 或 Safari 15.4 以上（Windows 7/8.1 可用 Chrome 109 或 Firefox ESR 115）；浏览器过旧时页面会说明该装哪个。
 

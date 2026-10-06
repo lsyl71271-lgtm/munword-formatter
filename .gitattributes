@@ -2,3 +2,4 @@
 *.bat -text
 *.ico binary
 Windows*.txt -text
+downloads/PKUNMUN2026-Install-Guide.txt -text

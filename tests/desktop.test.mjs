@@ -212,6 +212,18 @@ test("published installers match VERSION and their checksums", { skip: !existsSy
   for (const [digest, name] of entries) assert.equal(createHash("sha256").update(readFileSync(path.join(ROOT, "downloads", name))).digest("hex"), digest, name);
 });
 
+test("the install guide on the download page matches the published installers", { skip: !existsSync(path.join(ROOT, "downloads", "SHA256SUMS.txt")) }, () => {
+  const bytes = readFileSync(path.join(ROOT, "downloads", "PKUNMUN2026-Install-Guide.txt"));
+  // UTF-8 with BOM and CRLF, so Notepad on Windows 7 shows the Chinese text and the line breaks.
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+  const text = bytes.toString("utf8");
+  assert.doesNotMatch(text, /[^\r]\n/, "every line ends in CRLF");
+  assert.ok(text.includes(`版本 ${VERSION}`), "names the current version");
+  const sums = readFileSync(path.join(ROOT, "downloads", "SHA256SUMS.txt"), "utf8").trim().split("\n").slice(1);
+  for (const line of sums) assert.ok(text.includes(line.split(/\s+/)[0]), `lists the checksum of ${line.split(/\s+/)[1]}`);
+  for (const name of ["PKUNMUN2026-Formatter-macOS.dmg", "PKUNMUN2026-Formatter-Windows-Setup.exe", "仍要打开", "更多信息", "直接用浏览器打开.html"]) assert.ok(text.includes(name), name);
+});
+
 test("the build script's page transform is what the offline smoke test exercises", () => {
   const script = readFileSync(path.join(ROOT, "desktop", "build-desktop.mjs"), "utf8");
   assert.match(script, /scripts", "build-static\.mjs"/, "desktop apps reuse the Pages build, not a second UI");
