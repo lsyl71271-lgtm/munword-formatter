@@ -4,6 +4,8 @@
 
 ### macOS / Windows 离线安装器
 
+[一键下载安装包（GitHub Releases）](https://github.com/lsyl71271-lgtm/munword-formatter/releases/tag/v1.8.5-desktop)：在 Assets 中选择 Apple 芯片 Mac 的 `macOS-arm64.dmg`、Intel Mac 的 `macOS-x64.dmg`，或 Windows 的 `Windows-x64-Setup.exe`（常见电脑）/`Windows-x86-Setup.exe`（32 位 Windows 10）。同时提供 SHA-256 和原生验收记录；不必从 Actions 下载整个构建 ZIP。
+
 `desktop/` 实现自带运行环境的应用，`.github/workflows/desktop-installers.yml` 在两种系统的虚拟机中构建并验收。macOS 下载对应芯片的 DMG，拖动 Munword 到 Applications 后打开；Windows 下载 EXE，安装到当前用户目录并生成快捷方式，无需管理员、Python、Node、账号或首次联网下载。网页、规则、国家表、DOCX 引擎、预览与模板组件全部随包提供；运行时只监听随机的 `127.0.0.1` 端口，页面禁止外部网络请求。详情及实际验收范围见 [离线桌面安装说明](docs/desktop-installers.md)。
 
 目标范围为 Windows 10/11（x64；另有 x86 包用于 32 位系统）和 macOS 11+（Intel/Apple 芯片分包）。浏览器需 Edge/Chrome 111+、Firefox 128+ 或 Safari 16.4+；使用系统浏览器避免内置浏览器增加硬件门槛。最低系统版本是构建目标，不代表已在每一旧系统和硬件上验收。macOS 构建检查每个 Mach-O 的真实最低版本，不只修改 plist。正式免“未经验证的开发者”拦截仍需有效 Developer ID 签名及 Apple 公证；没有证书的构建明确标为未公证。
