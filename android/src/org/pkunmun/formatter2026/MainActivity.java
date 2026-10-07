@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -59,7 +60,7 @@ import java.util.Map;
  * android/build-site.mjs), plus what a WebView cannot do by itself. android/bridge.js is the page's side of it.
  *
  * - Saving: the page's download link hands the file over (MunwordAndroid.begin / append / finish); it is written to
- *   the phone's Downloads folder, then the user can open it in WPS / Word or share it.
+ *   the phone's Downloads folder, then the user can open it in WPS / Word or share it (through SavedFiles).
  * - Choosing a file: the page's file input opens the system file picker.
  * - "Open with" / "Share" from another app: the document is read here and given to the page's file input
  *   (window.__munwordReceive → openedName / openedSize / openedChunk / openedDone). Recognition, step 03 and
@@ -113,7 +114,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** Where a file ended up: its name there, a content URI other apps can read, and a description for the user. */
+    /** Where a file ended up: its name there, a content URI of SavedFiles other apps can be granted, and a description. */
     private static final class Saved {
         final String name;
         final String mime;
@@ -436,7 +437,7 @@ public final class MainActivity extends Activity {
                 cursor.close();
             }
         }
-        return new Saved(name, saving.mime, uri, "手机的「下载」（Download）文件夹");
+        return new Saved(name, saving.mime, SavedFiles.mediaUriFor(ContentUris.parseId(uri), name), "手机的「下载」（Download）文件夹");
     }
 
     /** Android 5–9 with the storage permission: the public Download folder. */
@@ -500,7 +501,7 @@ public final class MainActivity extends Activity {
         Intent view = new Intent(Intent.ACTION_VIEW).setDataAndType(saved.uri, saved.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
             startActivity(view);
-        } catch (ActivityNotFoundException e) {
+        } catch (ActivityNotFoundException | SecurityException e) {
             showMessage("没有可以打开的应用", saved.mime.equals(DOCX)
                     ? "手机上没有能打开 DOCX 的应用。请先安装 WPS Office 或 Microsoft Word；文件已经保存在「下载」文件夹里。"
                     : "手机上没有能打开这种文件的应用。文件已经保存，可以点「分享」发送。");
@@ -513,7 +514,7 @@ public final class MainActivity extends Activity {
         send.setClipData(ClipData.newRawUri(saved.name, saved.uri));
         try {
             startActivity(Intent.createChooser(send, "分享文件"));
-        } catch (ActivityNotFoundException e) {
+        } catch (ActivityNotFoundException | SecurityException e) {
             showMessage("无法分享", "手机上没有可以接收文件的应用。");
         }
     }

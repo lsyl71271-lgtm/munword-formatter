@@ -177,15 +177,23 @@ function deviceFile(name) {
   return `/sdcard/Download/${name}`;
 }
 function mediaStoreId(name) {
-  const rows = shell(`content query --uri content://media/external/downloads --projection _id:_display_name`).split("\n");
+  let rows = [];
+  try { rows = shell(`content query --uri content://media/external/downloads --projection _id:_display_name`).split("\n"); } catch { /* the shell may not read MediaStore */ }
   for (const row of rows) {
     const match = /_id=(\d+), _display_name=(.*)$/.exec(row.trim());
     if (match && match[2] === name) return match[1];
   }
+  return null;
+}
+// A URI another app would hand over: a plain path on Android 9 and earlier, the MediaStore entry on 10+ (or, on 11+,
+// the path, which an app may read for a file it created itself).
+function shareUri(name) {
+  if (sdk < 29) return `file://${deviceFile(name)}`;
+  const id = mediaStoreId(name);
+  if (id) return `content://media/external/downloads/${id}`;
+  if (sdk >= 30) return `file://${deviceFile(name)}`;
   throw new Error(`${name} is not in MediaStore downloads`);
 }
-// A URI another app would hand over: a plain path on Android 9 and earlier, the MediaStore entry on 10+.
-const shareUri = (name) => (sdk >= 29 ? `content://media/external/downloads/${mediaStoreId(name)}` : `file://${deviceFile(name)}`);
 function sendIntent(action, uri) {
   const target = action === "VIEW" ? `-a android.intent.action.VIEW -d ${quote(uri)} -t ${DOCX}` : `-a android.intent.action.SEND -t ${DOCX} --eu android.intent.extra.STREAM ${quote(uri)}`;
   shell(`am start -W ${target} -n ${ACTIVITY}`);
@@ -403,10 +411,24 @@ async function main() {
   await bridgeOpens(bridgeFile, BIG);
   if (report.mode === "app") await appFlows();
 
-  const crashes = shell("logcat -d -b crash");
+  let crashes = "";
+  try { crashes = shell("logcat -d -b crash"); } catch { crashes = shell("logcat -d -s AndroidRuntime:E"); }
   if (crashes.includes(PACKAGE)) throw new Error(`the app crashed:\n${crashes}`);
   step("no crash in the log");
   report.passed = true;
+}
+
+// What the phone shows and logged, printed into the CI log (the evidence files may not be reachable).
+function diagnose() {
+  try {
+    const nodes = uiNodes();
+    console.log(`  · in front: ${resumedActivity() || "?"}`);
+    console.log(`  · on screen: ${JSON.stringify(nodes.filter((node) => node.text).map((node) => node.text.slice(0, 120)).slice(0, 40))}`);
+    const log = adb(["logcat", "-d", "-v", "brief", "Munword:V", "AndroidRuntime:E", "ActivityTaskManager:I", "ActivityManager:I", "chromium:W", "*:S"]).replace(/\r/g, "").trim().split("\n");
+    console.log(`  · log (last ${Math.min(log.length, 60)} lines):\n${log.slice(-60).map((line) => "      " + line).join("\n")}`);
+  } catch (error) {
+    console.log(`  · diagnosis failed: ${error.message}`);
+  }
 }
 
 try {
@@ -415,6 +437,7 @@ try {
   report.error = String(error.stack || error);
   console.log(`FAILED: ${report.error}`);
   screencap("failed");
+  diagnose();
 } finally {
   cdp?.close();
   try { writeFileSync(path.join(out, "logcat.txt"), adb(["logcat", "-d", "-v", "time", "Munword:V", "chromium:V", "AndroidRuntime:E", "ActivityManager:I", "*:S"])); } catch { /* no log */ }

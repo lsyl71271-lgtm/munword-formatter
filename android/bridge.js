@@ -39,7 +39,8 @@
 
   var click = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function () {
-    var blob = blobs[this.href];
+    // The page assigns the object URL itself; older engines may give .href back in another spelling.
+    var blob = blobs[this.getAttribute("href")] || blobs[this.href];
     if (blob && this.hasAttribute("download")) {
       save(blob, this.getAttribute("download") || "PKUNMUN2026.docx");
       return;

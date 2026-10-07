@@ -20,6 +20,8 @@ on:
     paths:
       - 'desktop/**'
       - 'android/**'
+      - 'tests/desktop.test.mjs'
+      - 'tests/android.test.mjs'
       - 'downloads/**'
       - 'VERSION'
       - '.github/workflows/offline-installers.yml'

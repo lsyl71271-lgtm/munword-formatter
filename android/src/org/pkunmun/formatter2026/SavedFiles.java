@@ -16,20 +16,37 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Lets WPS, Word or the share sheet read a file this app saved on Android 9 and earlier (Android 10+ shares the
- * MediaStore entry instead). Not exported: another app can only read a URI handed to it with a read grant, and only
- * a file directly inside the public Download folder or the app's own download folder, read-only.
+ * Lets WPS, Word or the share sheet read a file this app saved. Not exported: another app can only read a URI handed
+ * to it with a read grant, read-only, and only a file this app put in Download (or in its own download folder).
  *
- *   content://org.pkunmun.formatter2026.files/downloads/<name>  → Download/<name>
- *   content://org.pkunmun.formatter2026.files/app/<name>        → Android/data/org.pkunmun.formatter2026/files/Download/<name>
+ *   content://org.pkunmun.formatter2026.files/downloads/<name>   → Download/<name> (Android 9 and earlier)
+ *   content://org.pkunmun.formatter2026.files/app/<name>         → Android/data/org.pkunmun.formatter2026/files/Download/<name>
+ *   content://org.pkunmun.formatter2026.files/media/<id>/<name>  → the app's own MediaStore Downloads entry <id> (Android 10+)
+ *
+ * Android 10+ files are passed through rather than shared as MediaStore URIs, because whether the system lets an app
+ * grant another app access to a Downloads entry differs between versions; this provider's grants always work.
  */
 public final class SavedFiles extends ContentProvider {
     static final String AUTHORITY = "org.pkunmun.formatter2026.files";
     static final String DOWNLOADS = "downloads";
     static final String APP = "app";
 
+    static final String MEDIA = "media";
+
     static Uri uriFor(String root, String name) {
         return new Uri.Builder().scheme("content").authority(AUTHORITY).appendPath(root).appendPath(name).build();
+    }
+
+    static Uri mediaUriFor(long id, String name) {
+        return new Uri.Builder().scheme("content").authority(AUTHORITY).appendPath(MEDIA).appendPath(Long.toString(id)).appendPath(name).build();
+    }
+
+    /** The MediaStore entry behind a media/<id>/<name> URI, or null for the other kinds. */
+    private static Uri mediaEntry(Uri uri) throws FileNotFoundException {
+        List<String> segments = uri.getPathSegments();
+        if (segments.isEmpty() || !MEDIA.equals(segments.get(0))) return null;
+        if (segments.size() != 3 || !segments.get(1).matches("\\d{1,18}")) throw new FileNotFoundException(uri.toString());
+        return Uri.parse("content://media/external/downloads/" + segments.get(1));
     }
 
     static File appFolder(Context context) throws IOException {
@@ -69,18 +86,34 @@ public final class SavedFiles extends ContentProvider {
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
-        File file;
+        String name;
+        long size;
         try {
-            file = fileFor(uri);
-        } catch (FileNotFoundException e) {
+            Uri entry = mediaEntry(uri);
+            if (entry != null) {
+                Cursor source = getContext().getContentResolver().query(entry, new String[] {OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}, null, null, null);
+                if (source == null) return null;
+                try {
+                    if (!source.moveToFirst()) return null;
+                    name = source.getString(0);
+                    size = source.getLong(1);
+                } finally {
+                    source.close();
+                }
+            } else {
+                File file = fileFor(uri);
+                name = file.getName();
+                size = file.length();
+            }
+        } catch (FileNotFoundException | SecurityException e) {
             return null;
         }
         String[] columns = (projection != null ? projection : new String[] {OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}).clone();
         Object[] row = new Object[columns.length];
         int used = 0;
         for (int i = 0; i < columns.length; i++) {
-            if (OpenableColumns.DISPLAY_NAME.equals(columns[i])) row[used] = file.getName();
-            else if (OpenableColumns.SIZE.equals(columns[i])) row[used] = file.length();
+            if (OpenableColumns.DISPLAY_NAME.equals(columns[i])) row[used] = name;
+            else if (OpenableColumns.SIZE.equals(columns[i])) row[used] = size;
             else continue;
             columns[used++] = columns[i];
         }
@@ -96,6 +129,8 @@ public final class SavedFiles extends ContentProvider {
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         if (!"r".equals(mode)) throw new SecurityException("read-only");
+        Uri entry = mediaEntry(uri);
+        if (entry != null) return getContext().getContentResolver().openFileDescriptor(entry, "r");
         return ParcelFileDescriptor.open(fileFor(uri), ParcelFileDescriptor.MODE_READ_ONLY);
     }
 
