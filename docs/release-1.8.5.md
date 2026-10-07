@@ -40,3 +40,17 @@
 - **仓库整理**：
   - 删除一次性的 `CLAUDE_REVIEW_REQUEST.md`（v1.8.2 审查请求），以及未被引用的脚手架图片 `public/file.svg`、`globe.svg`、`window.svg`；
   - 重写 README 的介绍与结构；新增 `docs/README.md`（文档导航）和 `docs/website-capacity.md`（网页版承载力与稳定性）。
+
+## 2026-10-07 安卓版（版本号不变）
+
+不改排版规则、界面流程或第 03 步人工修改入口；网页版、DMG、EXE 的内容不变。
+
+- **新增安卓安装包** `PKUNMUN2026-Formatter-Android.apk`（约 0.4 MB，Android 5.0 及以上）。
+  - 同一个界面、同一个排版引擎，装在一个 Java 写的 WebView 外壳里；没有联网权限，页面只加载应用自带的文件。
+  - 成品保存到手机的「下载」文件夹（Android 10+ 经 MediaStore，6–9 第一次保存时请求存储权限），保存后可直接用 WPS / Word 打开或分享。
+  - 可以在微信、QQ、文件管理里对 DOCX 选「其他应用打开 → PKUNMUN 排版」；传入的文件在点选文书类型后仍然保留。
+  - 不需要 Gradle：用 Ubuntu 软件包（aapt2、dx、zipalign、apksigner、API 23 的 android.jar）和 OpenJDK 构建，同一份源码得到相同的 APK 内容；签名密钥不进仓库，证书指纹登记在 `android/signing-cert.sha256`。
+- **旧 WebView 兼容**：手机版页面按 Chromium 69 编译，补齐缺少的内置函数、CSS 级联层、`:where()`、`inset`、`clamp()`、flex 对齐和 flex `gap` 等；低于 69 时显示如何更新系统 WebView。
+  - 本地实测：Chromium 66、67 显示说明且不加载程序；69、75、79、83、85、88、91、95、99、109 和 141 跑完 11 份原稿，成品与共享页面逐部件相同；当前 Chromium 中手机版页面与桌面页面截图逐像素相同。
+- **持续集成**：`offline-installers` 新增 `android`（重建比对、签名核对、Chromium 67–最新）和 `android-devices`（Android 5.0、6.0、8.0、9、10、11、12、13、14、15 模拟器，用各系统自带的 WebView）两组作业，全部通过才发布；`SHA256SUMS.txt` 列出三个安装包，安装教程新增安卓一章。
+

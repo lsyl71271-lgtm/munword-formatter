@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PKUNMUN 2026 文件自动排版系统, Android. Version, minimum and target SDK are set by android/build-apk.mjs.
+     No INTERNET permission: the page runs from the app's own assets and documents never leave the phone.
+     Storage permission only up to Android 9; Android 10+ saves to Downloads through MediaStore without one. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.pkunmun.formatter2026"
+    android:installLocation="auto">
+
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:supportsRtl="false"
+        android:usesCleartextTraffic="false"
+        android:hardwareAccelerated="true">
+
+        <!-- WebView sends nothing: no usage metrics, no Safe Browsing lookups (the app loads only its own files). -->
+        <meta-data android:name="android.webkit.WebView.MetricsOptOut" android:value="true" />
+        <meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|locale|fontScale"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- "Open with" / "Share" a Word document from WeChat, QQ, a file manager or mail. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            </intent-filter>
+        </activity>
+
+        <!-- Hands a saved file to WPS / Word or the share sheet (Android 9 and earlier; 10+ shares the MediaStore entry). -->
+        <provider
+            android:name=".SavedFiles"
+            android:authorities="org.pkunmun.formatter2026.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

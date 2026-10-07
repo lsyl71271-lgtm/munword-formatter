@@ -6,21 +6,22 @@
 
 - 六种文书：立场文件、工作文件、指令草案、决议草案、友好修正案、非友好修正案，中英文都支持。
 - 四步完成：选择类型 → 上传原稿 → 确认识别 → 生成下载。
-- 文件只在你自己的电脑上处理，不上传，不需要账号，也不用 AI 改写内容。
+- 文件只在你自己的电脑或手机上处理，不上传，不需要账号，也不用 AI 改写内容。
 
-## 三种用法
+## 四种用法
 
-三种用法是同一套界面、同一个排版引擎，处理结果完全一样。
+四种用法是同一套界面、同一个排版引擎，处理结果完全一样。
 
 | 用法 | 适合 | 入口 |
 |---|---|---|
 | 网页版 | 有网络、不想安装 | [munword-formatter.pages.dev](https://munword-formatter.pages.dev/) |
 | macOS 版 | macOS 10.11 及以上，Intel 与 Apple 芯片通用 | [PKUNMUN2026-Formatter-macOS.dmg](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Formatter-macOS.dmg) |
 | Windows 版 | Windows 7 / 8.1 / 10 / 11，32 位与 64 位，ARM 也可 | [PKUNMUN2026-Formatter-Windows-Setup.exe](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Formatter-Windows-Setup.exe) |
+| 安卓版 | Android 5.0 及以上的手机、平板 | [PKUNMUN2026-Formatter-Android.apk](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Formatter-Android.apk) |
 
 - 网页版打开就能用。排版在你的浏览器里完成，服务器只负责把网页发给你。
-- 桌面版装好后完全离线，断网也能用，适合会场网络不稳定的时候。
-- 第一次安装请先看 **[安装教程](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Install-Guide.txt)**：Mac 与 Windows 的手把手步骤、弹窗怎么处理、系统或浏览器太旧时怎么更新。
+- 桌面版和安卓版装好后完全离线，断网也能用，适合会场网络不稳定的时候。iPhone / iPad 请用网页版。
+- 第一次安装请先看 **[安装教程](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest/download/PKUNMUN2026-Install-Guide.txt)**：Mac、Windows 与安卓手机的手把手步骤、弹窗怎么处理、系统或浏览器太旧时怎么更新。
 - 所有安装文件都在 **[下载页（GitHub Releases）](https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest)**，仓库的 [downloads/](downloads/) 目录里也有一份。
 
 ## 下载桌面版
@@ -49,6 +50,16 @@
   - 每次相关改动后，[`offline-installers`](.github/workflows/offline-installers.yml) 工作流都会从源码重建并比对，再在真实系统上安装、打开、跑完全部样例、升级、卸载：Windows Server 2022 x64、Windows 11 ARM、macOS 14 / 15（Apple 芯片）、macOS 15（Intel），Wine 里的 32 位 Windows 7，以及旧版 Chromium 98 / 99 / 109。
 - 构建方法、验收范围和签名方式见 [desktop/README.md](desktop/README.md)。
 
+## 下载安卓版
+
+- **安装**：在手机浏览器里下载 APK，点开安装；系统提示「安装未知应用」时，按提示允许本次来源。华为、小米等手机的额外风险提示，安装教程里逐一说明了怎么处理。
+- **用法**：和网页版完全一样的界面。可以在应用里选文件，也可以在微信、QQ 或文件管理里对 DOCX 选「其他应用打开 → PKUNMUN 排版」。成品保存到手机的「下载」文件夹，弹窗里可以直接用 WPS / Word 打开或分享。
+- **纯本机**：应用没有联网权限，页面从应用自带的文件打开，安全策略禁止一切网络连接；只在 Android 6–9 第一次保存时请求存储权限。
+- **兼容**：Android 5.0 及以上（API 21），需要系统 WebView 69 或更高（2018 年起的版本；Android 7 以上的手机一般早已自动更新）。WebView 太旧时页面会说明去哪里更新，不会白屏。旧 WebView 缺少的新语法、内置函数和样式由手机版页面补齐，排版结果与电脑上逐部件相同。鸿蒙 HarmonyOS NEXT 不能安装安卓应用，请用网页版。
+- **体积小**：约 0.4 MB。签名证书指纹登记在 [`android/signing-cert.sha256`](android/signing-cert.sha256)，升级安装时系统会核对同一把签名密钥。
+- **可验证**：CI 从源码重建 APK，与发布文件逐项比对内容并核对签名；手机版页面在 Chromium 67（应显示说明）到最新版里跑完全部样例；APK 在 Android 5.0、6.0、8.0、9、10、11、12、13、14、15 的模拟器上安装运行（用各系统自带、未更新的 WebView），检查保存到「下载」、存储权限弹窗、打开方式与分享传入，以及新到能运行的 WebView 上的全部样例流程。
+- 构建方法和验收细节见 [android/README.md](android/README.md)。
+
 ## 它会做什么，不会做什么
 
 **会做**
@@ -76,6 +87,7 @@
 | [学标对照](docs/handbook-alignment.md) | 每条规则对应手册哪一页 |
 | [版本说明 v1.8.5](docs/release-1.8.5.md) | 当前版本的改动与核查记录（更早的版本见 docs/） |
 | [desktop/README.md](desktop/README.md) | 桌面安装包的构建、验收与签名 |
+| [android/README.md](android/README.md) | 安卓安装包的构建、兼容性、验收与签名 |
 
 ## 开发
 
@@ -121,6 +133,18 @@ pnpm test:desktop
 - 改动界面、引擎或共享规则后要重新运行 `pnpm build:desktop` 并提交新的安装包，否则 CI 的逐字节复现检查会失败。
 - 所需工具（NSIS、rcodesign、libdmg-hfsplus 等）见 [desktop/README.md](desktop/README.md)。
 
+### 安卓安装包
+
+```sh
+sudo apt-get install aapt dalvik-exchange zipalign apksigner libandroid-23-java openjdk-21-jdk-headless
+pnpm build:local-tools
+node android/build-apk.mjs              # 未签名 APK，写入 dist/android/
+MUNWORD_ANDROID_KEYSTORE=… MUNWORD_ANDROID_KEYSTORE_PASSWORD=… MUNWORD_ANDROID_KEY_ALIAS=… node android/build-apk.mjs --publish
+```
+
+- 不需要 Gradle 或 Android Studio，Ubuntu / Debian 的软件包就够了。
+- 改动界面、引擎或共享规则后，要用签名密钥重新运行 `--publish` 并提交新的 APK，否则 CI 的内容比对会失败。签名密钥不在仓库里，见 [android/README.md](android/README.md)。
+
 ### Python 兼容引擎、API 与批处理
 
 ```sh
@@ -161,7 +185,7 @@ python3 scripts/audit-source.py
 ```
 
 - [`source-checks`](.github/workflows/source-checks.yml) 在每次推送和每个 PR 上运行以上全部检查。
-- [`offline-installers`](.github/workflows/offline-installers.yml) 在桌面安装包或其页面来源改动时运行。
+- [`offline-installers`](.github/workflows/offline-installers.yml) 在安装包（DMG / EXE / APK）或其页面来源改动时运行。
 - 标准测试只用仓库里的 11 份合成验收原稿和 `tests/fixtures/engine-parity.json`，不需要私人文件或云端凭据。
 - 自动化验收只检查第 03 步“可以编辑”，从不代填字段来掩盖识别错误。
 - 其他压力与比对脚本在 `scripts/`。需要私人样例的脚本通过 `MUNWORD_FIXTURE_ROOT` 定位，这些样例不随仓库分享。
@@ -187,7 +211,8 @@ local_web/              离线 / 本机页面外壳（直接挂载 app/page.tsx�
 shared/                 两个引擎共用的规则：学标版式、编号、国家名表、包安全上限
 backend/                Python 兼容引擎、FastAPI 服务、CLI 与测试
 desktop/                桌面安装包的构建脚本、启动器、验收脚本
-downloads/              已发布的 DMG、EXE、校验值与安装教程
+android/                安卓应用（Java 外壳、旧 WebView 兼容层）、构建与验收脚本
+downloads/              已发布的 DMG、EXE、APK、校验值与安装教程
 tests/                  Node 测试与引擎一致性基线
 examples/               11 份合成验收原稿；D1 示例（平台脚手架）
 scripts/                构建、打包、审计、压力与比对脚本，旧版本机服务安装脚本

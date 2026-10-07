@@ -7,7 +7,7 @@
 //   dist/desktop/site/                                   offline page (relative paths, CSP)
 //   dist/desktop/PKUNMUN2026-Formatter-macOS.dmg         drag-to-Applications disk image
 //   dist/desktop/PKUNMUN2026-Formatter-Windows-Setup.exe per-user installer (no admin rights)
-//   --publish copies both into downloads/ with SHA256SUMS.txt
+//   --publish copies both into downloads/ and updates their lines in SHA256SUMS.txt
 //
 // Tools: macOS image → codesign + hdiutil (built into macOS), or on Linux rcodesign (apple-codesign) +
 // mkfs.hfsplus + hfsplus/dmg (libdmg-hfsplus, the route Firefox uses for its Linux-built macOS images).
@@ -312,7 +312,11 @@ if (isMain) {
     const downloads = path.join(ROOT, "downloads");
     mkdirSync(downloads, { recursive: true });
     for (const file of outputs) copyFileSync(file, path.join(downloads, path.basename(file)));
-    writeFileSync(path.join(downloads, "SHA256SUMS.txt"), `# PKUNMUN 2026 文件排版系统 ${VERSION} — offline desktop installers\n${sums.join("\n")}\n`);
+    // The other installers' lines (the Android APK, from android/build-apk.mjs --publish) stay as they are.
+    const sumsFile = path.join(downloads, "SHA256SUMS.txt");
+    const kept = existsSync(sumsFile) ? readFileSync(sumsFile, "utf8").split("\n").filter((line) => /^[0-9a-f]{64} {2}/.test(line) && !outputs.some((file) => line.endsWith(`  ${path.basename(file)}`))) : [];
+    const lines = [...kept, ...sums].sort((a, b) => (a.slice(66) < b.slice(66) ? -1 : 1));
+    writeFileSync(sumsFile, `# PKUNMUN 2026 文件排版系统 ${VERSION} — offline installers\n${lines.join("\n")}\n`);
     console.log(`Published ${outputs.length} installers for ${VERSION} to downloads/ (${outputs.map((f) => `${path.basename(f)} ${(statSync(f).size / 1048576).toFixed(1)} MB`).join(", ")})`);
   }
 }

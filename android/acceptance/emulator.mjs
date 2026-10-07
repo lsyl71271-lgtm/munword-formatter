@@ -1,0 +1,424 @@
+// The published APK on a real Android system (an emulator in CI), with the system's own WebView, driven the way a
+// user drives it: taps on native dialogs through UI Automator, files through the page's own file input or through
+// "open with" / "share" intents, and the result read back from the phone's Download folder.
+//
+//   node android/acceptance/emulator.mjs <apk> <reference dir> <out dir>
+//
+// adb must reach exactly one device (ADB to override the binary). The page is driven over the WebView's DevTools
+// socket, which the app opens only when `debug.munword.devtools` is set from adb, so this is the APK users install.
+//
+// WebView 69 or newer (the app runs):
+// - every acceptance input: pick the type, choose the file, recognize, check step 03 is there and editable (never
+//   filled in), generate; the app's own save dialog must name the file, and the DOCX in Download must have the same
+//   parts as the shared page's output in current Chromium (reference dir: desktop/offline-smoke.mjs output);
+// - rotating the screen and leaving with Back keep the work; the page loads nothing outside the app;
+// - "open with" from a cold start and "share" into the running app hand the document to the page, which keeps it
+//   through the type choice and formats it like any other.
+// Older WebView (the notice): the notice shows and app.js never loads.
+// Both: the save path for a 1.5 MB file (two chunks each way), Android 6–9's storage permission prompt, duplicate
+// names, the dialog's 打开 and 分享, and "open with" / "share" handing the exact bytes over.
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { unzipSync } from "fflate";
+import { Cdp, PAGE_STATE } from "./cdp.mjs";
+
+const [apk, reference, out] = process.argv.slice(2).map((p) => path.resolve(p));
+const ROOT = path.resolve(import.meta.dirname, "..", "..");
+const ADB = process.env.ADB || "adb";
+const PACKAGE = "org.pkunmun.formatter2026";
+const ACTIVITY = `${PACKAGE}/.MainActivity`;
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const FLOOR = 69;
+const PORT = 9333;
+const CASES = [
+  ["立场文件", "01_中文立场文件"], ["立场文件", "02_English_Position_Paper"], ["工作文件", "03_中文工作文件"],
+  ["工作文件", "04_English_Working_Paper"], ["指令草案", "05_中文指令草案"], ["指令草案", "06_English_Draft_Directive"],
+  ["决议草案", "07_中文决议草案"], ["决议草案", "08_English_Draft_Resolution"], ["友好修正案", "09_中文友好修正案"],
+  ["非友好修正案", "10_中文非友好修正案"], ["友好修正案", "11_English_Amendment"],
+];
+mkdirSync(out, { recursive: true });
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const report = { passed: false, steps: [], cases: [] };
+const step = (name, detail = {}) => {
+  report.steps.push({ name, ...detail });
+  console.log(`  ✓ ${name}${Object.keys(detail).length ? " " + JSON.stringify(detail) : ""}`);
+};
+
+// ---- adb ----
+const adb = (args, options = {}) => execFileSync(ADB, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 180000, maxBuffer: 64 << 20, ...options });
+const shell = (command) => adb(["shell", command]).replace(/\r/g, "");
+const quote = (text) => `'${String(text).replace(/'/g, `'\\''`)}'`;
+const sdk = Number(shell("getprop ro.build.version.sdk").trim());
+const screencap = (name) => {
+  try {
+    writeFileSync(path.join(out, `${name}.png`), execFileSync(ADB, ["exec-out", "screencap", "-p"], { maxBuffer: 64 << 20, timeout: 60000 }));
+  } catch (error) {
+    console.log(`  (screenshot ${name} failed: ${error.message})`);
+  }
+};
+const pull = (devicePath) => {
+  const local = path.join(out, "pulled", path.basename(devicePath));
+  mkdirSync(path.dirname(local), { recursive: true });
+  adb(["pull", devicePath, local]);
+  return readFileSync(local);
+};
+function appPid() {
+  for (const command of ["pidof " + PACKAGE, sdk >= 26 ? "ps -A" : "ps"]) {
+    const output = (() => { try { return shell(command); } catch { return ""; } })();
+    if (command.startsWith("pidof")) {
+      const pid = output.trim().split(/\s+/)[0];
+      if (/^\d+$/.test(pid)) return pid;
+    } else {
+      const line = output.split("\n").find((row) => row.trim().endsWith(" " + PACKAGE));
+      if (line) return line.trim().split(/\s+/)[1];
+    }
+  }
+  return null;
+}
+function resumedActivity() {
+  const output = shell("dumpsys activity activities");
+  const match = /(?:mResumedActivity|ResumedActivity|topResumedActivity)[:=]\s*ActivityRecord\{\S+ \S+ (\S+?)[ }]/.exec(output);
+  return match ? match[1] : "";
+}
+async function waitFor(check, timeout, what) {
+  const end = Date.now() + timeout;
+  let last;
+  while (Date.now() < end) {
+    last = await check();
+    if (last) return last;
+    await sleep(500);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+// ---- UI Automator: the native dialogs ----
+const entities = (text) => text.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code))).replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+function uiNodes() {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      shell("rm -f /sdcard/munword-ui.xml");
+      shell("uiautomator dump /sdcard/munword-ui.xml");
+      const xml = adb(["shell", "cat /sdcard/munword-ui.xml"]);
+      if (!xml.includes("<hierarchy")) continue;
+      return [...xml.matchAll(/<node ([^>]*?)\/?>/g)].map(([, attributes]) => {
+        const node = {};
+        for (const [, name, value] of attributes.matchAll(/([\w-]+)="([^"]*)"/g)) node[name] = entities(value);
+        const bounds = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(node.bounds || "");
+        node.center = bounds ? [(Number(bounds[1]) + Number(bounds[3])) >> 1, (Number(bounds[2]) + Number(bounds[4])) >> 1] : null;
+        return node;
+      });
+    } catch { /* the screen was still moving: try again */ }
+  }
+  return [];
+}
+const findNode = (nodes, test) => nodes.find((node) => node.center && test(node));
+async function waitForNode(test, timeout, what) {
+  let nodes = [];
+  try {
+    return await waitFor(() => { nodes = uiNodes(); return findNode(nodes, test); }, timeout, what);
+  } catch (error) {
+    writeFileSync(path.join(out, `ui-${what.replace(/\W+/g, "-")}.json`), JSON.stringify(nodes.map(({ text, "resource-id": id, class: cls, package: pkg }) => ({ text, id, cls, pkg })), null, 1));
+    screencap(`failed-${what.replace(/\W+/g, "-")}`);
+    throw error;
+  }
+}
+const tap = (node) => shell(`input tap ${node.center[0]} ${node.center[1]}`);
+const button = (label) => (node) => /Button/.test(node.class || "") && node.text === label;
+
+// The app's save dialog: returns the file name it reports.
+async function savedDialog(what) {
+  const message = await waitForNode((node) => /^文件：/.test(node.text || ""), 60000, `save dialog (${what})`);
+  const name = /^文件：(.*)\n/.exec(message.text)?.[1];
+  if (!name) throw new Error(`save dialog without a file name: ${message.text}`);
+  return { name, text: message.text };
+}
+async function allowStoragePrompt() {
+  // Android 6–9 ask once, the first time something is saved.
+  const allow = await waitForNode((node) => /permission_allow_button$/.test(node["resource-id"] || "") || /^allow$/i.test(node.text || ""), 30000, "storage permission prompt");
+  tap(allow);
+  step("storage permission prompt shown and allowed");
+}
+
+// ---- The page, over the WebView's DevTools socket ----
+let cdp;
+async function connect() {
+  cdp?.close();
+  const pid = await waitFor(() => appPid(), 30000, "the app's process");
+  const socket = `webview_devtools_remote_${pid}`;
+  await waitFor(() => shell("cat /proc/net/unix").includes(socket), 60000, `DevTools socket ${socket}`);
+  adb(["forward", "--remove-all"]);
+  adb(["forward", `tcp:${PORT}`, `localabstract:${socket}`]);
+  cdp = await Cdp.open(PORT, { match: (target) => target.url.startsWith("file:///android_asset/site/"), timeout: 60000 });
+  return pid;
+}
+async function launch() {
+  shell(`am start -W -n ${ACTIVITY}`);
+  await waitFor(() => resumedActivity().startsWith(PACKAGE), 30000, "the app in front");
+}
+
+// Hands bytes to the page as a download (what the page does with a finished DOCX) through the real bridge.
+async function saveThroughBridge(name, bytes) {
+  await cdp.eval(`(function () {
+    var binary = atob(${JSON.stringify(Buffer.from(bytes).toString("base64"))}), data = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([data], { type: ${JSON.stringify(DOCX)} }));
+    link.download = ${JSON.stringify(name)};
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode.removeChild(link);
+    return true;
+  })()`);
+}
+function deviceFile(name) {
+  return `/sdcard/Download/${name}`;
+}
+function mediaStoreId(name) {
+  const rows = shell(`content query --uri content://media/external/downloads --projection _id:_display_name`).split("\n");
+  for (const row of rows) {
+    const match = /_id=(\d+), _display_name=(.*)$/.exec(row.trim());
+    if (match && match[2] === name) return match[1];
+  }
+  throw new Error(`${name} is not in MediaStore downloads`);
+}
+// A URI another app would hand over: a plain path on Android 9 and earlier, the MediaStore entry on 10+.
+const shareUri = (name) => (sdk >= 29 ? `content://media/external/downloads/${mediaStoreId(name)}` : `file://${deviceFile(name)}`);
+function sendIntent(action, uri) {
+  const target = action === "VIEW" ? `-a android.intent.action.VIEW -d ${quote(uri)} -t ${DOCX}` : `-a android.intent.action.SEND -t ${DOCX} --eu android.intent.extra.STREAM ${quote(uri)}`;
+  shell(`am start -W ${target} -n ${ACTIVITY}`);
+}
+
+const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
+function sameParts(actual, expected) {
+  const left = unzipSync(new Uint8Array(actual)), right = unzipSync(new Uint8Array(expected));
+  const names = Object.keys(right).sort();
+  if (Object.keys(left).sort().join("|") !== names.join("|")) return "part list differs";
+  const differing = names.filter((name) => !Buffer.from(left[name]).equals(Buffer.from(right[name])));
+  return differing.length ? `parts differ: ${differing.join(", ")}` : "";
+}
+// 1.5 MB of fixed pseudo-random bytes: two pieces each way through the bridge.
+const BIG = (() => {
+  const bytes = Buffer.alloc(1536 * 1024);
+  let seed = 2026;
+  for (let i = 0; i < bytes.length; i++) { seed = (seed * 1103515245 + 12345) >>> 0; bytes[i] = seed >>> 24; }
+  return bytes;
+})();
+
+// The native save path, both modes: saves, the permission prompt, duplicate names, 打开 and 分享.
+async function bridgeSaves() {
+  shell("rm -f /sdcard/Download/PKUNMUN-bridge-test*.docx");
+  await saveThroughBridge("PKUNMUN-bridge-test.docx", BIG);
+  if (sdk >= 23 && sdk <= 28) await allowStoragePrompt();
+  const first = await savedDialog("first save");
+  if (first.name !== "PKUNMUN-bridge-test.docx") throw new Error(`saved as ${first.name}`);
+  if (!first.text.includes("下载")) throw new Error(`dialog does not say Download: ${first.text}`);
+  tap(await waitForNode(button("完成"), 10000, "完成 button"));
+  const pulled = pull(deviceFile(first.name));
+  if (!pulled.equals(BIG)) throw new Error(`Download/${first.name} is ${pulled.length} bytes, sha ${sha(pulled)}; sent ${BIG.length}, sha ${sha(BIG)}`);
+  step("1.5 MB file saved to Download, byte for byte", { name: first.name });
+
+  await saveThroughBridge("PKUNMUN-bridge-test.docx", BIG.subarray(0, 4096));
+  const second = await savedDialog("second save");
+  if (second.name === first.name || !/PKUNMUN-bridge-test.*\(1\)\.docx$/.test(second.name)) throw new Error(`second save named ${second.name}`);
+  if (!pull(deviceFile(second.name)).equals(BIG.subarray(0, 4096))) throw new Error(`Download/${second.name} differs`);
+  tap(await waitForNode(button("打开"), 10000, "打开 button"));
+  // No DOCX viewer on a bare emulator: the app explains which apps to install. If an image has one, it opens.
+  const opened = await waitFor(() => {
+    const nodes = uiNodes();
+    if (findNode(nodes, (node) => (node.text || "").includes("WPS Office"))) return "explained";
+    const front = resumedActivity();
+    return front && !front.startsWith(PACKAGE) ? front : null;
+  }, 30000, "打开 result");
+  if (opened === "explained") tap(await waitForNode(button("好"), 10000, "好 button"));
+  else { shell("input keyevent 4"); await waitFor(() => resumedActivity().startsWith(PACKAGE), 20000, "back from the viewer"); }
+  step("duplicate name kept apart; 打开 handled", { name: second.name, open: opened });
+
+  await saveThroughBridge("PKUNMUN-bridge-test.docx", BIG.subarray(0, 2048));
+  const third = await savedDialog("third save");
+  tap(await waitForNode(button("分享"), 10000, "分享 button"));
+  const chooser = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, "share sheet");
+  screencap("share-sheet");
+  shell("input keyevent 4");
+  await waitFor(() => resumedActivity().startsWith(PACKAGE), 20000, "back from the share sheet");
+  step("分享 opens the share sheet", { name: third.name, chooser });
+  return first.name;
+}
+
+// "Open with" / "share" handing the exact bytes over, read through the bridge's own calls.
+async function bridgeOpens(name, bytes) {
+  const capture = `window.__munwordReceive = function () {
+    var bridge = window.MunwordAndroid, size = bridge.openedSize(), parts = [];
+    window.__got = { name: bridge.openedName(), size: size };
+    for (var offset = 0; offset < size; offset += 786432) parts.push(bridge.openedChunk(offset, 786432));
+    bridge.openedDone();
+    window.__got.base64 = parts.join("");
+  }; window.__got = null; true`;
+  for (const action of ["VIEW", "SEND"]) {
+    await cdp.eval(capture);
+    sendIntent(action, shareUri(name));
+    await cdp.until("!!(window.__got && window.__got.base64 !== undefined)", 30000);
+    const got = await cdp.eval("window.__got");
+    const received = Buffer.from(got.base64, "base64");
+    if (got.name !== name || got.size !== bytes.length || !received.equals(bytes)) throw new Error(`${action}: page got ${got.name}, ${got.size} bytes (sha ${sha(received)})`);
+    if (await cdp.eval("window.MunwordAndroid.openedName()") !== "") throw new Error(`${action}: the app kept the file after handing it over`);
+    step(`${action === "VIEW" ? "open with" : "share"} into the running app hands the exact bytes over`, { name, bytes: bytes.length });
+  }
+}
+
+const typeCard = (type) => `[].find.call(document.querySelectorAll(".typeCard"), function (c) { return c.querySelector("b").textContent === ${JSON.stringify(type)}; })`;
+const clickButton = (label) => `[].find.call(document.querySelectorAll("button"), function (b) { return b.textContent.indexOf(${JSON.stringify(label)}) >= 0; }).click(), true`;
+const REVIEW = `[].some.call(document.querySelectorAll("h2"), function (h) { return h.textContent === "确认识别结果"; })`;
+
+// One document through the page, from recognition to the file in Download.
+async function recognizeAndGenerate(input, { rotate = false, background = false } = {}) {
+  await cdp.eval(clickButton("识别文件结构"));
+  await cdp.until(`${REVIEW} || !!document.querySelector(".errorBox")`, 90000, PAGE_STATE);
+  const error = await cdp.eval(`(document.querySelector(".errorBox") || {}).textContent || ""`);
+  if (error) throw new Error(`${input}: ${error}`);
+  if (!(await cdp.eval(`document.querySelectorAll(".reviewSection input").length`))) throw new Error(`${input}: step 03 has no editable fields`);
+  if (input.startsWith("07") || input.startsWith("01")) screencap(`review-${input}`);
+  if (rotate) {
+    shell("settings put system accelerometer_rotation 0");
+    shell("settings put system user_rotation 1");
+    await cdp.until("window.innerWidth > window.innerHeight", 20000);
+    await sleep(1000);
+    screencap(`landscape-${input}`);
+    if (!(await cdp.eval(REVIEW))) throw new Error("rotating lost the recognized document");
+    shell("settings put system user_rotation 0");
+    await cdp.until("window.innerWidth < window.innerHeight", 20000);
+    if (!(await cdp.eval(REVIEW))) throw new Error("rotating back lost the recognized document");
+    step("rotation keeps the work", { input });
+  }
+  if (background) {
+    shell("input keyevent 4");
+    await waitFor(() => !resumedActivity().startsWith(PACKAGE), 20000, "Back leaving the app");
+    await launch();
+    if (!(await cdp.eval(REVIEW))) throw new Error("leaving with Back lost the recognized document");
+    step("Back leaves the app and keeps the work", { input });
+  }
+  await cdp.eval(clickButton("生成并下载 DOCX"));
+  const saved = await savedDialog(input);
+  tap(await waitForNode(button("完成"), 10000, "完成 button"));
+  const docx = pull(deviceFile(saved.name));
+  const expected = path.join(reference, `${input}.docx`);
+  const difference = existsSync(expected) ? sameParts(docx, readFileSync(expected)) : "no reference output";
+  if (difference) throw new Error(`${input}: ${saved.name} ${difference}`);
+  return { input, saved: saved.name, bytes: docx.length };
+}
+
+async function appFlows() {
+  report.flexGapFallback = await cdp.eval(`document.documentElement.className.indexOf("no-flex-gap") >= 0`);
+  for (const [index, [type, input]] of CASES.entries()) {
+    await cdp.eval("location.reload(), true");
+    await sleep(500);
+    await cdp.until(`document.querySelectorAll(".typeCard").length === 6`, 60000, PAGE_STATE);
+    // As a user does: the type first, then the file (what the system file picker hands the page).
+    await cdp.eval(`${typeCard(type)}.click(), true`);
+    const bytes = readFileSync(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
+    await cdp.eval(`(function () {
+      var binary = atob(${JSON.stringify(bytes.toString("base64"))}), data = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+      var transfer = new DataTransfer(), input = document.querySelector('input[type="file"]');
+      transfer.items.add(new File([data], ${JSON.stringify(input + ".docx")}, { type: ${JSON.stringify(DOCX)} }));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    await cdp.until(`!!document.querySelector(".dropzone.hasFile") && document.querySelector(".dropzone h3").textContent === ${JSON.stringify(input + ".docx")}`, 20000, PAGE_STATE);
+    if (index === 0) screencap("file-chosen");
+    const result = await recognizeAndGenerate(input, { rotate: input.startsWith("07"), background: input.startsWith("08") });
+    report.cases.push(result);
+    step(`${input}: recognized, step 03 editable, saved to Download with the reference's parts`, { saved: result.saved });
+  }
+  const outside = await cdp.eval(`(performance.getEntriesByType("resource") || []).map(function (e) { return e.name; }).filter(function (n) { return n.indexOf("file:///android_asset/site/") !== 0 && n.indexOf("blob:") !== 0 && n.indexOf("data:") !== 0; })`);
+  if (outside.length) throw new Error(`the page loaded ${outside.join(", ")}`);
+  step("nothing loaded from outside the app");
+
+  // "Open with" from a cold start: the app starts with the document; it stays through the type choice. The
+  // documents are first put in Download by the app itself (under their own names), as another app would hold them.
+  const documents = {};
+  for (const input of ["07_中文决议草案", "08_English_Draft_Resolution"]) {
+    const bytes = readFileSync(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
+    await saveThroughBridge(`${input}.docx`, bytes);
+    const kept = await savedDialog(`${input} to open`);
+    if (kept.name !== `${input}.docx`) throw new Error(`${input} kept as ${kept.name}`);
+    tap(await waitForNode(button("完成"), 10000, "完成 button"));
+    documents[input] = { name: kept.name, bytes };
+  }
+  const arrived = async (name, size) => {
+    await cdp.until(`!!document.querySelector(".dropzone.hasFile") && document.querySelector(".dropzone h3").textContent === ${JSON.stringify(name)}`, 60000, PAGE_STATE);
+    const got = await cdp.eval(`document.querySelector('input[type="file"]').files[0].size`);
+    if (got !== size) throw new Error(`${name}: the page has ${got} bytes, the file is ${size}`);
+  };
+  const resolution = `!!document.querySelector(".typeCard.selected") && document.querySelector(".typeCard.selected b").textContent === "决议草案"`;
+  shell(`am force-stop ${PACKAGE}`);
+  sendIntent("VIEW", shareUri(documents["07_中文决议草案"].name));
+  await connect();
+  await arrived(documents["07_中文决议草案"].name, documents["07_中文决议草案"].bytes.length);
+  screencap("opened-with");
+  await cdp.eval(`${typeCard("决议草案")}.click(), true`);
+  await cdp.until(resolution, 20000, PAGE_STATE);
+  await arrived(documents["07_中文决议草案"].name, documents["07_中文决议草案"].bytes.length);
+  const opened = await recognizeAndGenerate("07_中文决议草案");
+  step("open with (cold start): the document arrives, stays through the type choice, formats like the reference", { saved: opened.saved });
+
+  // "Share" into the running app replaces the document, as choosing another file does.
+  sendIntent("SEND", shareUri(documents["08_English_Draft_Resolution"].name));
+  await arrived(documents["08_English_Draft_Resolution"].name, documents["08_English_Draft_Resolution"].bytes.length);
+  if (!(await cdp.eval(resolution))) throw new Error("share changed the document type");
+  const shared = await recognizeAndGenerate("08_English_Draft_Resolution");
+  step("share into the running app: the document arrives and formats like the reference", { saved: shared.saved });
+}
+
+async function main() {
+  report.device = {
+    sdk, release: shell("getprop ro.build.version.release").trim(), abi: shell("getprop ro.product.cpu.abi").trim(),
+    model: shell("getprop ro.product.model").trim(),
+  };
+  console.log(`Android ${report.device.release} (API ${sdk}, ${report.device.abi})`);
+  shell("input keyevent 82"); // wake and unlock
+  adb(["install", "-r", apk]);
+  const installed = shell(`dumpsys package ${PACKAGE}`);
+  report.installed = { versionName: /versionName=(\S+)/.exec(installed)?.[1], versionCode: /versionCode=(\d+)/.exec(installed)?.[1] };
+  if (/android\.permission\.INTERNET/.test(installed)) throw new Error("the app holds the INTERNET permission");
+  step("installed", report.installed);
+  shell("setprop debug.munword.devtools 1");
+  shell("rm -f /sdcard/Download/*.docx");
+  await launch();
+  await connect();
+  await cdp.until(`document.querySelectorAll(".typeCard").length === 6 || (document.body && document.body.innerText.indexOf("WebView）版本太旧") >= 0)`, 90000, PAGE_STATE);
+  report.userAgent = await cdp.eval("navigator.userAgent");
+  report.webview = Number((/Chrome\/(\d+)/.exec(report.userAgent) || [])[1]);
+  report.mode = await cdp.eval(`document.querySelectorAll(".typeCard").length === 6 ? "app" : "notice"`);
+  const expected = report.webview >= FLOOR ? "app" : "notice";
+  screencap(`start-${report.mode}`);
+  if (report.mode !== expected) throw new Error(`WebView ${report.webview} shows the ${report.mode}, expected the ${expected}`);
+  if (report.mode === "notice" && (await cdp.eval(`[].some.call(document.scripts, function (s) { return /app\\.js$/.test(s.src); })`))) throw new Error("app.js loaded below the floor");
+  step(`WebView ${report.webview}: ${report.mode === "app" ? "the app runs" : "the update notice shows"}`, { userAgent: report.userAgent });
+
+  const bridgeFile = await bridgeSaves();
+  await bridgeOpens(bridgeFile, BIG);
+  if (report.mode === "app") await appFlows();
+
+  const crashes = shell("logcat -d -b crash");
+  if (crashes.includes(PACKAGE)) throw new Error(`the app crashed:\n${crashes}`);
+  step("no crash in the log");
+  report.passed = true;
+}
+
+try {
+  await main();
+} catch (error) {
+  report.error = String(error.stack || error);
+  console.log(`FAILED: ${report.error}`);
+  screencap("failed");
+} finally {
+  cdp?.close();
+  try { writeFileSync(path.join(out, "logcat.txt"), adb(["logcat", "-d", "-v", "time", "Munword:V", "chromium:V", "AndroidRuntime:E", "ActivityManager:I", "*:S"])); } catch { /* no log */ }
+  writeFileSync(path.join(out, "emulator.json"), JSON.stringify(report, null, 2));
+  console.log(report.passed ? `PASSED: Android API ${sdk}, WebView ${report.webview} (${report.mode})` : "FAILED");
+  process.exitCode = report.passed ? 0 : 1;
+}
