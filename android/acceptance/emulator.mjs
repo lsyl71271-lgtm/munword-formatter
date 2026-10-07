@@ -96,13 +96,14 @@ async function waitFor(check, timeout, what) {
 // ---- UI Automator: the native dialogs ----
 const entities = (text) => text.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code))).replace(/&quot;/g, '"').replace(/&apos;/g, "'")
   .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+let lastDump = "";
 function uiNodes() {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       shell("rm -f /sdcard/munword-ui.xml");
-      shell("uiautomator dump /sdcard/munword-ui.xml");
+      lastDump = shell("uiautomator dump /sdcard/munword-ui.xml").trim();
       const xml = adb(["shell", "cat /sdcard/munword-ui.xml"]);
-      if (!xml.includes("<hierarchy")) continue;
+      if (!xml.includes("<hierarchy")) { lastDump += ` | no hierarchy: ${xml.slice(0, 200)}`; continue; }
       return [...xml.matchAll(/<node ([^>]*?)\/?>/g)].map(([, attributes]) => {
         const node = {};
         for (const [, name, value] of attributes.matchAll(/([\w-]+)="([^"]*)"/g)) node[name] = entities(value);
@@ -110,7 +111,7 @@ function uiNodes() {
         node.center = bounds ? [(Number(bounds[1]) + Number(bounds[3])) >> 1, (Number(bounds[2]) + Number(bounds[4])) >> 1] : null;
         return node;
       });
-    } catch { /* the screen was still moving: try again */ }
+    } catch (error) { lastDump = String(error.stderr || error.message).trim(); /* the screen was still moving: try again */ }
   }
   return [];
 }
@@ -424,6 +425,7 @@ function diagnose() {
     const nodes = uiNodes();
     console.log(`  · in front: ${resumedActivity() || "?"}`);
     console.log(`  · on screen: ${JSON.stringify(nodes.filter((node) => node.text).map((node) => node.text.slice(0, 120)).slice(0, 40))}`);
+    console.log(`  · uiautomator: ${lastDump.slice(0, 300)}`);
     const log = adb(["logcat", "-d", "-v", "brief", "Munword:V", "AndroidRuntime:E", "ActivityTaskManager:I", "ActivityManager:I", "chromium:W", "*:S"]).replace(/\r/g, "").trim().split("\n");
     console.log(`  · log (last ${Math.min(log.length, 60)} lines):\n${log.slice(-60).map((line) => "      " + line).join("\n")}`);
   } catch (error) {

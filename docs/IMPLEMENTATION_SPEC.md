@@ -2247,10 +2247,10 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 
 | 文件 | 内容 |
 |---|---|
-| `AndroidManifest.xml` | 唯一权限 `WRITE_EXTERNAL_STORAGE`（`maxSdkVersion="28"`），**没有 `INTERNET`**；`allowBackup=false`；WebView 元数据 `MetricsOptOut=true`、`EnableSafeBrowsing=false`；`MainActivity`（`exported=true`，`singleTask`，`configChanges` 含方向、屏幕尺寸、键盘、uiMode、字号，`adjustResize`），`MAIN/LAUNCHER` 与两个接收 DOCX MIME 的过滤器（`VIEW`、`SEND`）；`SavedFiles` 提供者（`exported=false`，`grantUriPermissions=true`） |
+| `AndroidManifest.xml` | 唯一权限 `WRITE_EXTERNAL_STORAGE`（`maxSdkVersion="28"`），**没有 `INTERNET`**；`<queries>` 声明“VIEW + DOCX”（Android 11+ 才能看到 WPS / Word 等）；`allowBackup=false`；WebView 元数据 `MetricsOptOut=true`、`EnableSafeBrowsing=false`；`MainActivity`（`exported=true`，`singleTask`，`configChanges` 含方向、屏幕尺寸、键盘、uiMode、字号，`adjustResize`），`MAIN/LAUNCHER` 与两个接收 DOCX MIME 的过滤器（`VIEW`、`SEND`）；`SavedFiles` 提供者（`exported=false`，`grantUriPermissions=true`） |
 | `res/` | 主题 `Theme.Material.Light.NoActionBar`：窗口背景与页面同色 `#EDF5FA`；Android 5 状态栏用深蓝（只能显示白色图标），6+ 用页面色加深色图标（`values-v23`）；自适应图标（背景渐变 + 矢量四方块，`mipmap-anydpi-v26`），旧版 48dp PNG 五种密度（`make-icons.mjs` 用 Chromium 渲染） |
 | `src/…/MainActivity.java` | 见 20.2 |
-| `src/…/SavedFiles.java` | 只读 `ContentProvider`：`content://org.pkunmun.formatter2026.files/{downloads|app}/<文件名>` → 公共 Download 或应用自己的 `files/Download`；规范化路径后必须正好在该目录下；`query` 只答 `DISPLAY_NAME`、`SIZE`；`openFile` 只允许 `"r"` |
+| `src/…/SavedFiles.java` | 只读 `ContentProvider`：`content://org.pkunmun.formatter2026.files/{downloads|app}/<文件名>` → 公共 Download 或应用自己的 `files/Download`（规范化路径后必须正好在该目录下）；`…/media/<id>/<文件名>` → 本应用的 MediaStore 条目 `content://media/external/downloads/<id>`（转读，不把 MediaStore 地址交给别的应用）；`query` 只答 `DISPLAY_NAME`、`SIZE`；`openFile` 只允许 `"r"` |
 | `stubs/android/webkit/RenderProcessGoneDetail.java` | API 26 类的编译期替身，只在 javac 的 classpath 上，不打包 |
 | `bridge.js` | 页面一侧的桥，ES5，内联进 `index.html`（见 20.3） |
 | `polyfills.js`、`flex-gap.js`、`build-site.mjs` | 手机版页面（见 20.4） |
@@ -2272,7 +2272,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
   - API 29+：`ContentResolver.insert("content://media/external/downloads", {DISPLAY_NAME, MIME_TYPE, relative_path="Download/", is_pending=1})`，写入后 `is_pending=0`，失败删除该条目；回读系统实际的文件名（重名时系统改名）。
   - API 23–28：没有权限时把任务排队并 `requestPermissions`；允许 → 公共 Download（重名加 “ (1)”、“ (2)”），`MediaScannerConnection.scanFile`；拒绝 → 应用自己的 `files/Download`。
   - API 21–22：直接写公共 Download。
-  - 弹窗：标题“已保存”，正文“文件：<名称>\n位置：<位置>。”（DOCX 另加“可以用 WPS Office 或 Microsoft Word 打开。”），按钮「打开」（`ACTION_VIEW` + 读授权；无应用时说明安装 WPS / Word）、「分享」（`ACTION_SEND` + `ClipData` + 读授权，系统分享面板）、「完成」。API 29+ 共享 MediaStore 条目，更早的共享 `SavedFiles` 地址。
+  - 弹窗：标题“已保存”，正文“文件：<名称>\n位置：<位置>。”（DOCX 另加“可以用 WPS Office 或 Microsoft Word 打开。”），按钮「打开」（`ACTION_VIEW` + 读授权；`queryIntentActivities` 后去掉本应用——它自己也接收 DOCX——剩一个就直接打开，多个用 `createChooser` + `EXTRA_INITIAL_INTENTS`，没有就说明安装 WPS / Word；Android 11+ 需要清单里对“VIEW + DOCX”的 `<queries>`）、「分享」（`ACTION_SEND` + `ClipData` + 读授权，系统分享面板，`EXTRA_EXCLUDE_COMPONENTS` 去掉本应用）、「完成」。两者都用 `SavedFiles` 地址（API 29+ 为 `media/<id>/<名称>`），`ActivityNotFoundException` 与 `SecurityException` 都转成提示，不会闪退。
 - **选择文件**：`onShowFileChooser` → `ACTION_GET_CONTENT`、`CATEGORY_OPENABLE`、`*/*`，`EXTRA_MIME_TYPES` = DOCX、`application/octet-stream`、`application/zip`；找不到时退到 `ACTION_OPEN_DOCUMENT`；取消时回调 `null`（必须回调，否则输入框不再响应）。
 - **打开方式 / 分享传入**：`onCreate` 与 `onNewIntent` 读取 `VIEW` 的 data 或 `SEND` 的 `EXTRA_STREAM`，处理后把 intent 改成 `MAIN`，回到应用时不再重复传入。`file://` 地址在 API 23–28 先请求存储权限。后台线程读 `DISPLAY_NAME` / `SIZE`，超过 25 MB 拒绝，读入内存；页面就绪（`onPageFinished`）后 `evaluateJavascript("window.__munwordReceive && window.__munwordReceive()")`。
 - **生命周期**：返回键 `moveTaskToBack(true)`（保留进度）；`onPause/onResume` 转给 WebView；`onRenderProcessGone`（API 26+）销毁并重建 WebView，提示“页面意外关闭，已重新打开”，返回 `true`；Android 8.1+ 白色导航栏与深色按钮（标志位 `0x10`）。
@@ -2319,7 +2319,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 
 ### 20.6 验收
 
-- `tests/android.test.mjs`（`pnpm test:unit`）：`legacyCss` 各项降级；在去掉新内置函数的 `vm` 环境里加载 `polyfills.js` 后行为与原生一致、不可枚举；`bridge.js` 与加载器能按 ES5 解析；清单（无联网、存储到 28、导出设置、接收 DOCX）；`MainActivity` 关闭文件访问、调试受 adb 属性控制、没有 lambda；校验值行的更新规则；已发布 APK 的校验值、条目和版本。
+- `tests/android.test.mjs`（`node --test`，CI 的 source-checks 单独一步；不进 `test:unit`，因为 `package.json` 的哈希记录在桌面安装包的构建记录里，改它会改变 DMG / EXE）：`legacyCss` 各项降级；在去掉新内置函数的 `vm` 环境里加载 `polyfills.js` 后行为与原生一致、不可枚举；`bridge.js` 与加载器能按 ES5 解析；清单（无联网、存储到 28、导出设置、接收 DOCX）；`MainActivity` 关闭文件访问、调试受 adb 属性控制、没有 lambda；校验值行的更新规则；已发布 APK 的校验值、条目和版本。
 - `acceptance/verify-apk.mjs`：从源码重建未签名 APK，与发布 APK 去掉 v1 签名文件后的全部条目逐字节比较；v1/v2/v3 签名与证书固定值；`aapt dump badging` 读回包名、版本、`sdkVersion:'21'`、`targetSdkVersion:'34'`、权限只有存储（≤28）、桌面名称；`SHA256SUMS.txt` 与安装教程含 APK 校验值。写 `apk.json`。
 - `acceptance/webview-floor.mjs`：下载 Chromium 快照 67、69、79、83、88、95、99、109（位置号见脚本）加当前 Chromium，以 390×844 手机视口打开手机版页面并注入桥的替身。67 必须显示 WebView 说明且不加载 `app.js`；其余对 11 份原稿：先经 `__munwordReceive` 传入文件，再点选文书类型，确认文件仍在，识别、确认第 03 步可编辑、生成，替身收到的字节数正确，DOCX 与共享页面在当前 Chromium 中的输出（`output/desktop-smoke/`）逐部件相同。写 `webview-floor.json`。
 - `acceptance/emulator.mjs`：一台 adb 设备上安装发布的 APK（不带 `-g`），`setprop debug.munword.devtools 1`，经 `/proc/net/unix` 找到 `webview_devtools_remote_<pid>` 并转发，用 DevTools 驱动页面，用 `uiautomator dump` 找原生弹窗按钮并 `input tap`，`adb pull` 读回 Download 里的文件。检查项见 `android/README.md`；写 `emulator.json`、截图和 logcat。

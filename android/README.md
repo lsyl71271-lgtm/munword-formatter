@@ -9,7 +9,7 @@
 | 文件 | 作用 |
 |---|---|
 | `src/org/pkunmun/formatter2026/MainActivity.java` | 唯一的界面：一个 WebView，加上 WebView 自己做不到的事（保存到「下载」、系统文件选择器、「打开方式 / 分享」传入） |
-| `src/org/pkunmun/formatter2026/SavedFiles.java` | Android 9 及以前把已保存的文件交给 WPS / Word / 分享面板（只读、不导出，只认 Download 和应用自己的文件夹） |
+| `src/org/pkunmun/formatter2026/SavedFiles.java` | 把已保存的文件交给 WPS / Word / 分享面板（只读、不导出；只认本应用存进 Download 的文件：Android 10+ 转读自己的 MediaStore 条目，更早的读 Download 或应用自己的文件夹） |
 | `AndroidManifest.xml`、`res/` | 无联网权限；存储权限只到 Android 9；`VIEW` / `SEND` 接收 DOCX；自适应图标（矢量）与旧版 PNG 图标 |
 | `bridge.js` | 页面一侧的桥（ES5，内联进页面）：把下载链接交给原生保存；把「打开方式」传来的文件交给页面自己的文件输入框 |
 | `build-site.mjs` | 手机版页面：同一份源码按 Chromium 69 编译，补样式降级，写入加载器 |
@@ -26,7 +26,7 @@
   - Android 6–9：第一次保存时请求存储权限，允许后写入公共 Download 并通知媒体库；拒绝则写入应用自己的文件夹；
   - Android 5：安装时已授予权限，直接写入 Download。
   
-  保存后弹窗显示文件名和位置，可以「打开」（WPS / Word；没有能打开的应用时说明装哪个）或「分享」。
+  保存后弹窗显示文件名和位置，可以「打开」（WPS / Word；没有能打开的应用时说明装哪个）或「分享」。本应用自己也能打开 DOCX（用来排版），所以「打开」只交给其他应用（Android 11+ 靠清单里的 `<queries>` 才能看到它们），只有一个时直接打开，多个时让用户选；分享面板里也不列本应用（Android 7+）。两者都经 `SavedFiles` 授权读取：各版本 Android 是否允许把 MediaStore 的 Downloads 条目授权给别的应用并不一致，自己的提供者在所有版本上都可靠。
 - **选择文件**：页面的文件输入框打开系统文件选择器（`ACTION_GET_CONTENT`，DOCX 及来源不明的文件）。
 - **打开方式 / 分享传入**：从微信、QQ、文件管理等对 DOCX 选「其他应用打开」或「分享」，原生侧读出文件（上限 25 MB，页面本身拒收 20 MB 以上），页面加载好后调用 `window.__munwordReceive()`，`bridge.js` 分块读回，放进页面自己的文件输入框，和用户亲手选择完全一样。页面在切换文书类型时会清空文件，所以传入的文件会在用户点选类型后自动放回，直到用户自己选了别的文件。识别、第 03 步和生成仍然由用户操作。
 - **其他**：返回键回到桌面但保留进度；旋转屏幕、调整字号不重建页面；页面进程被系统回收（Android 8+）时重新打开页面而不是闪退；WebView 只加载应用自带的文件，其余请求一律拦截，并关闭 WebView 的使用统计和安全浏览查询。
@@ -77,7 +77,7 @@ node android/build-apk.mjs --publish
 
 | 检查 | 在哪里 | 内容 |
 |---|---|---|
-| 单元测试 | `tests/android.test.mjs`（`pnpm test:unit`） | 样式降级、内置函数补丁、桥与加载器是 ES5、清单承诺、校验值行 |
+| 单元测试 | `node --test tests/android.test.mjs`（CI：`source-checks`；不放进 `test:unit`，因为 `package.json` 记录在桌面安装包的构建记录里） | 样式降级、内置函数补丁、桥与加载器是 ES5、清单承诺、校验值行 |
 | 重建比对 | `acceptance/verify-apk.mjs`（CI） | 从源码重建，与发布的 APK 逐条目比对内容；v1/v2/v3 签名与证书指纹；用 `aapt` 读回包名、版本、SDK、权限；校验值与安装教程 |
 | 旧引擎 | `acceptance/webview-floor.mjs`（CI） | 手机版页面在 Chromium 67（必须显示说明、不加载程序）和 69、79、83、88、95、99、109、最新版里，以“打开方式”的路径传入文件、先传文件后选类型，跑完 11 份原稿；成品与共享页面在最新 Chromium 里的输出逐部件相同 |
 | 真机系统 | `acceptance/emulator.mjs`（CI，模拟器） | Android 5.0、6.0、8.0、9、10、11、12、13、14、15，各用系统自带、未更新的 WebView；见下 |

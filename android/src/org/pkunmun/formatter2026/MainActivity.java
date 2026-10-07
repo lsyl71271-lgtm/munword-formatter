@@ -7,10 +7,12 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentUris;
+import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Color;
@@ -21,6 +23,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Parcelable;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
@@ -163,6 +166,7 @@ public final class MainActivity extends Activity {
         web.setDownloadListener(new DownloadListener() {
             @Override
             public void onDownloadStart(String url, String userAgent, String disposition, String mime, long length) {
+                Log.w(TAG, "download not handed over: " + url);
                 showMessage("无法保存", "这个文件无法从页面直接保存。请重新点击下载按钮。");
             }
         });
@@ -185,7 +189,9 @@ public final class MainActivity extends Activity {
     private final class PageClient extends WebViewClient {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
-            return !url.startsWith(SITE); // the page has no links out; nothing else is ever loaded
+            if (url.startsWith(SITE)) return false;
+            Log.w(TAG, "blocked navigation to " + url); // the page has no links out; nothing else is ever loaded
+            return true;
         }
 
         @Override
@@ -280,6 +286,7 @@ public final class MainActivity extends Activity {
                 synchronized (lock) {
                     int id = nextSaving++;
                     savings.put(id, saving);
+                    Log.i(TAG, "save " + id + " begins: " + safe + ", " + size + " bytes");
                     return id;
                 }
             } catch (IOException e) {
@@ -463,6 +470,7 @@ public final class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         if (requestCode != STORAGE_PERMISSION) return;
         boolean granted = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+        Log.i(TAG, "storage permission " + (granted ? "granted" : "refused"));
         List<Saving> pending = new ArrayList<Saving>(waitingToStore);
         waitingToStore.clear();
         for (Saving saving : pending) storeInBackground(saving, granted);
@@ -475,6 +483,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showSaved(final Saved saved) {
+        Log.i(TAG, "saved " + saved.name + " (" + saved.uri + ")");
         if (isFinishing()) return;
         boolean docx = saved.mime.equals(DOCX);
         new AlertDialog.Builder(this)
@@ -499,8 +508,22 @@ public final class MainActivity extends Activity {
 
     private void openSaved(Saved saved) {
         Intent view = new Intent(Intent.ACTION_VIEW).setDataAndType(saved.uri, saved.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        // This app opens Word documents too (to format them): a saved result goes to a viewer, never back here.
+        List<Intent> viewers = new ArrayList<Intent>();
+        for (ResolveInfo info : getPackageManager().queryIntentActivities(view, PackageManager.MATCH_DEFAULT_ONLY)) {
+            if (info.activityInfo == null || getPackageName().equals(info.activityInfo.packageName)) continue;
+            viewers.add(new Intent(view).setClassName(info.activityInfo.packageName, info.activityInfo.name));
+        }
+        Log.i(TAG, "open " + saved.name + ": " + viewers.size() + " viewer(s)");
         try {
-            startActivity(view);
+            if (viewers.isEmpty()) throw new ActivityNotFoundException("no viewer");
+            if (viewers.size() == 1) {
+                startActivity(viewers.get(0));
+            } else {
+                Intent chooser = Intent.createChooser(viewers.remove(viewers.size() - 1), "用哪个应用打开");
+                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, viewers.toArray(new Parcelable[viewers.size()]));
+                startActivity(chooser);
+            }
         } catch (ActivityNotFoundException | SecurityException e) {
             showMessage("没有可以打开的应用", saved.mime.equals(DOCX)
                     ? "手机上没有能打开 DOCX 的应用。请先安装 WPS Office 或 Microsoft Word；文件已经保存在「下载」文件夹里。"
@@ -512,8 +535,11 @@ public final class MainActivity extends Activity {
         Intent send = new Intent(Intent.ACTION_SEND).setType(saved.mime).putExtra(Intent.EXTRA_STREAM, saved.uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         send.setClipData(ClipData.newRawUri(saved.name, saved.uri));
+        Intent chooser = Intent.createChooser(send, "分享文件");
+        // Leave this app itself out of the share sheet (Intent.EXTRA_EXCLUDE_COMPONENTS, Android 7+).
+        chooser.putExtra("android.intent.extra.EXCLUDE_COMPONENTS", new ComponentName[] {new ComponentName(this, MainActivity.class)});
         try {
-            startActivity(Intent.createChooser(send, "分享文件"));
+            startActivity(chooser);
         } catch (ActivityNotFoundException | SecurityException e) {
             showMessage("无法分享", "手机上没有可以接收文件的应用。");
         }
@@ -608,6 +634,7 @@ public final class MainActivity extends Activity {
         boolean waiting;
         synchronized (lock) {
             waiting = openedBytes != null;
+            if (waiting) Log.i(TAG, "opened " + openedName + ", " + openedBytes.length + " bytes; page ready: " + pageReady);
         }
         if (waiting && pageReady && web != null) web.evaluateJavascript("window.__munwordReceive && window.__munwordReceive()", null);
     }

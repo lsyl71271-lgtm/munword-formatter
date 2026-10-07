@@ -8,6 +8,15 @@
 
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
+    <!-- Android 11+ shows an app only the other apps it asks about: the ones that can open a Word document (WPS,
+         Word…), so 「打开」 can send a saved result to them rather than back to this app. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+        </intent>
+    </queries>
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
@@ -45,7 +54,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Hands a saved file to WPS / Word or the share sheet (Android 9 and earlier; 10+ shares the MediaStore entry). -->
+        <!-- Hands a saved file to WPS / Word or the share sheet (on Android 10+ by passing through the app's own MediaStore entry). -->
         <provider
             android:name=".SavedFiles"
             android:authorities="org.pkunmun.formatter2026.files"

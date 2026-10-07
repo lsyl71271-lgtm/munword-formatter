@@ -76,10 +76,16 @@ test("the manifest: no network, storage only up to Android 9, exported only wher
   assert.match(manifest, /MetricsOptOut" android:value="true"/);
   assert.match(manifest, /android:allowBackup="false"/);
   for (const action of ["VIEW", "SEND"]) assert.match(manifest, new RegExp(`intent\\.action\\.${action}"[\\s\\S]*?wordprocessingml\\.document`));
+  assert.match(manifest, /<queries>\s*<intent>\s*<action android:name="android\.intent\.action\.VIEW" \/>\s*<data android:mimeType="application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document" \/>/,
+    "Android 11+ lets the app see DOCX viewers only when it declares them");
   const activity = read("android/src/org/pkunmun/formatter2026/MainActivity.java");
   assert.match(activity, /setAllowFileAccess\(false\)/);
   assert.match(activity, /setWebContentsDebuggingEnabled\(devtoolsRequested\(\)\)/, "remote debugging only when asked for over adb");
   assert.doesNotMatch(activity, /->/, "no lambdas: the Debian dx converts Java 8 class files without them");
+  // The app accepts DOCX itself (to format it): a saved result must go to a viewer, not back to the app.
+  assert.match(activity, /getPackageName\(\)\.equals\(info\.activityInfo\.packageName\)\) continue;/);
+  assert.match(activity, /"android\.intent\.extra\.EXCLUDE_COMPONENTS", new ComponentName\[\] \{new ComponentName\(this, MainActivity\.class\)\}/);
+  assert.match(activity, /catch \(ActivityNotFoundException \| SecurityException e\)/);
 });
 
 test("checksum lines: each build replaces only its own", () => {
