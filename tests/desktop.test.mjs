@@ -208,7 +208,7 @@ test("published installers match VERSION and their checksums", { skip: !existsSy
   const sums = readFileSync(path.join(ROOT, "downloads", "SHA256SUMS.txt"), "utf8").trim().split("\n");
   assert.match(sums[0], new RegExp(`文件排版系统 ${VERSION.replaceAll(".", "\\.")} `), "rebuild with node desktop/build-desktop.mjs --publish after a version bump");
   const entries = sums.slice(1).map((line) => line.split(/\s+/));
-  assert.deepEqual(entries.map(([, name]) => name).sort(), ["PKUNMUN2026-Formatter-Windows-Setup.exe", "PKUNMUN2026-Formatter-macOS.dmg"]);
+  assert.deepEqual(entries.map(([, name]) => name).sort(), ["PKUNMUN2026-Formatter-Android.apk", "PKUNMUN2026-Formatter-Windows-Setup.exe", "PKUNMUN2026-Formatter-macOS.dmg"]);
   for (const [digest, name] of entries) assert.equal(createHash("sha256").update(readFileSync(path.join(ROOT, "downloads", name))).digest("hex"), digest, name);
 });
 
