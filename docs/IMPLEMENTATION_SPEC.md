@@ -178,7 +178,7 @@ docs/                   架构、ADR、学标对照、版本说明、审计报�
 - **前端**：
   - React 19.2.8、TypeScript 5.9；
   - vinext 0.0.50（Next.js 16 兼容层，Vite 8 构建，可部署到 Cloudflare Workers）；
-  - Tailwind CSS 4.2（只用它的 reset，样式基本是手写的类）。
+  - Tailwind CSS 4.2（只用它的 reset，样式基本是手写的类）。`app/globals.css` 用 `source(none)` 关闭自动扫描，只从 `app/**/*.tsx` 和 `local_web/*.tsx` 生成工具类。
 - **浏览器引擎依赖**：
   - `fflate` 0.7.5：ZIP 读写；
   - 浏览器原生 `DOMParser` / `XMLSerializer`：XML；
@@ -2056,8 +2056,10 @@ pnpm build:desktop  =  node desktop/build-desktop.mjs --publish
 - **来源校验**：
   - `scripts/verify-local-build.py` 核对 `local-build.json` 中的源码哈希（`local-build-policy.json` 规定范围：app/、local_web/、shared/、scripts/、public/ 以及若干配置文件）和产物哈希，防止产物陈旧或被篡改。
   - `build-local-tools` 构建结束时，若发现源码在构建过程中被改动，直接报错。
-- **注意**：Tailwind 4 会自动扫描整个仓库（.gitignore 忽略的除外）来生成工具类。即使改的是与界面无关的文件，也可能改变 `local-styles.css` 的字节，进而改变安装包。CI 的逐字节复现检查会发现这种情况，此时要重新运行 `pnpm build:desktop` 并提交新的安装包。
-  - 文档也算在内：在 Markdown 里原样写出某个 CSS 属性名，就可能多生成一条工具类。写完文档后，可以对比 `app/globals.css` 编译前后的输出是否相同。
+- **为什么锁定 Tailwind 的扫描范围**：Tailwind 4 默认扫描整个仓库（.gitignore 忽略的除外）来生成工具类，文档或脚本里的一个词就可能多生成一条 CSS，进而改变 `local-styles.css` 和安装包的字节。
+  - 因此 `app/globals.css` 写作 `@import "tailwindcss" source(none);`，再用 `@source` 只列出界面文件（`app/**/*.tsx`、`local_web/*.tsx`）。
+  - 改为锁定后，16 张界面截图（桌面与手机宽度，四个步骤，两份文档）与改动前逐像素相同。
+  - 改动界面、引擎或共享规则后仍要重新运行 `pnpm build:desktop` 并提交新的安装包；CI 的逐字节复现检查会发现遗漏。
 
 ### 19.2 离线页面（`offlineIndex`）
 
@@ -2262,9 +2264,18 @@ PKUNMUN2026.app/Contents/
 
 ## 21. 发布与持续集成
 
+### 21.0 `.github/workflows/source-checks.yml`
+
+每次推送和每个 PR 都运行，ubuntu-24.04，Node 24、pnpm 11.19.0、Python 3.12：
+
+1. `pnpm install --frozen-lockfile`，安装 `backend/requirements.txt`，复制 `.openai/hosting.example.json`；
+2. `pnpm build:static`（同时生成共用离线资产）；
+3. `pnpm test:unit`、Python `unittest`、`pnpm build`、`rendered-html`、`pnpm test:static`；
+4. `pnpm typecheck`、`pnpm lint`、`scripts/audit-source.py`。
+
 ### 21.1 `.github/workflows/offline-installers.yml`
 
-- **触发**：推送中改动了 `desktop/**`、`downloads/**`、`VERSION` 或工作流本身；或手动触发。
+- **触发**：推送中改动了 `desktop/**`、`downloads/**`、`VERSION`、工作流本身，或页面的来源（`app/**`、`local_web/**`、`shared/**`、`public/**`、`package.json`、`pnpm-lock.yaml`、`postcss.config.mjs`、`scripts/build-local-tools.mjs`、`scripts/build-static.mjs`）；或手动触发。
 - **作业**：
 
 | 作业 | 机器 | 内容 |

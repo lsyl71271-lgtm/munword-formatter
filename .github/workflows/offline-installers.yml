@@ -18,6 +18,17 @@ on:
       - 'downloads/**'
       - 'VERSION'
       - '.github/workflows/offline-installers.yml'
+      # Everything the bundled page is built from: a change here must come with rebuilt installers
+      # (pnpm build:desktop), or the reproduce job fails.
+      - 'app/**'
+      - 'local_web/**'
+      - 'shared/**'
+      - 'public/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'postcss.config.mjs'
+      - 'scripts/build-local-tools.mjs'
+      - 'scripts/build-static.mjs'
   workflow_dispatch:
 
 permissions:

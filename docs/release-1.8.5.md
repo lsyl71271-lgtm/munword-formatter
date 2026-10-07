@@ -22,3 +22,21 @@
 当前 `braces` 3.0.3 工具链仍有 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)，审计时上游没有已发布修复版。文稿正文不作为 glob 模式输入；没有通过隐藏审计、伪造版本或关闭内容保护来声称问题已消除。Python 3.12 安装的应用依赖未检出已知公告；检查环境自带的旧 pip 单独升级后重新审计。Python 3.9 的遗留兼容环境不在本次运行时验收范围内。
 
 本次 Linux 环境不能验证真实 Windows/macOS 安装行为、Word/WPS/LibreOffice 的字体替代与分页、所有浏览器版本及任意复杂 OOXML。构建、源码和结构测试通过不构成“所有输入无缺陷”或像素级视觉一致的保证。没有修改学标策略、国家资料表、网站授权或仓库可见性。
+
+## 2026-10-07 维护更新（版本号不变）
+
+不改排版规则、界面流程或第 03 步人工修改入口。
+
+- **复查**：在 `main` 上重跑全部检查，并逐字节核对安装包。
+  - 结果：Node 233/233、Python 207/207，构建、静态发布、类型检查、lint、源码审计全部通过；11 份验收原稿和模板在 `file://` 页面上零网络请求跑通。
+  - 下载页、仓库和从源码重建的 DMG / EXE 三方一致；安装包内的页面与源码构建相同。
+- **安装包不再受文档影响**：`app/globals.css` 改为只从界面文件（`app/**/*.tsx`、`local_web/*.tsx`）生成 Tailwind 工具类。
+  - 以前 README 或文档里的一个词就可能多生成一条 CSS，改变安装包字节。
+  - 样式表少了一些从未使用的工具类（29.4 KB → 23.2 KB）；16 张界面截图（桌面与手机宽度，四个步骤，两份文档）与改动前逐像素相同。
+  - 因此重建了两个安装包：DMG `663e7236…`，EXE `8da4ced7…`。
+- **持续集成**：
+  - 新增 `source-checks` 工作流，每次推送和 PR 都运行全部测试、构建、类型检查、lint 和源码审计（原 `docs/ci.example.yml` 转正后删除）。
+  - `offline-installers` 工作流在页面来源（`app/`、`local_web/`、`shared/` 等）改动时也会运行，避免安装包落后于源码。
+- **仓库整理**：
+  - 删除一次性的 `CLAUDE_REVIEW_REQUEST.md`（v1.8.2 审查请求），以及未被引用的脚手架图片 `public/file.svg`、`globe.svg`、`window.svg`；
+  - 重写 README 的介绍与结构；新增 `docs/README.md`（文档导航）和 `docs/website-capacity.md`（网页版承载力与稳定性）。

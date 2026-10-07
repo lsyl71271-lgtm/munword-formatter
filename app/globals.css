@@ -1,4 +1,8 @@
-@import "tailwindcss";
+/* Tailwind reads only the interface markup: text elsewhere in the repository (docs, README, scripts) must not
+   add utilities to this stylesheet, which ships inside the website and the byte-for-byte reproducible installers. */
+@import "tailwindcss" source(none);
+@source "./**/*.tsx";
+@source "../local_web/*.tsx";
 
 .countryReview { margin-bottom: 24px; padding: 16px 20px; background: rgba(236,248,253,.8); border: 1px solid #b8dae7; border-radius: 16px; }
 .countryReview p { margin: 6px 0; font-size: 14px; line-height: 1.7; }
