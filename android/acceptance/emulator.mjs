@@ -141,17 +141,30 @@ const tap = (node) => shell(`input tap ${node.center[0]} ${node.center[1]}`);
 const BUTTONS = { 打开: "android:id/button1", 好: "android:id/button1", 完成: "android:id/button2", 分享: "android:id/button3" };
 const button = (label) => (node) => node["resource-id"] === BUTTONS[label];
 
-// Waits for the app's save dialog. The file name comes from the app's log line ("saved <name> (<uri>)"; the log is
-// cleared just before each save), the dialog's message from the screen.
+// Waits for the app's save dialog. The file name comes from the app's log: the first "save <n> begins" of this app
+// process with a number above the last one seen, then its "saved <name> (<uri>)" line (clearing the log is not
+// immediate on every system, so earlier saves are told apart by number). The dialog's message comes from the screen.
+let appPid = null, lastSaveId = 0;
+function appLog() {
+  return adb(["logcat", "-d", "-v", "brief", "-s", "Munword:V"]).replace(/\r/g, "").split("\n")
+    .filter((line) => new RegExp(`\\(\\s*${appPid}\\)`).test(line));
+}
 async function savedDialog(what) {
-  const line = await waitFor(() => {
-    const log = adb(["logcat", "-d", "-v", "brief", "-s", "Munword:V"]).replace(/\r/g, "");
-    const failed = /: save failed: (.*)/.exec(log);
-    if (failed) throw new Error(`the app could not save ${what}: ${failed[1]}`);
-    return /: saved (.+) \((?:content|file):/.exec(log);
+  const saved = await waitFor(() => {
+    const lines = appLog();
+    const start = lines.findIndex((line) => { const begun = /: save (\d+) begins: /.exec(line); return begun && Number(begun[1]) > lastSaveId; });
+    if (start < 0) return null;
+    for (const line of lines.slice(start + 1)) {
+      const failed = /: save failed: (.*)/.exec(line);
+      if (failed) throw new Error(`the app could not save ${what}: ${failed[1]}`);
+      const done = /: saved (.+) \((?:content|file):/.exec(line);
+      if (done) return { id: Number(/: save (\d+) begins: /.exec(lines[start])[1]), name: done[1] };
+    }
+    return null;
   }, 60000, `the app saving ${what}`);
+  lastSaveId = saved.id;
   const message = await waitForNode((node) => node["resource-id"] === "android:id/message", 20000, `save dialog (${what})`);
-  return { name: line[1], text: message.text || "" };
+  return { name: saved.name, text: message.text || "" };
 }
 async function allowStoragePrompt() {
   // Android 6–9 ask once, the first time something is saved.
@@ -165,6 +178,8 @@ let cdp;
 async function connect() {
   cdp?.close();
   const socket = await waitFor(() => devtoolsSocket(), 60000, "the app's DevTools socket");
+  const pid = socket.split("_").pop();
+  if (pid !== appPid) { appPid = pid; lastSaveId = 0; } // a new app process numbers its saves from 1 again
   adb(["forward", "--remove-all"]);
   adb(["forward", `tcp:${PORT}`, `localabstract:${socket}`]);
   cdp = await Cdp.open(PORT, { match: (target) => target.url.startsWith("file:///android_asset/site/"), timeout: 60000 });
@@ -175,12 +190,33 @@ async function launch() {
   await waitFor(() => resumedActivity().startsWith(PACKAGE), 30000, "the app in front");
 }
 
+// Older WebViews' DevTools refuse a message over 1 MB (WebView 44: "Too large read data is pending"), so bytes go
+// into the page, and text comes back out, in pieces.
+const PIECE = 256 * 1024;
+async function bytesInPage(bytes) {
+  const base64 = Buffer.from(bytes).toString("base64");
+  await cdp.eval("window.__pieces = [], true");
+  for (let offset = 0; offset < base64.length; offset += PIECE) await cdp.eval(`window.__pieces.push(${JSON.stringify(base64.slice(offset, offset + PIECE))}), true`);
+  // An expression for the bytes as a Uint8Array.
+  return `(function () {
+    var binary = atob(window.__pieces.join("")), data = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+    window.__pieces = null;
+    return data;
+  })()`;
+}
+async function textFromPage(expression) {
+  const length = await cdp.eval(`(${expression}).length`);
+  let text = "";
+  for (let offset = 0; offset < length; offset += PIECE) text += await cdp.eval(`(${expression}).slice(${offset}, ${offset + PIECE})`);
+  return text;
+}
+
 // Hands bytes to the page as a download (what the page does with a finished DOCX) through the real bridge.
 async function saveThroughBridge(name, bytes) {
-  shell("logcat -c");
+  const data = await bytesInPage(bytes);
   await cdp.eval(`(function () {
-    var binary = atob(${JSON.stringify(Buffer.from(bytes).toString("base64"))}), data = new Uint8Array(binary.length);
-    for (var i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+    var data = ${data};
     var link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([data], { type: ${JSON.stringify(DOCX)} }));
     link.download = ${JSON.stringify(name)};
@@ -286,8 +322,8 @@ async function bridgeOpens(name, bytes) {
     await cdp.eval(capture);
     sendIntent(action, shareUri(name));
     await cdp.until("!!(window.__got && window.__got.base64 !== undefined)", 30000);
-    const got = await cdp.eval("window.__got");
-    const received = Buffer.from(got.base64, "base64");
+    const got = await cdp.eval("({ name: window.__got.name, size: window.__got.size })");
+    const received = Buffer.from(await textFromPage("window.__got.base64"), "base64");
     if (got.name !== name || got.size !== bytes.length || !received.equals(bytes)) throw new Error(`${action}: page got ${got.name}, ${got.size} bytes (sha ${sha(received)})`);
     if (await cdp.eval("window.MunwordAndroid.openedName()") !== "") throw new Error(`${action}: the app kept the file after handing it over`);
     step(`${action === "VIEW" ? "open with" : "share"} into the running app hands the exact bytes over`, { name, bytes: bytes.length });
@@ -325,7 +361,6 @@ async function recognizeAndGenerate(input, { rotate = false, background = false 
     if (!(await cdp.eval(REVIEW))) throw new Error("leaving with Back lost the recognized document");
     step("Back leaves the app and keeps the work", { input });
   }
-  shell("logcat -c");
   await cdp.eval(clickButton("生成并下载 DOCX"));
   const saved = await savedDialog(input);
   tap(await waitForNode(button("完成"), 10000, "完成 button"));
@@ -345,9 +380,9 @@ async function appFlows() {
     // As a user does: the type first, then the file (what the system file picker hands the page).
     await cdp.eval(`${typeCard(type)}.click(), true`);
     const bytes = readFileSync(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
+    const data = await bytesInPage(bytes);
     await cdp.eval(`(function () {
-      var binary = atob(${JSON.stringify(bytes.toString("base64"))}), data = new Uint8Array(binary.length);
-      for (var i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+      var data = ${data};
       var transfer = new DataTransfer(), input = document.querySelector('input[type="file"]');
       transfer.items.add(new File([data], ${JSON.stringify(input + ".docx")}, { type: ${JSON.stringify(DOCX)} }));
       input.files = transfer.files;
