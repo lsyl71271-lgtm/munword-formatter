@@ -270,7 +270,8 @@ public final class MainActivity extends Activity {
 
     // ---- The page's side: window.MunwordAndroid (called on the WebView's JavaBridge thread) ----
 
-    private final class Bridge {
+    // Public: older WebViews call these methods by reflection, which a private class can refuse.
+    public final class Bridge {
         @JavascriptInterface
         public int begin(String name, String mime, long size) {
             String safe = safeName(name);

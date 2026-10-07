@@ -64,16 +64,12 @@ const pull = (devicePath) => {
   adb(["pull", devicePath, local]);
   return readFileSync(local);
 };
-function appPid() {
-  for (const command of ["pidof " + PACKAGE, sdk >= 26 ? "ps -A" : "ps"]) {
-    const output = (() => { try { return shell(command); } catch { return ""; } })();
-    if (command.startsWith("pidof")) {
-      const pid = output.trim().split(/\s+/)[0];
-      if (/^\d+$/.test(pid)) return pid;
-    } else {
-      const line = output.split("\n").find((row) => row.trim().endsWith(" " + PACKAGE));
-      if (line) return line.trim().split(/\s+/)[1];
-    }
+// The app's WebView DevTools socket, found by the owning process's command line (pidof and ps differ by version).
+function devtoolsSocket() {
+  const sockets = [...new Set([...shell("cat /proc/net/unix").matchAll(/webview_devtools_remote_(\d+)/g)].map((m) => m[1]))];
+  for (const pid of sockets) {
+    const command = (() => { try { return shell(`cat /proc/${pid}/cmdline`); } catch { return ""; } })();
+    if (command.replace(/\0/g, " ").trim().startsWith(PACKAGE)) return `webview_devtools_remote_${pid}`;
   }
   return null;
 }
@@ -100,9 +96,10 @@ let lastDump = "";
 function uiNodes() {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      shell("rm -f /sdcard/munword-ui.xml");
-      lastDump = shell("uiautomator dump /sdcard/munword-ui.xml").trim();
-      const xml = adb(["shell", "cat /sdcard/munword-ui.xml"]);
+      // /data/local/tmp: on Android 5 the dump written to /sdcard is not where the shell's /sdcard points.
+      shell("rm -f /data/local/tmp/munword-ui.xml");
+      lastDump = shell("uiautomator dump /data/local/tmp/munword-ui.xml").trim();
+      const xml = adb(["shell", "cat /data/local/tmp/munword-ui.xml"]);
       if (!xml.includes("<hierarchy")) { lastDump += ` | no hierarchy: ${xml.slice(0, 200)}`; continue; }
       return [...xml.matchAll(/<node ([^>]*?)\/?>/g)].map(([, attributes]) => {
         const node = {};
@@ -147,13 +144,11 @@ async function allowStoragePrompt() {
 let cdp;
 async function connect() {
   cdp?.close();
-  const pid = await waitFor(() => appPid(), 30000, "the app's process");
-  const socket = `webview_devtools_remote_${pid}`;
-  await waitFor(() => shell("cat /proc/net/unix").includes(socket), 60000, `DevTools socket ${socket}`);
+  const socket = await waitFor(() => devtoolsSocket(), 60000, "the app's DevTools socket");
   adb(["forward", "--remove-all"]);
   adb(["forward", `tcp:${PORT}`, `localabstract:${socket}`]);
   cdp = await Cdp.open(PORT, { match: (target) => target.url.startsWith("file:///android_asset/site/"), timeout: 60000 });
-  return pid;
+  return socket;
 }
 async function launch() {
   shell(`am start -W -n ${ACTIVITY}`);
@@ -357,10 +352,11 @@ async function appFlows() {
     tap(await waitForNode(button("完成"), 10000, "完成 button"));
     documents[input] = { name: kept.name, bytes };
   }
+  // The page keeps the chosen file in its own state and clears its input, so the size it shows is what it holds.
   const arrived = async (name, size) => {
     await cdp.until(`!!document.querySelector(".dropzone.hasFile") && document.querySelector(".dropzone h3").textContent === ${JSON.stringify(name)}`, 60000, PAGE_STATE);
-    const got = await cdp.eval(`document.querySelector('input[type="file"]').files[0].size`);
-    if (got !== size) throw new Error(`${name}: the page has ${got} bytes, the file is ${size}`);
+    const shown = await cdp.eval(`document.querySelector(".dropzone.hasFile p").textContent`);
+    if (!shown.startsWith(`${(size / 1024).toFixed(1)} KB`)) throw new Error(`${name}: the page shows "${shown}", the file is ${size} bytes`);
   };
   const resolution = `!!document.querySelector(".typeCard.selected") && document.querySelector(".typeCard.selected b").textContent === "决议草案"`;
   shell(`am force-stop ${PACKAGE}`);
@@ -420,12 +416,13 @@ async function main() {
 }
 
 // What the phone shows and logged, printed into the CI log (the evidence files may not be reachable).
-function diagnose() {
+async function diagnose() {
   try {
     const nodes = uiNodes();
     console.log(`  · in front: ${resumedActivity() || "?"}`);
     console.log(`  · on screen: ${JSON.stringify(nodes.filter((node) => node.text).map((node) => node.text.slice(0, 120)).slice(0, 40))}`);
     console.log(`  · uiautomator: ${lastDump.slice(0, 300)}`);
+    if (cdp) console.log(`  · page: ${await cdp.eval(`JSON.stringify({ bridge: typeof window.MunwordAndroid, begin: typeof (window.MunwordAndroid || {}).begin, status: window.__munwordBridge || null, title: document.title })`).catch((error) => String(error))}`);
     const log = adb(["logcat", "-d", "-v", "brief", "Munword:V", "AndroidRuntime:E", "ActivityTaskManager:I", "ActivityManager:I", "chromium:W", "*:S"]).replace(/\r/g, "").trim().split("\n");
     console.log(`  · log (last ${Math.min(log.length, 60)} lines):\n${log.slice(-60).map((line) => "      " + line).join("\n")}`);
   } catch (error) {
@@ -439,7 +436,7 @@ try {
   report.error = String(error.stack || error);
   console.log(`FAILED: ${report.error}`);
   screencap("failed");
-  diagnose();
+  await diagnose();
 } finally {
   cdp?.close();
   try { writeFileSync(path.join(out, "logcat.txt"), adb(["logcat", "-d", "-v", "time", "Munword:V", "chromium:V", "AndroidRuntime:E", "ActivityManager:I", "*:S"])); } catch { /* no log */ }

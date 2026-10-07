@@ -14,6 +14,8 @@
   if (!bridge) return;
   var CHUNK = 1048576; // base64 characters per call: a multiple of 4, so every chunk decodes on its own
   var blobs = {};
+  // How far the last hand-overs got (counts and the last error only), for diagnosing a WebView that misbehaves.
+  var status = window.__munwordBridge = { links: 0, reads: 0, sent: 0, error: "" };
   var createObjectURL = URL.createObjectURL, revokeObjectURL = URL.revokeObjectURL;
   URL.createObjectURL = function (object) {
     var url = createObjectURL.call(URL, object);
@@ -28,12 +30,22 @@
   function save(blob, name) {
     var reader = new FileReader();
     reader.onload = function () {
-      var data = String(reader.result), base64 = data.slice(data.indexOf(",") + 1);
-      var id = bridge.begin(name, blob.type || "application/octet-stream", blob.size);
-      for (var offset = 0; offset < base64.length; offset += CHUNK) bridge.append(id, base64.slice(offset, offset + CHUNK));
-      bridge.finish(id);
+      status.reads++;
+      try {
+        var data = String(reader.result), base64 = data.slice(data.indexOf(",") + 1);
+        var id = bridge.begin(name, blob.type || "application/octet-stream", blob.size);
+        for (var offset = 0; offset < base64.length; offset += CHUNK) bridge.append(id, base64.slice(offset, offset + CHUNK));
+        bridge.finish(id);
+        status.sent++;
+      } catch (error) {
+        status.error = String(error && error.message || error);
+        try { bridge.failed(name, status.error); } catch (ignored) { /* the bridge itself is gone */ }
+      }
     };
-    reader.onerror = function () { bridge.failed(name, String(reader.error && reader.error.message || "read error")); };
+    reader.onerror = function () {
+      status.error = String(reader.error && reader.error.message || "read error");
+      bridge.failed(name, status.error);
+    };
     reader.readAsDataURL(blob);
   }
 
@@ -42,6 +54,7 @@
     // The page assigns the object URL itself; older engines may give .href back in another spelling.
     var blob = blobs[this.getAttribute("href")] || blobs[this.href];
     if (blob && this.hasAttribute("download")) {
+      status.links++;
       save(blob, this.getAttribute("download") || "PKUNMUN2026.docx");
       return;
     }
