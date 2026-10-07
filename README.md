@@ -228,7 +228,7 @@ VERSION                 本机后端版本；网页/离线界面统一读 packag
 
 原稿 ZIP/OOXML 安全验证 → 提取元数据与段落/列表结构 → 六类文书对应的中间模型 → 保守结构修复（不推测补齐原文）→ 用户可选确认 → 明确国家字段的全称/身份去重与排序 → 共享排版策略与各文种格式规则 → 内容、编号、修订与部件保护检查 → 打包 DOCX 与校验说明。
 
-日常网页和本机界面均使用 `app/docx-browser.ts`；`backend/app/` 保留兼容 API/CLI。Python 与 TypeScript 共享数据和策略，但并非同一算法源文件。边界见 [统一界面决策](docs/adr-0001-shared-daily-interface.md)、[架构导航](docs/architecture.md) 和 [学标对照](docs/handbook-alignment.md)。
+日常网页和本机界面均使用 `app/docx-browser.ts`；`backend/app/` 保留兼容 API/CLI。Python 与 TypeScript 共享数据和策略，但并非同一算法源文件。边界见 [统一界面决策](docs/adr-0001-shared-daily-interface.md)、[架构导航](docs/architecture.md) 和 [学标对照](docs/handbook-alignment.md)。每一处逻辑、界面和本机应用的完整说明见 [实现与需求规格](docs/IMPLEMENTATION_SPEC.md)。
 
 ## 已知限制
 
