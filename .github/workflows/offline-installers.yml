@@ -289,6 +289,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          sdcard-path-or-size: 256M   # shared storage, as phones have (Android 5 and 6 images have none without it)
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: node android/acceptance/emulator.mjs downloads/PKUNMUN2026-Formatter-Android.apk "${{ runner.temp }}/android-build/output/desktop-smoke" output/android-api${{ matrix.api }}

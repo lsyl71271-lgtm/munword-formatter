@@ -24,7 +24,8 @@
 - **保存**：页面生成 DOCX 后照常“点击下载链接”。`bridge.js` 拦下这个点击，用 `FileReader` 读出字节，分块（每块 1 MB 的 base64）交给 `MunwordAndroid.begin / append / finish`。原生侧先写到缓存，校验字节数，然后：
   - Android 10+：写入 MediaStore 的 Downloads（不需要权限，重名由系统自动加「(1)」）；
   - Android 6–9：第一次保存时请求存储权限，允许后写入公共 Download 并通知媒体库；拒绝则写入应用自己的文件夹；
-  - Android 5：安装时已授予权限，直接写入 Download。
+  - Android 5：安装时已授予权限，直接写入 Download；
+  - 任何版本上 Download 写不进去（没有插 SD 卡、存储已满或损坏）时，改存到应用自己的文件夹，弹窗说明原因，「打开」「分享」照常可用。
   
   保存后弹窗显示文件名和位置，可以「打开」（WPS / Word；没有能打开的应用时说明装哪个）或「分享」。本应用自己也能打开 DOCX（用来排版），所以「打开」只交给其他应用（Android 11+ 靠清单里的 `<queries>` 才能看到它们），只有一个时直接打开，多个时让用户选；分享面板里也不列本应用（Android 7+）。两者都经 `SavedFiles` 授权读取：各版本 Android 是否允许把 MediaStore 的 Downloads 条目授权给别的应用并不一致，自己的提供者在所有版本上都可靠。
 - **选择文件**：页面的文件输入框打开系统文件选择器（`ACTION_GET_CONTENT`，DOCX 及来源不明的文件）。

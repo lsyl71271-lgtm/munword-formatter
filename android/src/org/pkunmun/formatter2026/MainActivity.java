@@ -393,8 +393,17 @@ public final class MainActivity extends Activity {
             @Override
             public void run() {
                 try {
-                    final Saved saved = Build.VERSION.SDK_INT >= 29 ? storeInMediaStore(saving)
-                            : publicFolder ? storeInDownloads(saving) : storeInAppFolder(saving);
+                    Saved stored;
+                    try {
+                        stored = Build.VERSION.SDK_INT >= 29 ? storeInMediaStore(saving)
+                                : publicFolder ? storeInDownloads(saving) : storeInAppFolder(saving, null);
+                    } catch (IOException e) {
+                        // No shared storage to write to (no SD card mounted, a full or broken card…): keep the file in
+                        // the app's own folder rather than losing it; 打开 and 分享 work the same from there.
+                        Log.w(TAG, "Download not writable, saving in the app's folder", e);
+                        stored = storeInAppFolder(saving, "手机的「下载」文件夹暂时无法写入");
+                    }
+                    final Saved saved = stored;
                     main.post(new Runnable() {
                         @Override
                         public void run() {
@@ -458,13 +467,14 @@ public final class MainActivity extends Activity {
         return new Saved(target.getName(), saving.mime, SavedFiles.uriFor(SavedFiles.DOWNLOADS, target.getName()), "手机的「下载」（Download）文件夹");
     }
 
-    /** Android 6–9 without the permission: the app's own folder, still reachable through 打开 / 分享. */
-    private Saved storeInAppFolder(Saving saving) throws IOException {
+    /** The app's own folder, still reachable through 打开 / 分享: without the storage permission, or when Download fails. */
+    private Saved storeInAppFolder(Saving saving, String reason) throws IOException {
         File dir = SavedFiles.appFolder(this);
         File target = unique(dir, saving.name);
         copy(new FileInputStream(saving.temp), new FileOutputStream(target));
         return new Saved(target.getName(), saving.mime, SavedFiles.uriFor(SavedFiles.APP, target.getName()),
-                "应用自己的文件夹（" + dir.getPath() + "），因为没有获得存储权限。可以点「分享」发送或用 WPS 打开");
+                "应用自己的文件夹（" + dir.getPath() + "），因为" + (reason != null ? reason : "没有获得存储权限")
+                        + "。可以点「分享」发送或用 WPS 打开");
     }
 
     @Override

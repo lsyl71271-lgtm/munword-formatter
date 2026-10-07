@@ -113,10 +113,21 @@ function uiNodes() {
   return [];
 }
 const findNode = (nodes, test) => nodes.find((node) => node.center && test(node));
+// An emulator's own components sometimes crash or stall ("System UI has stopped"), covering the screen; such a
+// dialog is closed. One about this app is left alone (and the crash log check at the end fails the run).
+function dismissSystemDialog(nodes) {
+  const dialog = nodes.some((node) => /^android:id\/aerr_/.test(node["resource-id"] || "")) || nodes.some((node) => /has stopped|isn.t responding|keeps stopping/i.test(node.text || ""));
+  if (!dialog || nodes.some((node) => /PKUNMUN|pkunmun/.test(node.text || ""))) return false;
+  const close = findNode(nodes, (node) => /^android:id\/aerr_(close|wait)$/.test(node["resource-id"] || "") || /^(close app|wait|ok)$/i.test(node.text || ""));
+  if (!close) return false;
+  console.log(`  · closed a system dialog: ${nodes.filter((node) => node.text).map((node) => node.text).join(" / ").slice(0, 120)}`);
+  tap(close);
+  return true;
+}
 async function waitForNode(test, timeout, what) {
   let nodes = [];
   try {
-    return await waitFor(() => { nodes = uiNodes(); return findNode(nodes, test); }, timeout, what);
+    return await waitFor(() => { nodes = uiNodes(); if (dismissSystemDialog(nodes)) return null; return findNode(nodes, test); }, timeout, what);
   } catch (error) {
     writeFileSync(path.join(out, `ui-${what.replace(/\W+/g, "-")}.json`), JSON.stringify(nodes.map(({ text, "resource-id": id, class: cls, package: pkg }) => ({ text, id, cls, pkg })), null, 1));
     screencap(`failed-${what.replace(/\W+/g, "-")}`);
@@ -124,14 +135,23 @@ async function waitForNode(test, timeout, what) {
   }
 }
 const tap = (node) => shell(`input tap ${node.center[0]} ${node.center[1]}`);
-const button = (label) => (node) => /Button/.test(node.class || "") && node.text === label;
 
-// The app's save dialog: returns the file name it reports.
+// Android's dialog buttons by id (Android 5's UI Automator turns Chinese text into "?"): 打开 / 好 are the positive
+// button, 完成 the negative, 分享 the neutral one.
+const BUTTONS = { 打开: "android:id/button1", 好: "android:id/button1", 完成: "android:id/button2", 分享: "android:id/button3" };
+const button = (label) => (node) => node["resource-id"] === BUTTONS[label];
+
+// Waits for the app's save dialog. The file name comes from the app's log line ("saved <name> (<uri>)"; the log is
+// cleared just before each save), the dialog's message from the screen.
 async function savedDialog(what) {
-  const message = await waitForNode((node) => /^文件：/.test(node.text || ""), 60000, `save dialog (${what})`);
-  const name = /^文件：(.*)\n/.exec(message.text)?.[1];
-  if (!name) throw new Error(`save dialog without a file name: ${message.text}`);
-  return { name, text: message.text };
+  const line = await waitFor(() => {
+    const log = adb(["logcat", "-d", "-v", "brief", "-s", "Munword:V"]).replace(/\r/g, "");
+    const failed = /: save failed: (.*)/.exec(log);
+    if (failed) throw new Error(`the app could not save ${what}: ${failed[1]}`);
+    return /: saved (.+) \((?:content|file):/.exec(log);
+  }, 60000, `the app saving ${what}`);
+  const message = await waitForNode((node) => node["resource-id"] === "android:id/message", 20000, `save dialog (${what})`);
+  return { name: line[1], text: message.text || "" };
 }
 async function allowStoragePrompt() {
   // Android 6–9 ask once, the first time something is saved.
@@ -157,6 +177,7 @@ async function launch() {
 
 // Hands bytes to the page as a download (what the page does with a finished DOCX) through the real bridge.
 async function saveThroughBridge(name, bytes) {
+  shell("logcat -c");
   await cdp.eval(`(function () {
     var binary = atob(${JSON.stringify(Buffer.from(bytes).toString("base64"))}), data = new Uint8Array(binary.length);
     for (var i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
@@ -218,7 +239,8 @@ async function bridgeSaves() {
   if (sdk >= 23 && sdk <= 28) await allowStoragePrompt();
   const first = await savedDialog("first save");
   if (first.name !== "PKUNMUN-bridge-test.docx") throw new Error(`saved as ${first.name}`);
-  if (!first.text.includes("下载")) throw new Error(`dialog does not say Download: ${first.text}`);
+  // (Android 5's UI Automator shows Chinese as "?", so the wording is checked where it can be read.)
+  if (!/\?{3}/.test(first.text) && !first.text.includes("下载")) throw new Error(`dialog does not say Download: ${first.text}`);
   tap(await waitForNode(button("完成"), 10000, "完成 button"));
   const pulled = pull(deviceFile(first.name));
   if (!pulled.equals(BIG)) throw new Error(`Download/${first.name} is ${pulled.length} bytes, sha ${sha(pulled)}; sent ${BIG.length}, sha ${sha(BIG)}`);
@@ -303,6 +325,7 @@ async function recognizeAndGenerate(input, { rotate = false, background = false 
     if (!(await cdp.eval(REVIEW))) throw new Error("leaving with Back lost the recognized document");
     step("Back leaves the app and keeps the work", { input });
   }
+  shell("logcat -c");
   await cdp.eval(clickButton("生成并下载 DOCX"));
   const saved = await savedDialog(input);
   tap(await waitForNode(button("完成"), 10000, "完成 button"));
