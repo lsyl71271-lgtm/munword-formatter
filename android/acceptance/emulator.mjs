@@ -163,14 +163,35 @@ async function savedDialog(what) {
     return null;
   }, 60000, `the app saving ${what}`);
   lastSaveId = saved.id;
-  const message = await waitForNode((node) => node["resource-id"] === "android:id/message", 20000, `save dialog (${what})`);
+  const message = await waitForNode((node) => node["resource-id"] === "android:id/message", 60000, `save dialog (${what})`);
   return { name: saved.name, text: message.text || "" };
 }
 async function allowStoragePrompt() {
-  // Android 6–9 ask once, the first time something is saved.
-  const allow = await waitForNode((node) => /permission_allow_button$/.test(node["resource-id"] || "") || /^allow$/i.test(node.text || ""), 30000, "storage permission prompt");
-  tap(allow);
+  // Android 6–9 ask once, the first time something is saved. Allow is tapped again while the prompt is still there
+  // (a crashing System UI on the Android 8.0 image can swallow the tap), until the app is back in front.
+  let tapped = false, nodes = [];
+  try {
+    await waitFor(() => {
+      nodes = uiNodes();
+      if (dismissSystemDialog(nodes)) return null;
+      const allow = findNode(nodes, (node) => /permission_allow_button$/.test(node["resource-id"] || "") || /^allow$/i.test(node.text || ""));
+      if (allow) { tap(allow); tapped = true; return null; }
+      return tapped && resumedActivity().startsWith(PACKAGE);
+    }, 60000, "storage permission prompt allowed");
+  } catch (error) {
+    writeFileSync(path.join(out, "ui-storage-permission.json"), JSON.stringify(nodes.map(({ text, "resource-id": id }) => ({ text, id })), null, 1));
+    screencap("failed-storage-permission");
+    throw error;
+  }
   step("storage permission prompt shown and allowed");
+}
+// Back from another app's screen (a viewer, the share sheet), pressed again if the first press came too early.
+async function backToApp(what) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    shell("input keyevent 4");
+    try { return await waitFor(() => resumedActivity().startsWith(PACKAGE), 5000, what); } catch { /* not yet: press again */ }
+  }
+  throw new Error(`timed out waiting for ${what}`);
 }
 
 // ---- The page, over the WebView's DevTools socket ----
@@ -295,7 +316,7 @@ async function bridgeSaves() {
     return front && !front.startsWith(PACKAGE) ? front : null;
   }, 30000, "打开 result");
   if (opened === "explained") tap(await waitForNode(button("好"), 10000, "好 button"));
-  else { shell("input keyevent 4"); await waitFor(() => resumedActivity().startsWith(PACKAGE), 20000, "back from the viewer"); }
+  else await backToApp("back from the viewer");
   step("duplicate name kept apart; 打开 handled", { name: second.name, open: opened });
 
   await saveThroughBridge("PKUNMUN-bridge-test.docx", BIG.subarray(0, 2048));
@@ -303,8 +324,7 @@ async function bridgeSaves() {
   tap(await waitForNode(button("分享"), 10000, "分享 button"));
   const chooser = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, "share sheet");
   screencap("share-sheet");
-  shell("input keyevent 4");
-  await waitFor(() => resumedActivity().startsWith(PACKAGE), 20000, "back from the share sheet");
+  await backToApp("back from the share sheet");
   step("分享 opens the share sheet", { name: third.name, chooser });
   return first.name;
 }
@@ -443,6 +463,7 @@ async function main() {
   };
   console.log(`Android ${report.device.release} (API ${sdk}, ${report.device.abi})`);
   shell("input keyevent 82"); // wake and unlock
+  for (const command of ["wm dismiss-keyguard", "locksettings set-disabled true"]) { try { shell(command); } catch { /* not on this version */ } }
   adb(["install", "-r", apk]);
   const installed = shell(`dumpsys package ${PACKAGE}`);
   report.installed = { versionName: /versionName=(\S+)/.exec(installed)?.[1], versionCode: /versionCode=(\d+)/.exec(installed)?.[1] };
@@ -481,8 +502,11 @@ async function diagnose() {
     console.log(`  · on screen: ${JSON.stringify(nodes.filter((node) => node.text).map((node) => node.text.slice(0, 120)).slice(0, 40))}`);
     console.log(`  · uiautomator: ${lastDump.slice(0, 300)}`);
     if (cdp) console.log(`  · page: ${await cdp.eval(`JSON.stringify({ bridge: typeof window.MunwordAndroid, begin: typeof (window.MunwordAndroid || {}).begin, status: window.__munwordBridge || null, title: document.title })`).catch((error) => String(error))}`);
+    // The app's own lines (and the system's about it) apart from the rest of the system's noise.
     const log = adb(["logcat", "-d", "-v", "brief", "Munword:V", "AndroidRuntime:E", "ActivityTaskManager:I", "ActivityManager:I", "chromium:W", "*:S"]).replace(/\r/g, "").trim().split("\n");
-    console.log(`  · log (last ${Math.min(log.length, 60)} lines):\n${log.slice(-60).map((line) => "      " + line).join("\n")}`);
+    const ours = log.filter((line) => /^[A-Z]\/(Munword|chromium)\b/.test(line) || line.includes(PACKAGE) || (appPid && new RegExp(`\\(\\s*${appPid}\\)`).test(line)));
+    console.log(`  · app log (last ${Math.min(ours.length, 50)} lines):\n${ours.slice(-50).map((line) => "      " + line).join("\n")}`);
+    console.log(`  · system log (last 15 lines):\n${log.slice(-15).map((line) => "      " + line).join("\n")}`);
   } catch (error) {
     console.log(`  · diagnosis failed: ${error.message}`);
   }
