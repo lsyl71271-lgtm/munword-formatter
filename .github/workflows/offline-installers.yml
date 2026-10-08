@@ -1,13 +1,17 @@
-name: PKUNMUN offline installers (DMG / EXE)
+name: PKUNMUN offline installers (DMG / EXE / APK)
 
-# Checks the published downloads/PKUNMUN2026-Formatter-macOS.dmg and -Windows-Setup.exe:
-# - rebuilt from source on Linux, they must match downloads/SHA256SUMS.txt byte for byte;
+# Checks the published downloads/PKUNMUN2026-Formatter-macOS.dmg, -Windows-Setup.exe and -Android.apk:
+# - rebuilt from source on Linux, the DMG and EXE must match downloads/SHA256SUMS.txt byte for byte, and the APK
+#   must have exactly the published APK's contents, signed by the pinned key;
 # - the offline page passes all acceptance inputs in Chromium and the oldest supported Chromium;
 # - the EXE installs, launches, upgrades and uninstalls on Windows 7 32-bit / Windows 10 (Wine),
 #   Windows Server 2022 x64 and Windows 11 ARM, with the full flow in the installed Edge, Chrome, Firefox;
 # - the DMG verifies, its app passes Apple's codesign and runs natively on Apple silicon and Intel
 #   (macOS 14 and 15), with the full flow in the installed Safari, Chrome, Firefox; Safari also opens the
-#   app and the single-file page the way users do (LaunchServices), read back through Accessibility.
+#   app and the single-file page the way users do (LaunchServices), read back through Accessibility;
+# - the Android page passes all inputs in Chromium 69 to current (67 gets the update notice), and the APK runs on
+#   Android 5.0 to 15 emulators with each system's own WebView: saving to Download, the storage prompt, open with /
+#   share, and every input through the full flow wherever the WebView is new enough (the notice elsewhere).
 # Only when all of that passes, pushes to main or the desktop branch publish the installers on the
 # GitHub Releases page (tag v<VERSION>-desktop.2).
 
@@ -15,6 +19,9 @@ on:
   push:
     paths:
       - 'desktop/**'
+      - 'android/**'
+      - 'tests/desktop.test.mjs'
+      - 'tests/android.test.mjs'
       - 'downloads/**'
       - 'VERSION'
       - '.github/workflows/offline-installers.yml'
@@ -82,7 +89,7 @@ jobs:
       - name: Published installers are exactly what the source builds
         run: |
           cd dist/desktop
-          tail -n +2 ../../downloads/SHA256SUMS.txt | sha256sum --check
+          grep -E '  PKUNMUN2026-Formatter-(macOS\.dmg|Windows-Setup\.exe)$' ../../downloads/SHA256SUMS.txt | sha256sum --check
       - name: Playwright with its Chromium
         run: |
           npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund playwright@1.56.1
@@ -192,9 +199,126 @@ jobs:
           path: output/acceptance/
           retention-days: 30
 
+  android:
+    name: Android APK — rebuild and compare; the page in Chromium 67 to current
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.19.0'
+      - name: Android build tools from Ubuntu (aapt2, dx, zipalign, apksigner, android.jar) and OpenJDK 21
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aapt dalvik-exchange zipalign apksigner libandroid-23-java openjdk-21-jdk-headless
+      - run: pnpm install --frozen-lockfile
+      - name: Website build and the desktop page (the reference for the outputs)
+        run: node desktop/build-desktop.mjs --only site
+      - name: Rebuild the APK; the published one has these exact contents, the pinned signature and manifest
+        env:
+          JAVAC: /usr/lib/jvm/java-21-openjdk-amd64/bin/javac
+        run: node android/acceptance/verify-apk.mjs output/android
+      - name: Playwright with its Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund playwright@1.56.1
+          node "$RUNNER_TEMP/pw/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Reference outputs (the shared page in current Chromium, all inputs)
+        env:
+          MUNWORD_PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
+        run: node desktop/offline-smoke.mjs
+      - name: Android page in Chromium 67 (update notice) and 69, 79, 83, 88, 95, 99, 109 and current (all inputs)
+        run: |
+          export MUNWORD_CHROMIUM_EXECUTABLE="$(node --input-type=module -e "const p = await import('$RUNNER_TEMP/pw/node_modules/playwright/index.mjs'); console.log((p.chromium || p.default.chromium).executablePath())")"
+          node android/acceptance/webview-floor.mjs dist/android/site output/desktop-smoke output/android/webview-floor
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-build
+          path: |
+            dist/android/*.apk
+            output/android/
+            !output/android/webview-floor/chromium/
+            output/desktop-smoke/*.docx
+          retention-days: 30
+
+  android-devices:
+    name: Android ${{ matrix.release }} (API ${{ matrix.api }}) emulator${{ matrix.profile && format(' — {0}', matrix.profile) || '' }}
+    needs: android
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { api: 21, release: '5.0' }
+          - { api: 22, release: '5.1' }
+          - { api: 23, release: '6.0' }
+          - { api: 24, release: '7.0' }
+          - { api: 25, release: '7.1' }
+          - { api: 26, release: '8.0' }
+          - { api: 27, release: '8.1', arch: x86 }             # no x86_64 image with Google APIs for 8.1
+          - { api: 28, release: '9' }
+          - { api: 29, release: '10' }
+          - { api: 30, release: '11' }
+          - { api: 31, release: '12' }
+          - { api: 32, release: '12L', profile: tablet }        # the large-screen release, on a tablet-sized screen
+          - { api: 33, release: '13', profile: large-dark }     # font scale 1.3 and dark mode
+          - { api: 34, release: '14' }
+          - { api: 35, release: '15' }
+          - { api: 36, release: '16' }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.19.0'
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-build
+          path: ${{ runner.temp }}/android-build
+      - name: The APK released before, to install this one over it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/previous"
+          gh release download "v$(cat VERSION)-desktop.2" --repo "$GITHUB_REPOSITORY" --pattern PKUNMUN2026-Formatter-Android.apk --dir "$RUNNER_TEMP/previous" \
+            || echo "No APK released for this version yet: installed fresh only."
+      - name: Hardware acceleration for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: The published APK with the system's own WebView (no updates installed)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: ${{ matrix.arch || 'x86_64' }}
+          disable-animations: true
+          sdcard-path-or-size: 256M   # shared storage, as phones have (Android 5 and 6 images have none without it)
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: MUNWORD_DEVICE_PROFILE="${{ matrix.profile }}" MUNWORD_PREVIOUS_APK="${{ runner.temp }}/previous/PKUNMUN2026-Formatter-Android.apk" node android/acceptance/emulator.mjs downloads/PKUNMUN2026-Formatter-Android.apk "${{ runner.temp }}/android-build/output/desktop-smoke" output/android-api${{ matrix.api }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-api${{ matrix.api }}
+          path: |
+            output/android-api${{ matrix.api }}/*.json
+            output/android-api${{ matrix.api }}/*.png
+            output/android-api${{ matrix.api }}/*.txt
+          retention-days: 30
+
   release:
     name: Publish on GitHub Releases
-    needs: [reproduce, wine, windows, macos]
+    needs: [reproduce, wine, windows, macos, android, android-devices]
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/munword-formatter-audit-e11sma'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -219,9 +343,9 @@ jobs:
         run: |
           version=$(cat VERSION)
           tag="v${version}-desktop.2"
-          title="v${version} · 离线桌面安装包（通用版：一个 DMG、一个 EXE，兼容 Windows 7 与 macOS 10.11 起）"
+          title="v${version} · 离线安装包（macOS DMG、Windows EXE、Android APK；兼容 macOS 10.11、Windows 7、Android 5.0 起）"
           cd "$RUNNER_TEMP/release"
-          assets=(PKUNMUN2026-Formatter-macOS.dmg PKUNMUN2026-Formatter-Windows-Setup.exe "PKUNMUN2026-Install-Guide.txt#安装教程（先看这个）.txt" SHA256SUMS.txt PKUNMUN2026-*-Verification.zip)
+          assets=(PKUNMUN2026-Formatter-macOS.dmg PKUNMUN2026-Formatter-Windows-Setup.exe PKUNMUN2026-Formatter-Android.apk "PKUNMUN2026-Install-Guide.txt#安装教程（先看这个）.txt" SHA256SUMS.txt PKUNMUN2026-*-Verification.zip)
           if gh release view "$tag" >/dev/null 2>&1; then
             # Same version, rebuilt installers: move the tag to the verified commit by recreating the release.
             gh release download "$tag" --pattern SHA256SUMS.txt --dir previous

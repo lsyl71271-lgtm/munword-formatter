@@ -38,6 +38,10 @@ jobs:
       - name: Website bundle and static deployment (also builds the shared offline assets)
         run: pnpm build:static
       - run: pnpm test:unit
+      # Not part of test:unit: package.json is recorded in the desktop installers' build record, so changing that
+      # script would change the published DMG and EXE.
+      - name: Android app (page variant, manifest, published APK)
+        run: node --test tests/android.test.mjs
       - name: Python engine, API and CLI
         run: python -m unittest discover -s backend/tests
       - run: pnpm build

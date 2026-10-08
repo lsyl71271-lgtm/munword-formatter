@@ -47,7 +47,7 @@ pnpm build:desktop          # = node desktop/build-desktop.mjs --publish
 - `dist/desktop/PKUNMUN2026-Formatter-macOS.dmg`
 - `dist/desktop/PKUNMUN2026-Formatter-Windows-Setup.exe`
 
-加 `--publish` 时会把两个安装包复制到 `downloads/`，并更新 `SHA256SUMS.txt`。只调试一种安装包时用 `--only site|mac|win`。
+加 `--publish` 时会把两个安装包复制到 `downloads/`，并更新 `SHA256SUMS.txt` 里它们的两行（APK 那一行由 `android/build-apk.mjs --publish` 维护）。只调试一种安装包时用 `--only site|mac|win`。
 
 所需工具：
 

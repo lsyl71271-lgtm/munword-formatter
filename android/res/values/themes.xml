@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The page's own background behind the status bar and while it loads, so there is no white flash.
+         Android 5 can only draw white status bar icons, so its bar is the page's dark blue. -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/page</item>
+        <item name="android:colorPrimary">@color/page</item>
+        <item name="android:colorPrimaryDark">@color/brand_dark</item>
+        <item name="android:colorAccent">@color/brand</item>
+        <item name="android:statusBarColor">@color/brand_dark</item>
+    </style>
+    <color name="page">#FFEDF5FA</color>
+    <color name="brand">#FF137EB2</color>
+    <color name="brand_dark">#FF116BA8</color>
+</resources>

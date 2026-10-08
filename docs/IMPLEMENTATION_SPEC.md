@@ -26,11 +26,12 @@
 - [17. Python 兼容引擎、HTTP API 与 CLI（`backend/`）](#17-python-兼容引擎http-api-与-clibackend)
 - [18. 本机服务版（旧的 Python 本机安装）](#18-本机服务版旧的-python-本机安装)
 - [19. 桌面离线安装包（`desktop/`）](#19-桌面离线安装包desktop)
-- [20. 网页部署](#20-网页部署)
-- [21. 发布与持续集成](#21-发布与持续集成)
-- [22. 测试体系](#22-测试体系)
-- [23. 验收标准（复原后的程序应满足）](#23-验收标准复原后的程序应满足)
-- [24. 从零复原的建议顺序](#24-从零复原的建议顺序)
+- [20. 安卓安装包（`android/`）](#20-安卓安装包android)
+- [21. 网页部署](#21-网页部署)
+- [22. 发布与持续集成](#22-发布与持续集成)
+- [23. 测试体系](#23-测试体系)
+- [24. 验收标准（复原后的程序应满足）](#24-验收标准复原后的程序应满足)
+- [25. 从零复原的建议顺序](#25-从零复原的建议顺序)
 - [附录 A：序言与行动动词前缀（`document-policy.json` → `prefixes`）](#附录-a序言与行动动词前缀document-policyjson--prefixes)
 - [附录 B：关键正则（逐字）](#附录-b关键正则逐字)
 - [附录 C：相关文档](#附录-c相关文档)
@@ -120,14 +121,16 @@
 |---|---|---|---|
 | 网页版 | Cloudflare Pages / Workers 静态托管 | 用户浏览器 | https://munword-formatter.pages.dev/ |
 | 桌面离线版（推荐给普通用户） | macOS `.app`（DMG）/ Windows NSIS 安装程序（EXE） | 本机浏览器，从 `file://` 打开 | 双击图标 |
+| 安卓版 | Java 写的 WebView 应用（APK，Android 5.0+） | 手机系统的 WebView，从应用自带的文件打开 | 桌面图标，或对 DOCX 选「其他应用打开」 |
 | 本机服务版（旧） | Python FastAPI 在 127.0.0.1:8000 提供页面资源 | 仍在浏览器（服务只供资源） | `首次安装.command` / `Windows 首次安装.bat` |
 | 开发 / API | vinext（Next.js 兼容）开发服务器；可选 `NEXT_PUBLIC_API_URL` 指向 Python API | 浏览器，或配置了 API 时在 Python | `pnpm dev` |
 | 批处理 | Python CLI `backend/cli.py` | Python | 命令行 |
 
-三种面向用户的形态（网页、桌面、本机服务）加载的是**同一份**构建产物：
+面向用户的形态（网页、桌面、安卓、本机服务）加载的是**同一份**界面和引擎：
 
 - `local_web/main.tsx` 只是把 `app/page.tsx` 的 `<Home/>` 挂到 `#root`；
-- 构建出的 `public/local-app.js` 和 `public/local-styles.css` 同时用于静态站点、桌面安装包和本机服务。
+- 构建出的 `public/local-app.js` 和 `public/local-styles.css` 同时用于静态站点、桌面安装包和本机服务；
+- 安卓版把同一个 `local_web/main.tsx` 按 Chromium 69 重新编译，样式表由同一份 `public/local-styles.css` 加旧引擎降级得到（第 20 章）。
 
 ### 2.2 目录结构
 
@@ -162,7 +165,8 @@ backend/                Python 兼容引擎、FastAPI 服务、CLI
 shared/                 两个引擎共用的策略 JSON（第 2.5 节）
 local_web/              本机/静态页面外壳（index.html、main.tsx）
 desktop/                桌面离线安装包的构建脚本、启动器、验收脚本
-downloads/              已发布的 DMG、EXE、SHA256SUMS.txt、安装教程
+android/                安卓应用（Java 外壳、手机版页面与旧 WebView 兼容层）、构建与验收脚本
+downloads/              已发布的 DMG、EXE、APK、SHA256SUMS.txt、安装教程
 scripts/                构建、打包、审计、回归脚本
 windows/                本机服务版的 PowerShell 安装/启动脚本
 templates/pkunmun2026/  Python 流水线的模板目录参数（目前只有说明文件，版式全部来自 shared/）
@@ -2235,7 +2239,93 @@ PKUNMUN2026.app/Contents/
 - `python3 desktop/macos/make-dmg-layout.py`：重新生成 DMG 窗口布局，需要 pip 包 ds_store。
 - `desktop/macos/build-stub.sh`：重新编译启动器存根。
 
-## 20. 网页部署
+## 20. 安卓安装包（`android/`）
+
+APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排版」，`minSdk` 21（Android 5.0），`targetSdk` 34，versionCode = (主×10000 + 次×100 + 修订)×100 + 安卓修订号（`ANDROID_REVISION`，同一程序版本只更新安卓包时加一，换 `VERSION` 时回到 1），versionName = `VERSION`，修订号大于 1 时再加「.修订号」（当前 1.8.5.2 → 1080502；第一个 1.8.5 安装包是 10805，新版本号更大，可直接覆盖安装）。
+
+### 20.1 组成
+
+| 文件 | 内容 |
+|---|---|
+| `AndroidManifest.xml` | 仅有的权限是 `READ_EXTERNAL_STORAGE` 与 `WRITE_EXTERNAL_STORAGE`（都是 `maxSdkVersion="28"`），**没有 `INTERNET`**；`<queries>` 声明“VIEW + DOCX”（Android 11+ 才能看到 WPS / Word 等）；`allowBackup=false`；WebView 元数据 `MetricsOptOut=true`、`EnableSafeBrowsing=false`；`MainActivity`（`exported=true`，`singleTask`，`configChanges` 含方向、屏幕尺寸、键盘、uiMode、字号，`adjustResize`），`MAIN/LAUNCHER` 与两个接收 DOCX MIME 的过滤器（`VIEW`、`SEND`）；`SavedFiles` 提供者（`exported=false`，`grantUriPermissions=true`） |
+| `res/` | 主题 `Theme.Material.Light.NoActionBar`：窗口背景与页面同色 `#EDF5FA`；Android 5 状态栏用深蓝（只能显示白色图标），6+ 用页面色加深色图标（`values-v23`）；自适应图标（背景渐变 + 矢量四方块，`mipmap-anydpi-v26`），旧版 48dp PNG 五种密度（`make-icons.mjs` 用 Chromium 渲染） |
+| `src/…/MainActivity.java` | 见 20.2 |
+| `src/…/SavedFiles.java` | 只读 `ContentProvider`：`content://org.pkunmun.formatter2026.files/{downloads|app}/<文件名>` → 公共 Download 或应用自己的 `files/Download`（规范化路径后必须正好在该目录下）；`…/media/<id>/<文件名>` → 本应用的 MediaStore 条目 `content://media/external/downloads/<id>`（转读，不把 MediaStore 地址交给别的应用）；`query` 只答 `DISPLAY_NAME`、`SIZE`；`openFile` 只允许 `"r"` |
+| `stubs/android/webkit/RenderProcessGoneDetail.java` | API 26 类的编译期替身，只在 javac 的 classpath 上，不打包 |
+| `bridge.js` | 页面一侧的桥，ES5，内联进 `index.html`（见 20.3） |
+| `polyfills.js`、`flex-gap.js`、`build-site.mjs` | 手机版页面（见 20.4） |
+| `build-apk.mjs`、`signing-cert.sha256` | 打包与签名（见 20.5） |
+| `acceptance/` | `verify-apk.mjs`、`webview-floor.mjs`、`emulator.mjs`、`cdp.mjs`（见 20.6） |
+
+### 20.2 `MainActivity`
+
+- **WebView 设置**：JavaScript 开、DOM storage 开、`setAllowFileAccess(false)`（`file:///android_asset/` 不受影响）、内容访问开、不缩放、`textZoom` = 系统字号 × 100（字号变化时在 `onConfigurationChanged` 里更新）；背景 `#EDF5FA`；`addJavascriptInterface(new Bridge(), "MunwordAndroid")`；载入 `file:///android_asset/site/index.html`。
+- **只加载自己的文件**：`shouldOverrideUrlLoading` 拒绝一切不以 `file:///android_asset/site/` 开头的导航；`shouldInterceptRequest` 对其他地址（`data:`、`blob:` 除外）返回空响应并记日志。`DownloadListener` 只提示“请重新点击下载按钮”（正常的下载都被桥拦截）。
+- **远程调试**：启动时执行 `getprop debug.munword.devtools`，等于 `1` 才 `setWebContentsDebuggingEnabled(true)`；只能从 adb 设置。
+- **桥 `MunwordAndroid`**（在 WebView 的 JavaBridge 线程上调用，共享状态加锁）：
+  - `begin(name, mime, size) → id`：文件名净化（去掉 `\ / : * ? " < > |` 和控制字符、去掉开头的点、超过 120 字符时截断并保留扩展名，空则 `PKUNMUN2026.docx`）；`size` 超过 200 MB 拒绝；在 `cache/saving/` 建临时文件；
+  - `append(id, base64)`：解码写入，出错只记下，`finish` 时报告；
+  - `finish(id)`：关闭、核对写入字节数等于 `size`，回到主线程保存；
+  - `failed(name, message)`：页面读 Blob 失败时调用，弹出“保存失败”；
+  - `openedName()`、`openedSize()`、`openedChunk(offset, length)`（base64，`NO_WRAP`，每次最多 786432 字节）、`openedDone()`（清除）。
+- **保存**（后台线程，完成后弹窗）：
+  - API 29+：`ContentResolver.insert("content://media/external/downloads", {DISPLAY_NAME, MIME_TYPE, relative_path="Download/", is_pending=1})`，写入后 `is_pending=0`，失败删除该条目；回读系统实际的文件名（重名时系统改名）。
+  - API 23–28：没有权限时把任务排队，并用 `requestPermissions` 一次请求读、写两项（同一个弹窗；Android 8.0 只授予请求的那一项，只有写权限时拒绝写入公共 Download）；允许 → 公共 Download（重名加 “ (1)”、“ (2)”），`MediaScannerConnection.scanFile`；拒绝 → 应用自己的 `files/Download`。
+  - API 21–22：直接写公共 Download。
+  - 以上任何一种抛出 `IOException`（没有挂载共享存储、存储已满等）时，改存应用自己的 `files/Download`，弹窗写明“手机的「下载」文件夹暂时无法写入”。
+  - 弹窗：标题“已保存”，正文“文件：<名称>\n位置：<位置>。”（DOCX 另加“可以用 WPS Office 或 Microsoft Word 打开。”），按钮「打开」（`ACTION_VIEW` + 读授权；`queryIntentActivities` 后去掉本应用——它自己也接收 DOCX——剩一个就直接打开，多个用 `createChooser` + `EXTRA_INITIAL_INTENTS`，没有就说明安装 WPS / Word；Android 11+ 需要清单里对“VIEW + DOCX”的 `<queries>`）、「分享」（`ACTION_SEND` + `ClipData` + 读授权，系统分享面板；Android 7+ 用 `EXTRA_EXCLUDE_COMPONENTS` 去掉本应用，Android 5–6 没有这个参数，改为 `queryIntentActivities` 去掉本应用后用 `createChooser` + `EXTRA_INITIAL_INTENTS` 逐个列出）、「完成」。两者都用 `SavedFiles` 地址（API 29+ 为 `media/<id>/<名称>`），`ActivityNotFoundException` 与 `SecurityException` 都转成提示，不会闪退。
+- **选择文件**：`onShowFileChooser` → `ACTION_GET_CONTENT`、`CATEGORY_OPENABLE`、`*/*`，`EXTRA_MIME_TYPES` = DOCX、`application/octet-stream`、`application/zip`；找不到时退到 `ACTION_OPEN_DOCUMENT`；取消时回调 `null`（必须回调，否则输入框不再响应）。
+- **打开方式 / 分享传入**：`onCreate` 与 `onNewIntent` 读取 `VIEW` 的 data 或 `SEND` 的 `EXTRA_STREAM`，处理后把 intent 改成 `MAIN`，回到应用时不再重复传入。`file://` 地址在 API 23–28 先请求存储权限。后台线程读 `DISPLAY_NAME` / `SIZE`，超过 25 MB 拒绝，读入内存；页面就绪（`onPageFinished`）后 `evaluateJavascript("window.__munwordReceive && window.__munwordReceive()")`。
+- **生命周期**：返回键 `moveTaskToBack(true)`（保留进度）；`onPause/onResume` 转给 WebView；`onRenderProcessGone`（API 26+）销毁并重建 WebView，提示“页面意外关闭，已重新打开”，返回 `true`；Android 8.1+ 白色导航栏与深色按钮（标志位 `0x10`）。
+
+### 20.3 `bridge.js`（页面一侧）
+
+没有 `window.MunwordAndroid` 时什么也不做（同一份页面在桌面 Chromium 里测试时由测试注入替身）。
+
+- 包装 `URL.createObjectURL` / `revokeObjectURL`，记住每个 Blob 地址对应的 Blob。
+- 覆盖 `HTMLAnchorElement.prototype.click`：带 `download` 属性、地址是记住的 Blob 时，`FileReader.readAsDataURL` 读出，取逗号后的 base64，按 1048576 字符一块调用 `begin` / `append` / `finish`；读失败调用 `failed`。其他链接照常点击。
+- `window.__munwordReceive()`：按 786432 字节一块（3 的倍数，块间没有填充）读回、`atob` 成 `Uint8Array`，调用 `openedDone()`，构造 `File`（DOCX MIME），记为 `held` 并交付。
+- 交付：等页面的 `input[type=file]` 出现（每 100 ms，最多 10 秒），`new DataTransfer()` 放入文件，赋给 `input.files`。Chromium 69 等旧版本赋值时自己会派发真实的 `change` 事件，新版本不会：交付期间捕获阶段的监听器记下是否已有 `change`，没有才补派一个。
+- 保留：页面在点选文书类型时会清空文件（先选类型、后选文件的设计），而传入的文件先于类型到达。点击 `.typeCard` 后等 `.dropzone.hasFile` 消失（每 50 ms，最多 3 秒）再交付一次 `held`。用户自己选了文件（交付之外的可信 `change` 事件）时清除 `held`。
+
+### 20.4 手机版页面（`build-site.mjs` → `dist/android/site/`）
+
+- 先核对 `public/local-build.json` 的版本和 `public/local-styles.css` 的哈希（需要先运行 `pnpm build:local-tools`）。
+- `app.js` = `polyfills.js` + `flex-gap.js`（其中占位符 `/*AUTO_MARGIN_SELECTORS*/[]` 替换为样式表里外边距为 `auto` 的选择器列表）+ esbuild 打包 `local_web/main.tsx`（`target: chrome69`、`format: iife`、`minify`、`jsx: automatic`，`process.env.NODE_ENV="production"`、`NEXT_PUBLIC_API_URL=""`）。
+- `styles.css` = `legacyCss(public/local-styles.css)`：
+  1. `@layer` 原地展开；
+  2. 选择器列表里含 `:where(`、`:is(`、`::file-selector-button`、`::backdrop`、`:focus-visible`、`::marker`、`:has(` 的规则拆成每个选择器一条（关键帧里的除外）；
+  3. 单值 `inset` 前加 `top/right/bottom/left`；`margin-inline` / `padding-inline` 前加左右两条；`clamp(a, …)` 前加 `a`；`min()` / `max()` 前加最后一个参数；`overflow-wrap: anywhere` 前加 `word-wrap: break-word`；
+  4. `justify-content` / `align-items` / `align-self` / `align-content` 的 `start` / `end` 改成 `flex-start` / `flex-end`（样式表里出现 `reverse` 方向时构建报错）。
+- `flex-gap.js`：只在 `<html>` 有 `no-flex-gap` 类时运行。`MutationObserver`（子节点、文字、`class` / `open` / `hidden` 属性）和窗口尺寸变化触发，`requestAnimationFrame` 合并。每次先撤销上次设置的行内外边距，再遍历所有 `display: flex / inline-flex` 且 `row-gap` / `column-gap` 非零的元素：子项为非空文字节点或非 `display:none`、非绝对 / 固定定位的元素；从第二项起，元素在主轴起始边加间距，文字节点则给它前面的元素在主轴末端加间距；换行容器给每个元素加交叉轴末端间距，容器本身减去同样的值。先全部读完计算样式再统一写入；匹配“外边距为 auto”的选择器的元素跳过。
+- `index.html`：`<html lang="zh-CN">`；CSP `connect-src 'none'; img-src 'self' data: blob:; font-src 'self' data: blob:; media-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'`；视口、标题、图标、`styles.css`；`#root` 占位“正在加载 PKUNMUN 2026 排版系统…”；内联 `bridge.js`；ES5 加载器：
+  1. 探测 flex gap：绝对定位的纵向 flex 容器、`row-gap:1px`、两个空子元素，`scrollHeight !== 1` 时给 `<html>` 加 `no-flex-gap`；
+  2. `[].flat`、`CSS.supports("display","grid")`、`TextDecoder` 都有 → 加载 `app.js`（加载失败显示“程序文件不完整。请重新安装本应用。”）；
+  3. 否则显示“手机的网页组件（WebView）版本太旧，无法运行排版系统。”、当前版本号与“需要 69 或更高”、更新「Android System WebView」（或「系统 WebView」「Chrome」「浏览器内核」）的办法，以及改用网页版或电脑版。
+- 另复制 `favicon.svg`、`licenses/`，写 `version.json`（`kind: "android"`、`target: "chrome69"`、各文件哈希）。
+- 在当前 Chromium 中，手机版页面与桌面页面的 16 张截图（桌面与手机宽度、四个步骤、两份文档）逐像素相同。
+
+### 20.5 打包与签名（`build-apk.mjs`）
+
+1. 生成手机版页面（`--skip-site` 跳过），复制到 `dist/android/build/assets/site/`。
+2. `aapt2 compile --no-crunch --dir android/res` → `aapt2 link -I android.jar(API 23) --manifest … --min-sdk-version 21 --target-sdk-version 34 --version-code … --version-name … -A assets`。
+3. `javac -source 8 -target 8 -bootclasspath android.jar`：先编译替身到单独目录，再以它为 classpath 编译 `src/`（`-Xlint:all -Werror -implicit:none`）；代码不用 lambda。
+4. `dalvik-exchange --dex --min-sdk-version=21`，在 classes 目录里按排序后的相对路径传入。
+5. 自己写 ZIP：顺序为 `AndroidManifest.xml`、`classes.dex`、`resources.arsc`、`res/…`、`assets/…`（各组内按名称），全部日期 2008-01-01 00:00，无扩展字段，`resources.arsc` 与 PNG 不压缩，其余 DEFLATE 9。
+6. `zipalign -f -p 4`，再 `zipalign -c` 检查 → `PKUNMUN2026-Formatter-Android-unsigned.apk`。
+7. 有密钥（`MUNWORD_ANDROID_KEYSTORE`、`…_KEYSTORE_PASSWORD`、`…_KEY_ALIAS`，可选 `…_KEY_PASSWORD`）时 `apksigner sign --min-sdk-version 21`，v1 + v2 + v3；`apksigner verify --print-certs` 必须三种方案都通过，证书 SHA-256 必须等于 `android/signing-cert.sha256`。
+8. `--publish`：复制到 `downloads/`，`SHA256SUMS.txt` 只替换 APK 一行（其余行保留，按文件名排序；`desktop/build-desktop.mjs --publish` 同样只替换自己的两行）。
+
+签名密钥（PKCS12，RSA 3072，SHA256withRSA，有效期 100 年，别名 `munword`）不进仓库。之后的版本必须用同一把密钥签名，用户才能覆盖安装。
+
+### 20.6 验收
+
+- `tests/android.test.mjs`（`node --test`，CI 的 source-checks 单独一步；不进 `test:unit`，因为 `package.json` 的哈希记录在桌面安装包的构建记录里，改它会改变 DMG / EXE）：`legacyCss` 各项降级；在去掉新内置函数的 `vm` 环境里加载 `polyfills.js` 后行为与原生一致、不可枚举；`bridge.js` 与加载器能按 ES5 解析；清单（无联网、存储到 28、导出设置、接收 DOCX）；`MainActivity` 关闭文件访问、调试受 adb 属性控制、没有 lambda；校验值行的更新规则；已发布 APK 的校验值、条目和版本。
+- `acceptance/verify-apk.mjs`：从源码重建未签名 APK，与发布 APK 去掉 v1 签名文件后的全部条目逐字节比较；v1/v2/v3 签名与证书固定值；`aapt dump badging` 读回包名、版本、`sdkVersion:'21'`、`targetSdkVersion:'34'`、权限只有存储（≤28）、桌面名称；`SHA256SUMS.txt` 与安装教程含 APK 校验值。写 `apk.json`。
+- `acceptance/webview-floor.mjs`：下载 Chromium 快照 67、69、79、83、88、95、99、109（位置号见脚本）加当前 Chromium，以 390×844 手机视口打开手机版页面并注入桥的替身。67 必须显示 WebView 说明且不加载 `app.js`；其余对 11 份原稿：先经 `__munwordReceive` 传入文件，再点选文书类型，确认文件仍在，识别、确认第 03 步可编辑、生成，替身收到的字节数正确，DOCX 与共享页面在当前 Chromium 中的输出（`output/desktop-smoke/`）逐部件相同。写 `webview-floor.json`。
+- `acceptance/emulator.mjs`：一台 adb 设备上安装发布的 APK（不带 `-g`），`setprop debug.munword.devtools 1`，经 `/proc/net/unix` 找到 `webview_devtools_remote_<pid>` 并转发，用 DevTools 驱动页面，用 `uiautomator dump` 找原生弹窗按钮并 `input tap`，`adb pull` 读回 Download 里的文件。检查项见 `android/README.md`；写 `emulator.json`、截图和 logcat。
+
+## 21. 网页部署
 
 **`pnpm build:static` → `static-site/`**：
 
@@ -2262,9 +2352,9 @@ PKUNMUN2026.app/Contents/
 
 **连通性**：大陆不同运营商对 `workers.dev` 的连通性需要实测，不能承诺所有网络都可达。
 
-## 21. 发布与持续集成
+## 22. 发布与持续集成
 
-### 21.0 `.github/workflows/source-checks.yml`
+### 22.0 `.github/workflows/source-checks.yml`
 
 每次推送和每个 PR 都运行，ubuntu-24.04，Node 24、pnpm 11.19.0、Python 3.12：
 
@@ -2273,17 +2363,19 @@ PKUNMUN2026.app/Contents/
 3. `pnpm test:unit`、Python `unittest`、`pnpm build`、`rendered-html`、`pnpm test:static`；
 4. `pnpm typecheck`、`pnpm lint`、`scripts/audit-source.py`。
 
-### 21.1 `.github/workflows/offline-installers.yml`
+### 22.1 `.github/workflows/offline-installers.yml`
 
-- **触发**：推送中改动了 `desktop/**`、`downloads/**`、`VERSION`、工作流本身，或页面的来源（`app/**`、`local_web/**`、`shared/**`、`public/**`、`package.json`、`pnpm-lock.yaml`、`postcss.config.mjs`、`scripts/build-local-tools.mjs`、`scripts/build-static.mjs`）；或手动触发。
+- **触发**：推送中改动了 `desktop/**`、`android/**`、`downloads/**`、`VERSION`、工作流本身，或页面的来源（`app/**`、`local_web/**`、`shared/**`、`public/**`、`package.json`、`pnpm-lock.yaml`、`postcss.config.mjs`、`scripts/build-local-tools.mjs`、`scripts/build-static.mjs`）；或手动触发。
 - **作业**：
 
 | 作业 | 机器 | 内容 |
 |---|---|---|
-| reproduce | ubuntu-24.04 | 安装 NSIS、hfsprogs、faketime、zsh；编译带补丁的 libdmg-hfsplus；安装 rcodesign；用 bash 和 zsh 跑 `tests/desktop.test.mjs`；重建两个安装包，与 `SHA256SUMS.txt` 逐字节比对；Playwright Chromium 从 `file://` 跑全部验收原稿（`offline-smoke.mjs`）；最低浏览器检查（`browser-floor.mjs`）：Chromium 98 必须看到说明，99 和 109 必须完整跑通 |
+| reproduce | ubuntu-24.04 | 安装 NSIS、hfsprogs、faketime、zsh；编译带补丁的 libdmg-hfsplus；安装 rcodesign；用 bash 和 zsh 跑 `tests/desktop.test.mjs`；重建两个安装包，与 `SHA256SUMS.txt` 中 DMG、EXE 两行逐字节比对；Playwright Chromium 从 `file://` 跑全部验收原稿（`offline-smoke.mjs`）；最低浏览器检查（`browser-floor.mjs`）：Chromium 98 必须看到说明，99 和 109 必须完整跑通 |
 | wine | ubuntu-24.04 | 32 位 Windows 7 与 64 位 Windows 10 两个 Wine 前缀，31 项场景：静默安装、11 种浏览器组合、含空格/中文/#/% 的路径、卸载（`acceptance/wine/scenarios.sh`） |
 | windows | windows-2022、windows-11-arm | 先装 1.8.4 再升级；检查快捷方式和卸载项；启动器真的拉起浏览器独立窗口、URL 转义正确；系统自带的 Edge / Chrome / Firefox 跑全部原稿和模板；卸载（`acceptance/windows.py`，Selenium） |
 | macos | macos-14、macos-15、macos-15-intel | `hdiutil verify`；中文文件名；`codesign --verify --deep --strict`；记录 Gatekeeper 判定；原生运行入口；LaunchServices 真实打开；Chrome / Firefox 跑全部原稿和模板，再跑复制到桌面的单文件页面；Safari 经本机 http 跑全流程；Safari 像用户那样从访达打开程序、DMG 里的网页和复制到桌面的网页，并通过辅助功能（pyobjc AX 树）读取 Safari 实际显示的内容（`acceptance/macos.py`） |
+| android | ubuntu-24.04 | 从 Ubuntu 安装 aapt、dalvik-exchange、zipalign、apksigner、libandroid-23-java、openjdk-21-jdk-headless；`build-desktop.mjs --only site`；`verify-apk.mjs`；Playwright Chromium 跑共享页面得到参考输出（`offline-smoke.mjs`）；`webview-floor.mjs`（第 20.6 节） |
+| android-devices | ubuntu-24.04 ×10 | 开启 KVM；`reactivecircus/android-emulator-runner@v2`（`google_apis`、x86_64、关闭动画、无快照），API 21、23、26、28、29、30、31、33、34、35，各用镜像自带的 WebView；`emulator.mjs` 测发布的 APK，参考输出来自 android 作业 |
 | release | ubuntu-24.04 | 仅在以上全部通过，且是 main / 开发分支推送或手动触发时运行，见下 |
 
 **浏览器全流程**（`acceptance/browser_flow.py`）：
@@ -2299,17 +2391,17 @@ PKUNMUN2026.app/Contents/
 
 1. 下载全部构建产物。
 2. 运行 `desktop/acceptance/stage_release.py`：任何一项没有通过就拒绝发布。通过后生成：
-   - 两个安装包；
+   - 三个安装包（DMG、EXE、APK；`stage_release.py` 另要求 APK 校验报告、手机版页面的 Chromium 检查和十六个模拟器报告全部通过）；
    - `PKUNMUN2026-Install-Guide.txt`（下载页显示名“安装教程（先看这个）.txt”）；
    - `SHA256SUMS.txt`；
    - `PKUNMUN2026-{版本}-Verification.zip`（全部报告、日志和截图）；
    - 发布说明 `notes.md`。
-3. 发布到 tag `v{VERSION}-desktop.2`，标题“v{版本} · 离线桌面安装包（通用版：一个 DMG、一个 EXE，兼容 Windows 7 与 macOS 10.11 起）”，标为 Latest。
+3. 发布到 tag `v{VERSION}-desktop.2`，标题“v{版本} · 离线安装包（macOS DMG、Windows EXE、Android APK；兼容 macOS 10.11、Windows 7、Android 5.0 起）”，标为 Latest。
    - 同名 release 已存在且校验和相同 → 只替换附件、更新说明；
    - 校验和不同 → 删除旧 release 和 tag 后重建，让 tag 指向通过验证的提交。
 4. 需要 `GH_REPO` 环境变量，因为该步骤在 checkout 目录之外运行，gh 无法从 git 读取仓库。
 
-### 21.2 其他发布方式
+### 22.2 其他发布方式
 
 - **源码包**：`python scripts/package-release.py --output <zip> [--desktop]`：
   - 先运行 `audit-source.py`（扫描密钥、令牌、个人路径、邮箱）；
@@ -2319,7 +2411,7 @@ PKUNMUN2026.app/Contents/
   - 写入 `PACKAGE-MANIFEST.json`，回读 CRC 和哈希，原子地“不存在才创建”。
 - **视觉验收（可选）**：`deploy/visual-qa.compose.yaml` 启动 Gotenberg，`scripts/visual-qa.py` 把成稿转成 PDF 后量行距。
 
-## 22. 测试体系
+## 23. 测试体系
 
 **命令**：
 
@@ -2351,6 +2443,7 @@ python scripts/audit-source.py
 | template-race | 模板生成的竞态 |
 | dr-numbering、all-numbering | 六个文种的编号转换、层级规划、原生编号 |
 | edge-cases | 边界情况 |
+| android | 手机版页面的样式降级与内置函数补丁；桥和加载器是 ES5；清单承诺；校验值行；已发布 APK（第 20.6 节） |
 | desktop | 离线页面 CSP 与相对路径；加载器在新旧浏览器中的行为和语法兼容；单文件页面；macOS 入口的架构和最低系统；启动脚本在多种 shell 下的浏览器选择和 URL 编码；安装脚本设置；已发布安装包的校验和与版本 |
 | rendered-html | 服务端渲染出产品页，有六个文种 |
 | static-deployment | 静态资源白名单；发布包能在不调用 API、不填写第 03 步的情况下识别并下载 |
@@ -2362,7 +2455,7 @@ python scripts/audit-source.py
   - 所有端到端测试都只用规则处理它们，不得写针对样例的代码。
 - **其他回归脚本**：`scripts/stress_damage.py`（损伤注入）、`run_resolution_stress_regression.py`、`engine_readback_diff.py`、`docx_compare.py`、`reference_regression.py`。
 
-## 23. 验收标准（复原后的程序应满足）
+## 24. 验收标准（复原后的程序应满足）
 
 1. 11 份验收原稿在两种引擎中都能识别、生成，校验结果无 ×；输出能被 Word / WPS / LibreOffice 正常打开。
 2. **成稿再处理一遍**（选同一文种）后，没有新的文字改动：幂等。
@@ -2376,9 +2469,10 @@ python scripts/audit-source.py
    - macOS：通过 `codesign --verify --deep --strict`，能原生运行；
    - Windows：无管理员权限即可安装、升级、卸载；
    - 旧浏览器看到中文说明，不白屏。
-10. 同一源码重建的安装包字节相同。
+10. 同一源码重建的安装包字节相同（APK 为条目内容相同，签名证书与登记的指纹相同）。
+11. **安卓安装包**：没有联网权限；WebView 69 以上跑完全部原稿、成品与电脑上逐部件相同，以下显示更新说明；保存到「下载」、Android 6–9 存储权限、打开方式与分享传入在 Android 5.0–16 上可用；可覆盖安装上一版，拒绝存储权限时存到应用文件夹，页面进程崩溃（Android 8+）后自动恢复，平板屏幕和 1.3 倍字体下页面不超出屏幕宽度。
 
-## 24. 从零复原的建议顺序
+## 25. 从零复原的建议顺序
 
 1. **策略文件**：照抄 `shared/*.json`。它们是规则本身，比代码更稳定。
 2. **包安全层**：实现 `readPackage`、`decodeXml`、`visibleText` 和切分工具（第 5 章），用畸形 ZIP 测试。
@@ -2389,7 +2483,7 @@ python scripts/audit-source.py
 6. **国家名称**（第 11 章）与**编号系统**（第 10 章）作为独立模块，单独写单元测试。
 7. **界面**（第 3 章）：先做浏览器模式，再加 API 模式；重点实现 `operationRef` 与 `discardPending`。
 8. **预览、模板、诊断**（第 14–16 章）。
-9. **静态构建与来源记录**（第 19.1 节），然后做桌面安装包（第 19 章）和 CI（第 21 章）。
+9. **静态构建与来源记录**（第 19.1 节），然后做桌面安装包（第 19 章）、安卓安装包（第 20 章）和 CI（第 22 章）。
 10. **Python 兼容引擎**（第 17 章）：可选。需要 API 或批处理时，按模块对应表移植，并用一致性夹具对齐。
 
 ## 附录 A：序言与行动动词前缀（`document-policy.json` → `prefixes`）
