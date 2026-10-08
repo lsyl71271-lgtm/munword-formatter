@@ -52,5 +52,5 @@
   - 不需要 Gradle：用 Ubuntu 软件包（aapt2、dx、zipalign、apksigner、API 23 的 android.jar）和 OpenJDK 构建，同一份源码得到相同的 APK 内容；签名密钥不进仓库，证书指纹登记在 `android/signing-cert.sha256`。
 - **旧 WebView 兼容**：手机版页面按 Chromium 69 编译，补齐缺少的内置函数、CSS 级联层、`:where()`、`inset`、`clamp()`、flex 对齐和 flex `gap` 等；低于 69 时显示如何更新系统 WebView。
   - 本地实测：Chromium 66、67 显示说明且不加载程序；69、75、79、83、85、88、91、95、99、109 和 141 跑完 11 份原稿，成品与共享页面逐部件相同；当前 Chromium 中手机版页面与桌面页面截图逐像素相同。
-- **持续集成**：`offline-installers` 新增 `android`（重建比对、签名核对、Chromium 67–最新）和 `android-devices`（Android 5.0、6.0、8.0、9、10、11、12、13、14、15 模拟器，用各系统自带的 WebView）两组作业，全部通过才发布；`SHA256SUMS.txt` 列出三个安装包，安装教程新增安卓一章。
+- **持续集成**：`offline-installers` 新增 `android`（重建比对、签名核对、Chromium 67–最新）和 `android-devices`（Android 5.0 到 16 共十六个模拟器，用各系统自带的 WebView）两组作业，全部通过才发布；`SHA256SUMS.txt` 列出三个安装包，安装教程新增安卓一章。
 

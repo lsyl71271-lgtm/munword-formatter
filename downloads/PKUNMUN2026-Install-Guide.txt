@@ -332,7 +332,7 @@ Intel 芯片和 Apple 芯片（M1、M2、M3、M4……）用的是同一个文�
     1.8.5 版的校验值：
       macOS  ：663e72368b529db5b5d0669bfa622172f294fa8790ac3b554625afd527f6ea58
       Windows：8da4ced77cf9fc17cc4fec42364501f13f3c8db822c72ebd289676f5ea429870
-      Android：24b2563e1a5142c7a2186a6718803230d4db2381827f9e709c837dbba0f20496
+      Android：1ebc390fc646004bd7eab35e2091ee9d84401eca7c6c5a3103481921912cfad3
 
 --------------------------------------------------------------
 下载页：https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest

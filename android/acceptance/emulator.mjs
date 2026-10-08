@@ -16,7 +16,12 @@
 //   through the type choice and formats it like any other.
 // Older WebView (the notice): the notice shows and app.js never loads.
 // Both: the save path for a 1.5 MB file (two chunks each way), Android 6–9's storage permission prompt, duplicate
-// names, the dialog's 打开 and 分享, and "open with" / "share" handing the exact bytes over.
+// names, the dialog's 打开 and 分享 (the share sheet must not offer this app itself), and "open with" / "share"
+// handing the exact bytes over; no page wider than the screen.
+// Also: installed over the APK released before (MUNWORD_PREVIOUS_APK, when given); Android 6–9 refusing the
+// permission (the file goes to the app's own folder and can still be shared); WebView 69+: the file picker opens and
+// cancels cleanly, and on Android 8+ a crashed page process is replaced without the app closing.
+// MUNWORD_DEVICE_PROFILE: "tablet" (1200×1920 at 240 dpi) or "large-dark" (font scale 1.3, dark mode).
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -55,6 +60,8 @@ const sdk = Number(shell("getprop ro.build.version.sdk").trim());
 // (NavigationBarFragment.onKeyguardOccludedChanged), so there the permission is granted from adb beforehand; the
 // prompt itself is checked on Android 6.0 and 9.
 const PROMPT_UNUSABLE = sdk === 26;
+const PROFILE = process.env.MUNWORD_DEVICE_PROFILE || "";
+const PREVIOUS_APK = process.env.MUNWORD_PREVIOUS_APK || "";
 const screencap = (name) => {
   try {
     writeFileSync(path.join(out, `${name}.png`), execFileSync(ADB, ["exec-out", "screencap", "-p"], { maxBuffer: 64 << 20, timeout: 60000 }));
@@ -161,14 +168,14 @@ async function savedDialog(what) {
     for (const line of lines.slice(start + 1)) {
       const failed = /: save failed: (.*)/.exec(line);
       if (failed) throw new Error(`the app could not save ${what}: ${failed[1]}`);
-      const done = /: saved (.+) \((?:content|file):/.exec(line);
-      if (done) return { id: Number(/: save (\d+) begins: /.exec(lines[start])[1]), name: done[1] };
+      const done = /: saved (.+?) \(((?:content|file):.*)\)$/.exec(line);
+      if (done) return { id: Number(/: save (\d+) begins: /.exec(lines[start])[1]), name: done[1], uri: done[2] };
     }
     return null;
   }, 60000, `the app saving ${what}`);
   lastSaveId = saved.id;
   const message = await waitForNode((node) => node["resource-id"] === "android:id/message", 60000, `save dialog (${what})`);
-  return { name: saved.name, text: message.text || "" };
+  return { name: saved.name, uri: saved.uri, text: message.text || "" };
 }
 async function allowStoragePrompt() {
   // Android 6–9 ask once, the first time something is saved. Allow is tapped again while the prompt is still there
@@ -327,7 +334,11 @@ async function bridgeSaves() {
   const third = await savedDialog("third save");
   tap(await waitForNode(button("分享"), 10000, "分享 button"));
   const chooser = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, "share sheet");
+  await sleep(1500);
   screencap("share-sheet");
+  const offered = uiNodes().map((node) => node.text || "").filter(Boolean);
+  // The app's own label ("PKUNMUN 排版"; Android 5's UI Automator shows the Chinese as "?"). The file name has no space.
+  if (offered.some((text) => /^PKUNMUN (排|\?)/.test(text))) throw new Error(`the share sheet offers this app itself: ${JSON.stringify(offered)}`);
   await backToApp("back from the share sheet");
   step("分享 opens the share sheet", { name: third.name, chooser });
   return first.name;
@@ -354,6 +365,64 @@ async function bridgeOpens(name, bytes) {
   }
 }
 
+// The page must fit the screen's width at any size and font scale.
+async function fitsWidth(where) {
+  const sizes = await cdp.eval("({ content: document.documentElement.scrollWidth, screen: window.innerWidth })");
+  if (sizes.content > sizes.screen + 1) throw new Error(`${where}: the page is ${sizes.content}px wide on a ${sizes.screen}px screen`);
+  return sizes;
+}
+
+// Android 6–9 refusing the permission: the file goes to the app's own folder, the dialog says so, it can be shared.
+async function refusedStorage() {
+  for (const permission of ["READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]) shell(`pm revoke ${PACKAGE} android.permission.${permission}`);
+  shell(`am force-stop ${PACKAGE}`); // (revoking stops the app on most versions; on the rest, this does)
+  await launch();
+  await connect();
+  await cdp.until(`document.querySelectorAll(".typeCard").length === 6 || (document.body && document.body.innerText.indexOf("WebView）版本太旧") >= 0)`, 90000, PAGE_STATE);
+  await saveThroughBridge("PKUNMUN-no-permission.docx", BIG.subarray(0, 3000));
+  let tapped = false;
+  await waitFor(() => {
+    const nodes = uiNodes();
+    if (dismissSystemDialog(nodes)) return null;
+    const deny = findNode(nodes, (node) => /permission_deny(_and_dont_ask_again)?_button$/.test(node["resource-id"] || "") || /^(deny|don.t allow)$/i.test(node.text || ""));
+    if (deny) { tap(deny); tapped = true; return null; }
+    return tapped && resumedActivity().startsWith(PACKAGE);
+  }, 60000, "storage permission prompt refused");
+  const saved = await savedDialog("save without the permission");
+  if (!/^content:\/\/org\.pkunmun\.formatter2026\.files\/app\//.test(saved.uri)) throw new Error(`refused, but saved to ${saved.uri}`);
+  if (shell(`ls /sdcard/Download/ 2>/dev/null`).includes("PKUNMUN-no-permission")) throw new Error("refused, but the file is in Download");
+  if (!/\?{3}/.test(saved.text) && !saved.text.includes("应用自己的文件夹")) throw new Error(`the dialog does not say where: ${saved.text}`);
+  tap(await waitForNode(button("分享"), 10000, "分享 button"));
+  const chooser = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, "share sheet");
+  await backToApp("back from the share sheet");
+  step("storage permission refused: saved in the app's own folder, the dialog says so, 分享 works", { uri: saved.uri, chooser });
+}
+
+// The page's file input opens the system picker; cancelling it leaves the page able to open it again.
+async function filePicker() {
+  for (const attempt of [1, 2]) {
+    await cdp.eval(`document.querySelector('input[type="file"]').click(), true`, { userGesture: true });
+    const picker = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, `the file picker (${attempt})`);
+    if (attempt === 1) { await sleep(1500); screencap("file-picker"); }
+    await backToApp(`back from the file picker (${attempt})`);
+    report.picker = picker;
+  }
+  if (!(await cdp.eval(`document.querySelectorAll(".typeCard").length === 6`))) throw new Error("the page changed after the picker was cancelled");
+  step("file picker opens, and cancelling it leaves the page ready (twice)", { picker: report.picker });
+}
+
+// Android 8+: the page's process crashes; the app replaces the page instead of closing.
+async function pageProcessCrash() {
+  await cdp.send("Page.crash").catch(() => { /* the connection goes down with the page */ });
+  await sleep(3000);
+  await waitFor(() => resumedActivity().startsWith(PACKAGE), 20000, "the app still in front after the page crashed");
+  await connect();
+  await cdp.until(`document.querySelectorAll(".typeCard").length === 6`, 90000, PAGE_STATE);
+  const log = appLog().join("\n");
+  if (!/render process gone, crash=true/.test(log)) throw new Error("the app did not see the page process crash");
+  step("crashed page process: the app stays open and loads the page again");
+}
+
 const typeCard = (type) => `[].find.call(document.querySelectorAll(".typeCard"), function (c) { return c.querySelector("b").textContent === ${JSON.stringify(type)}; })`;
 const clickButton = (label) => `[].find.call(document.querySelectorAll("button"), function (b) { return b.textContent.indexOf(${JSON.stringify(label)}) >= 0; }).click(), true`;
 const REVIEW = `[].some.call(document.querySelectorAll("h2"), function (h) { return h.textContent === "确认识别结果"; })`;
@@ -366,6 +435,7 @@ async function recognizeAndGenerate(input, { rotate = false, background = false 
   if (error) throw new Error(`${input}: ${error}`);
   if (!(await cdp.eval(`document.querySelectorAll(".reviewSection input").length`))) throw new Error(`${input}: step 03 has no editable fields`);
   if (input.startsWith("07") || input.startsWith("01")) screencap(`review-${input}`);
+  await fitsWidth(`${input} review`);
   if (rotate) {
     shell("settings put system accelerometer_rotation 0");
     shell("settings put system user_rotation 1");
@@ -397,6 +467,8 @@ async function recognizeAndGenerate(input, { rotate = false, background = false 
 
 async function appFlows() {
   report.flexGapFallback = await cdp.eval(`document.documentElement.className.indexOf("no-flex-gap") >= 0`);
+  report.width = await fitsWidth("start page");
+  await filePicker();
   for (const [index, [type, input]] of CASES.entries()) {
     await cdp.eval("location.reload(), true");
     await sleep(500);
@@ -466,12 +538,26 @@ async function main() {
     model: shell("getprop ro.product.model").trim(),
   };
   console.log(`Android ${report.device.release} (API ${sdk}, ${report.device.abi})`);
+  if (PROFILE === "tablet") { shell("wm size 1200x1920"); shell("wm density 240"); }
+  if (PROFILE === "large-dark") {
+    shell("settings put system font_scale 1.3");
+    try { shell("cmd uimode night yes"); } catch { /* Android 10+ only */ }
+  }
+  if (PROFILE) { report.profile = PROFILE; await sleep(3000); }
   shell("input keyevent 82"); // wake and unlock
   for (const command of ["wm dismiss-keyguard", "locksettings set-disabled true"]) { try { shell(command); } catch { /* not on this version */ } }
+  if (PREVIOUS_APK && existsSync(PREVIOUS_APK)) {
+    adb(["install", PREVIOUS_APK]);
+    report.previous = { versionCode: Number(/versionCode=(\d+)/.exec(shell(`dumpsys package ${PACKAGE}`))?.[1]) };
+  }
   adb(["install", "-r", apk]);
   const installed = shell(`dumpsys package ${PACKAGE}`);
   report.installed = { versionName: /versionName=(\S+)/.exec(installed)?.[1], versionCode: /versionCode=(\d+)/.exec(installed)?.[1] };
   if (/android\.permission\.INTERNET/.test(installed)) throw new Error("the app holds the INTERNET permission");
+  if (report.previous) {
+    if (!(Number(report.installed.versionCode) >= report.previous.versionCode)) throw new Error(`version ${report.installed.versionCode} installed over ${report.previous.versionCode}`);
+    step("installed over the APK released before (same signing key)", { from: report.previous.versionCode, to: Number(report.installed.versionCode) });
+  }
   step("installed", report.installed);
   shell("setprop debug.munword.devtools 1");
   if (PROMPT_UNUSABLE) {
@@ -491,13 +577,18 @@ async function main() {
   if (report.mode === "notice" && (await cdp.eval(`[].some.call(document.scripts, function (s) { return /app\\.js$/.test(s.src); })`))) throw new Error("app.js loaded below the floor");
   step(`WebView ${report.webview}: ${report.mode === "app" ? "the app runs" : "the update notice shows"}`, { userAgent: report.userAgent });
 
+  report.width = await fitsWidth(report.mode === "app" ? "start page" : "update notice");
+
   const bridgeFile = await bridgeSaves();
   await bridgeOpens(bridgeFile, BIG);
   if (report.mode === "app") await appFlows();
+  if (report.mode === "app" && sdk >= 26) await pageProcessCrash();
+  if (sdk >= 23 && sdk <= 28 && !PROMPT_UNUSABLE) await refusedStorage();
 
   let crashes = "";
   try { crashes = shell("logcat -d -b crash"); } catch { crashes = shell("logcat -d -s AndroidRuntime:E"); }
-  if (crashes.includes(PACKAGE)) throw new Error(`the app crashed:\n${crashes}`);
+  // The app's own process (a Java or a native crash); the page process crashed on purpose above is the WebView's.
+  if (/Process: org\.pkunmun\.formatter2026\b|>>> org\.pkunmun\.formatter2026 <<</.test(crashes)) throw new Error(`the app crashed:\n${crashes}`);
   step("no crash in the log");
   report.passed = true;
 }

@@ -87,6 +87,7 @@ test("the manifest: no network, storage only up to Android 9, exported only wher
   assert.match(activity, /getPackageName\(\)\.equals\(info\.activityInfo\.packageName\)\) continue;/);
   assert.match(activity, /"android\.intent\.extra\.EXCLUDE_COMPONENTS", new ComponentName\[\] \{new ComponentName\(this, MainActivity\.class\)\}/);
   assert.match(activity, /catch \(ActivityNotFoundException \| SecurityException e\)/);
+  assert.equal(activity.match(/getPackageName\(\)\.equals\(info\.activityInfo\.packageName\)\) continue;/g).length, 2, "打开 and, on Android 5–6, 分享 list other apps only");
 });
 
 test("checksum lines: each build replaces only its own", () => {

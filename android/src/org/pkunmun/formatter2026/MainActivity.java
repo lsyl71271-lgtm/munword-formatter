@@ -554,10 +554,23 @@ public final class MainActivity extends Activity {
         Intent send = new Intent(Intent.ACTION_SEND).setType(saved.mime).putExtra(Intent.EXTRA_STREAM, saved.uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         send.setClipData(ClipData.newRawUri(saved.name, saved.uri));
-        Intent chooser = Intent.createChooser(send, "分享文件");
-        // Leave this app itself out of the share sheet (Intent.EXTRA_EXCLUDE_COMPONENTS, Android 7+).
-        chooser.putExtra("android.intent.extra.EXCLUDE_COMPONENTS", new ComponentName[] {new ComponentName(this, MainActivity.class)});
         try {
+            Intent chooser;
+            if (Build.VERSION.SDK_INT >= 24) {
+                chooser = Intent.createChooser(send, "分享文件");
+                // Leave this app itself out of the share sheet (Intent.EXTRA_EXCLUDE_COMPONENTS, Android 7+).
+                chooser.putExtra("android.intent.extra.EXCLUDE_COMPONENTS", new ComponentName[] {new ComponentName(this, MainActivity.class)});
+            } else {
+                // Android 5–6 cannot leave an app out of the share sheet: offer every other app by name instead.
+                List<Intent> targets = new ArrayList<Intent>();
+                for (ResolveInfo info : getPackageManager().queryIntentActivities(send, PackageManager.MATCH_DEFAULT_ONLY)) {
+                    if (info.activityInfo == null || getPackageName().equals(info.activityInfo.packageName)) continue;
+                    targets.add(new Intent(send).setClassName(info.activityInfo.packageName, info.activityInfo.name));
+                }
+                if (targets.isEmpty()) throw new ActivityNotFoundException("no share target");
+                chooser = Intent.createChooser(targets.remove(targets.size() - 1), "分享文件");
+                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, targets.toArray(new Parcelable[targets.size()]));
+            }
             startActivity(chooser);
         } catch (ActivityNotFoundException | SecurityException e) {
             showMessage("无法分享", "手机上没有可以接收文件的应用。");

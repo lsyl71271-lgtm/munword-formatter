@@ -32,7 +32,9 @@ NATIVE = {
     "acceptance-macos-15-intel": ("macos.json", "macOS 15 Intel"),
 }
 # Android emulators (the android-devices matrix in offline-installers.yml): API level → release.
-ANDROID = {21: "5.0", 23: "6.0", 26: "8.0", 28: "9", 29: "10", 30: "11", 31: "12", 33: "13", 34: "14", 35: "15"}
+ANDROID = {21: "5.0", 22: "5.1", 23: "6.0", 24: "7.0", 25: "7.1", 26: "8.0", 27: "8.1", 28: "9", 29: "10", 30: "11", 31: "12",
+           32: "12L", 33: "13", 34: "14", 35: "15", 36: "16"}
+PROFILES = {"tablet": "平板尺寸屏幕（1200×1920）", "large-dark": "字体放大到 1.3 倍、深色模式"}
 
 
 def sha256(path: Path) -> str:
@@ -129,11 +131,20 @@ def main() -> int:
     floor_rows = "；".join(f"Chromium {row['milestone']} {'显示升级说明' if row['expect'] == 'notice' else '完整跑通'}" for row in floor)
     webview_rows = "、".join(str(row["milestone"]) for row in webview_floor if row.get("expect") == "flow")
     webview_notice = "、".join(str(row["milestone"]) for row in webview_floor if row.get("expect") == "notice")
-    device_rows = "\n".join(
-        f"| Android {ANDROID[api]}（API {api}） | {report.get('webview')} | "
-        + (f"全部 {len(report.get('cases', []))} 份原稿完整跑通；保存到「下载」、打开方式与分享传入" if report.get("mode") == "app" else "显示「更新系统 WebView」说明；保存到「下载」、打开方式与分享传入")
-        + ("；存储权限弹窗" if any(step.get("name") == "storage permission prompt shown and allowed" for step in report.get("steps", [])) else "") + " |"
-        for api, report in devices.items())
+    def device_row(api, report):
+        steps = [step.get("name", "") for step in report.get("steps", [])]
+        ran = lambda prefix: any(name.startswith(prefix) for name in steps)
+        parts = [f"全部 {len(report.get('cases', []))} 份原稿完整跑通" if report.get("mode") == "app" else "显示「更新系统 WebView」说明",
+                 "保存到「下载」、打开方式与分享传入"]
+        if ran("storage permission prompt shown"): parts.append("存储权限弹窗")
+        if ran("storage permission refused"): parts.append("拒绝权限时存到应用文件夹")
+        if ran("file picker"): parts.append("文件选择器")
+        if ran("crashed page process"): parts.append("页面进程崩溃后自动恢复")
+        if ran("installed over"): parts.append("覆盖安装上一版")
+        setting = f"（{PROFILES[report['profile']]}）" if report.get("profile") in PROFILES else ""
+        return f"| Android {ANDROID[api]}（API {api}）{setting} | {report.get('webview')} | {'；'.join(parts)} |"
+
+    device_rows = "\n".join(device_row(api, report) for api, report in devices.items())
     notes = f"""## 下载
 
 | 系统 | 文件 | 安装 |

@@ -246,22 +246,28 @@ jobs:
           retention-days: 30
 
   android-devices:
-    name: Android ${{ matrix.release }} (API ${{ matrix.api }}) emulator
+    name: Android ${{ matrix.release }} (API ${{ matrix.api }}) emulator${{ matrix.profile && format(' — {0}', matrix.profile) || '' }}
     needs: android
     strategy:
       fail-fast: false
       matrix:
         include:
           - { api: 21, release: '5.0' }
+          - { api: 22, release: '5.1' }
           - { api: 23, release: '6.0' }
+          - { api: 24, release: '7.0' }
+          - { api: 25, release: '7.1' }
           - { api: 26, release: '8.0' }
+          - { api: 27, release: '8.1' }
           - { api: 28, release: '9' }
           - { api: 29, release: '10' }
           - { api: 30, release: '11' }
           - { api: 31, release: '12' }
-          - { api: 33, release: '13' }
+          - { api: 32, release: '12L', profile: tablet }        # the large-screen release, on a tablet-sized screen
+          - { api: 33, release: '13', profile: large-dark }     # font scale 1.3 and dark mode
           - { api: 34, release: '14' }
           - { api: 35, release: '15' }
+          - { api: 36, release: '16' }
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
@@ -277,6 +283,13 @@ jobs:
         with:
           name: android-build
           path: ${{ runner.temp }}/android-build
+      - name: The APK released before, to install this one over it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/previous"
+          gh release download "v$(cat VERSION)-desktop.2" --repo "$GITHUB_REPOSITORY" --pattern PKUNMUN2026-Formatter-Android.apk --dir "$RUNNER_TEMP/previous" \
+            || echo "No APK released for this version yet: installed fresh only."
       - name: Hardware acceleration for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -292,7 +305,7 @@ jobs:
           sdcard-path-or-size: 256M   # shared storage, as phones have (Android 5 and 6 images have none without it)
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          script: node android/acceptance/emulator.mjs downloads/PKUNMUN2026-Formatter-Android.apk "${{ runner.temp }}/android-build/output/desktop-smoke" output/android-api${{ matrix.api }}
+          script: MUNWORD_DEVICE_PROFILE="${{ matrix.profile }}" MUNWORD_PREVIOUS_APK="${{ runner.temp }}/previous/PKUNMUN2026-Formatter-Android.apk" node android/acceptance/emulator.mjs downloads/PKUNMUN2026-Formatter-Android.apk "${{ runner.temp }}/android-build/output/desktop-smoke" output/android-api${{ matrix.api }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

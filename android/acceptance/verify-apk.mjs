@@ -8,11 +8,10 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { APK_NAME, MIN_SDK, TARGET_SDK, VERSION_CODE, buildApk, contentEntries, signingCertificate } from "../build-apk.mjs";
+import { APK_NAME, MIN_SDK, TARGET_SDK, VERSION_CODE, VERSION_NAME, buildApk, contentEntries, signingCertificate } from "../build-apk.mjs";
 
 const out = path.resolve(process.argv[2] || "output/android");
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
-const VERSION = readFileSync(path.join(ROOT, "VERSION"), "utf8").trim();
 const published = path.join(ROOT, "downloads", APK_NAME);
 mkdirSync(out, { recursive: true });
 const report = { apk: APK_NAME, passed: false, checks: [] };
@@ -39,7 +38,7 @@ try {
   report.certificate = certificate;
 
   const badging = execFileSync(process.env.AAPT || "aapt", ["dump", "badging", published], { encoding: "utf8" });
-  check("package, version", badging.includes(`package: name='org.pkunmun.formatter2026' versionCode='${VERSION_CODE}' versionName='${VERSION}'`));
+  check("package, version", badging.includes(`package: name='org.pkunmun.formatter2026' versionCode='${VERSION_CODE}' versionName='${VERSION_NAME}'`));
   check(`Android 5.0+ (API ${MIN_SDK}), target API ${TARGET_SDK}`, badging.includes(`sdkVersion:'${MIN_SDK}'`) && badging.includes(`targetSdkVersion:'${TARGET_SDK}'`));
   const permissions = [...badging.matchAll(/^uses-permission: name='([^']+)'(?: maxSdkVersion='(\d+)')?/gm)].map(([, name, max]) => `${name}${max ? `≤${max}` : ""}`);
   check("no network permission; storage only up to Android 9", permissions.every((p) => /EXTERNAL_STORAGE≤28$/.test(p)), permissions.join(", "));

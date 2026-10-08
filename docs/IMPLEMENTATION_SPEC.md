@@ -2241,7 +2241,7 @@ PKUNMUN2026.app/Contents/
 
 ## 20. 安卓安装包（`android/`）
 
-APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排版」，`minSdk` 21（Android 5.0），`targetSdk` 34，versionName = `VERSION`，versionCode = 主×10000 + 次×100 + 修订（1.8.5 → 10805）。
+APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排版」，`minSdk` 21（Android 5.0），`targetSdk` 34，versionCode = (主×10000 + 次×100 + 修订)×100 + 安卓修订号（`ANDROID_REVISION`，同一程序版本只更新安卓包时加一，换 `VERSION` 时回到 1），versionName = `VERSION`，修订号大于 1 时再加「.修订号」（当前 1.8.5.2 → 1080502；第一个 1.8.5 安装包是 10805，新版本号更大，可直接覆盖安装）。
 
 ### 20.1 组成
 
@@ -2273,7 +2273,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
   - API 23–28：没有权限时把任务排队，并用 `requestPermissions` 一次请求读、写两项（同一个弹窗；Android 8.0 只授予请求的那一项，只有写权限时拒绝写入公共 Download）；允许 → 公共 Download（重名加 “ (1)”、“ (2)”），`MediaScannerConnection.scanFile`；拒绝 → 应用自己的 `files/Download`。
   - API 21–22：直接写公共 Download。
   - 以上任何一种抛出 `IOException`（没有挂载共享存储、存储已满等）时，改存应用自己的 `files/Download`，弹窗写明“手机的「下载」文件夹暂时无法写入”。
-  - 弹窗：标题“已保存”，正文“文件：<名称>\n位置：<位置>。”（DOCX 另加“可以用 WPS Office 或 Microsoft Word 打开。”），按钮「打开」（`ACTION_VIEW` + 读授权；`queryIntentActivities` 后去掉本应用——它自己也接收 DOCX——剩一个就直接打开，多个用 `createChooser` + `EXTRA_INITIAL_INTENTS`，没有就说明安装 WPS / Word；Android 11+ 需要清单里对“VIEW + DOCX”的 `<queries>`）、「分享」（`ACTION_SEND` + `ClipData` + 读授权，系统分享面板，`EXTRA_EXCLUDE_COMPONENTS` 去掉本应用）、「完成」。两者都用 `SavedFiles` 地址（API 29+ 为 `media/<id>/<名称>`），`ActivityNotFoundException` 与 `SecurityException` 都转成提示，不会闪退。
+  - 弹窗：标题“已保存”，正文“文件：<名称>\n位置：<位置>。”（DOCX 另加“可以用 WPS Office 或 Microsoft Word 打开。”），按钮「打开」（`ACTION_VIEW` + 读授权；`queryIntentActivities` 后去掉本应用——它自己也接收 DOCX——剩一个就直接打开，多个用 `createChooser` + `EXTRA_INITIAL_INTENTS`，没有就说明安装 WPS / Word；Android 11+ 需要清单里对“VIEW + DOCX”的 `<queries>`）、「分享」（`ACTION_SEND` + `ClipData` + 读授权，系统分享面板；Android 7+ 用 `EXTRA_EXCLUDE_COMPONENTS` 去掉本应用，Android 5–6 没有这个参数，改为 `queryIntentActivities` 去掉本应用后用 `createChooser` + `EXTRA_INITIAL_INTENTS` 逐个列出）、「完成」。两者都用 `SavedFiles` 地址（API 29+ 为 `media/<id>/<名称>`），`ActivityNotFoundException` 与 `SecurityException` 都转成提示，不会闪退。
 - **选择文件**：`onShowFileChooser` → `ACTION_GET_CONTENT`、`CATEGORY_OPENABLE`、`*/*`，`EXTRA_MIME_TYPES` = DOCX、`application/octet-stream`、`application/zip`；找不到时退到 `ACTION_OPEN_DOCUMENT`；取消时回调 `null`（必须回调，否则输入框不再响应）。
 - **打开方式 / 分享传入**：`onCreate` 与 `onNewIntent` 读取 `VIEW` 的 data 或 `SEND` 的 `EXTRA_STREAM`，处理后把 intent 改成 `MAIN`，回到应用时不再重复传入。`file://` 地址在 API 23–28 先请求存储权限。后台线程读 `DISPLAY_NAME` / `SIZE`，超过 25 MB 拒绝，读入内存；页面就绪（`onPageFinished`）后 `evaluateJavascript("window.__munwordReceive && window.__munwordReceive()")`。
 - **生命周期**：返回键 `moveTaskToBack(true)`（保留进度）；`onPause/onResume` 转给 WebView；`onRenderProcessGone`（API 26+）销毁并重建 WebView，提示“页面意外关闭，已重新打开”，返回 `true`；Android 8.1+ 白色导航栏与深色按钮（标志位 `0x10`）。
@@ -2391,7 +2391,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 
 1. 下载全部构建产物。
 2. 运行 `desktop/acceptance/stage_release.py`：任何一项没有通过就拒绝发布。通过后生成：
-   - 三个安装包（DMG、EXE、APK；`stage_release.py` 另要求 APK 校验报告、手机版页面的 Chromium 检查和十个模拟器报告全部通过）；
+   - 三个安装包（DMG、EXE、APK；`stage_release.py` 另要求 APK 校验报告、手机版页面的 Chromium 检查和十六个模拟器报告全部通过）；
    - `PKUNMUN2026-Install-Guide.txt`（下载页显示名“安装教程（先看这个）.txt”）；
    - `SHA256SUMS.txt`；
    - `PKUNMUN2026-{版本}-Verification.zip`（全部报告、日志和截图）；
@@ -2470,7 +2470,7 @@ python scripts/audit-source.py
    - Windows：无管理员权限即可安装、升级、卸载；
    - 旧浏览器看到中文说明，不白屏。
 10. 同一源码重建的安装包字节相同（APK 为条目内容相同，签名证书与登记的指纹相同）。
-11. **安卓安装包**：没有联网权限；WebView 69 以上跑完全部原稿、成品与电脑上逐部件相同，以下显示更新说明；保存到「下载」、Android 6–9 存储权限、打开方式与分享传入在 Android 5.0–15 上可用。
+11. **安卓安装包**：没有联网权限；WebView 69 以上跑完全部原稿、成品与电脑上逐部件相同，以下显示更新说明；保存到「下载」、Android 6–9 存储权限、打开方式与分享传入在 Android 5.0–16 上可用；可覆盖安装上一版，拒绝存储权限时存到应用文件夹，页面进程崩溃（Android 8+）后自动恢复，平板屏幕和 1.3 倍字体下页面不超出屏幕宽度。
 
 ## 25. 从零复原的建议顺序
 

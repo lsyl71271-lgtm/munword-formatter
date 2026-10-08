@@ -33,7 +33,11 @@ export const UNSIGNED_NAME = "PKUNMUN2026-Formatter-Android-unsigned.apk";
 export const MIN_SDK = 21; // Android 5.0
 export const TARGET_SDK = 34; // Android 14
 const [major, minor, patch] = VERSION.split(".").map(Number);
-export const VERSION_CODE = major * 10000 + minor * 100 + patch;
+// Android-only updates of the same program version (the first 1.8.5 APK was versionCode 10805, revision 1): each
+// raises the revision, so phones install it over the previous APK. Back to 1 with the next VERSION.
+export const ANDROID_REVISION = 2;
+export const VERSION_CODE = (major * 10000 + minor * 100 + patch) * 100 + ANDROID_REVISION;
+export const VERSION_NAME = ANDROID_REVISION > 1 ? `${VERSION}.${ANDROID_REVISION}` : VERSION;
 const ANDROID_JAR = process.env.ANDROID_JAR || "/usr/lib/android-sdk/platforms/android-23/android.jar";
 const tool = (name, fallback) => process.env[name] || fallback;
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", ...options });
@@ -103,7 +107,7 @@ export async function buildApk({ skipSite = false } = {}) {
   cpSync(site, path.join(assets, "site"), { recursive: true });
   run(tool("AAPT2", "aapt2"), ["link", "-o", path.join(WORK, "base.apk"), "-I", ANDROID_JAR, "--manifest", path.join(HERE, "AndroidManifest.xml"),
     "--min-sdk-version", String(MIN_SDK), "--target-sdk-version", String(TARGET_SDK),
-    "--version-code", String(VERSION_CODE), "--version-name", VERSION, "-A", assets, path.join(WORK, "res.zip")]);
+    "--version-code", String(VERSION_CODE), "--version-name", VERSION_NAME, "-A", assets, path.join(WORK, "res.zip")]);
 
   // Code: Java 8 class files (no lambdas, so the Debian dx can convert them), then one classes.dex.
   const javac = tool("JAVAC", "javac");
@@ -125,7 +129,7 @@ export async function buildApk({ skipSite = false } = {}) {
   run(tool("ZIPALIGN", "zipalign"), ["-f", "-p", "4", path.join(WORK, "unaligned.apk"), unsigned]);
   run(tool("ZIPALIGN", "zipalign"), ["-c", "-p", "4", unsigned]);
 
-  const result = { version: VERSION, versionCode: VERSION_CODE, minSdk: MIN_SDK, targetSdk: TARGET_SDK, unsigned, entries: order.length };
+  const result = { version: VERSION, versionName: VERSION_NAME, versionCode: VERSION_CODE, minSdk: MIN_SDK, targetSdk: TARGET_SDK, unsigned, entries: order.length };
   if (process.env.MUNWORD_ANDROID_KEYSTORE) {
     const signed = path.join(OUT, APK_NAME);
     const password = process.env.MUNWORD_ANDROID_KEYSTORE_PASSWORD;
@@ -158,7 +162,7 @@ export function updateChecksums(downloads, updates) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const result = await buildApk({ skipSite: args.includes("--skip-site") });
-  console.log(`Android ${result.version} (versionCode ${result.versionCode}, Android 5.0+ / API ${result.minSdk}, target API ${result.targetSdk}): ${result.entries} entries`);
+  console.log(`Android ${result.versionName} (versionCode ${result.versionCode}, Android 5.0+ / API ${result.minSdk}, target API ${result.targetSdk}): ${result.entries} entries`);
   console.log(`  unsigned: ${result.unsigned}`);
   if (result.signed) console.log(`  signed:   ${result.signed} (${(result.bytes / 1048576).toFixed(2)} MB, sha256 ${result.sha256}, certificate ${result.certificate})`);
   if (args.includes("--publish")) {
