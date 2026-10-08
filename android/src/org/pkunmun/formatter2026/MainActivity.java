@@ -78,6 +78,9 @@ public final class MainActivity extends Activity {
     static final String DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static final int PICK_FILE = 1;
     private static final int STORAGE_PERMISSION = 2;
+    // Both, asked together (one prompt): Android 8.0 grants exactly what is asked for, and without the read
+    // permission it refuses writes to the public Download folder.
+    private static final String[] STORAGE = {Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE};
     /** The page refuses files over 20 MB itself; anything much larger is not read into memory at all. */
     private static final long MAX_OPEN_BYTES = 25L * 1024 * 1024;
     private static final long MAX_SAVE_BYTES = 200L * 1024 * 1024;
@@ -379,10 +382,9 @@ public final class MainActivity extends Activity {
     // ---- Saving to Downloads ----
 
     private void store(Saving saving) {
-        if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29
-                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29 && !hasStorage()) {
             waitingToStore.add(saving);
-            if (waitingToStore.size() == 1) requestPermissions(new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE}, STORAGE_PERMISSION);
+            if (waitingToStore.size() == 1) requestPermissions(STORAGE, STORAGE_PERMISSION);
             return;
         }
         storeInBackground(saving, true);
@@ -477,10 +479,16 @@ public final class MainActivity extends Activity {
                         + "。可以点「分享」发送或用 WPS 打开");
     }
 
+    private boolean hasStorage() {
+        for (String permission : STORAGE) if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) return false;
+        return true;
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         if (requestCode != STORAGE_PERMISSION) return;
-        boolean granted = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+        boolean granted = results.length > 0;
+        for (int result : results) granted &= result == PackageManager.PERMISSION_GRANTED;
         Log.i(TAG, "storage permission " + (granted ? "granted" : "refused"));
         List<Saving> pending = new ArrayList<Saving>(waitingToStore);
         waitingToStore.clear();
@@ -573,10 +581,9 @@ public final class MainActivity extends Activity {
         if (uri == null) return;
         // Handled once: coming back to the app later must not hand the same file over again.
         intent.setAction(Intent.ACTION_MAIN);
-        if ("file".equals(uri.getScheme()) && Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29
-                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+        if ("file".equals(uri.getScheme()) && Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29 && !hasStorage()) {
             waitingToOpen = uri; // an older app sent a plain file path, which needs the storage permission to read
-            requestPermissions(new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE}, STORAGE_PERMISSION);
+            requestPermissions(STORAGE, STORAGE_PERMISSION);
             return;
         }
         readOpened(uri);

@@ -475,7 +475,7 @@ async function main() {
   step("installed", report.installed);
   shell("setprop debug.munword.devtools 1");
   if (PROMPT_UNUSABLE) {
-    shell(`pm grant ${PACKAGE} android.permission.WRITE_EXTERNAL_STORAGE`);
+    for (const permission of ["READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]) shell(`pm grant ${PACKAGE} android.permission.${permission}`);
     step("storage permission granted from adb (this image's System UI crashes on the permission screen; the prompt is checked on Android 6.0 and 9)");
   }
   shell("rm -f /sdcard/Download/*.docx");

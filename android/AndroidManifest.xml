@@ -6,6 +6,7 @@
     package="org.pkunmun.formatter2026"
     android:installLocation="auto">
 
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <!-- Android 11+ shows an app only the other apps it asks about: the ones that can open a Word document (WPS,

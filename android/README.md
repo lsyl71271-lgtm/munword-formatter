@@ -23,7 +23,7 @@
 
 - **保存**：页面生成 DOCX 后照常“点击下载链接”。`bridge.js` 拦下这个点击，用 `FileReader` 读出字节，分块（每块 1 MB 的 base64）交给 `MunwordAndroid.begin / append / finish`。原生侧先写到缓存，校验字节数，然后：
   - Android 10+：写入 MediaStore 的 Downloads（不需要权限，重名由系统自动加「(1)」）；
-  - Android 6–9：第一次保存时请求存储权限，允许后写入公共 Download 并通知媒体库；拒绝则写入应用自己的文件夹；
+  - Android 6–9：第一次保存时请求存储权限（读、写两项一起请求，只弹一次；Android 8.0 只授予请求的那一项，只有写权限时拒绝写入 Download），允许后写入公共 Download 并通知媒体库；拒绝则写入应用自己的文件夹；
   - Android 5：安装时已授予权限，直接写入 Download；
   - 任何版本上 Download 写不进去（没有插 SD 卡、存储已满或损坏）时，改存到应用自己的文件夹，弹窗说明原因，「打开」「分享」照常可用。
   

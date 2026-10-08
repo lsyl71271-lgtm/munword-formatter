@@ -71,6 +71,7 @@ test("the manifest: no network, storage only up to Android 9, exported only wher
   const manifest = read("android/AndroidManifest.xml");
   assert.doesNotMatch(manifest, /android\.permission\.INTERNET/);
   assert.match(manifest, /WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/);
+  assert.match(manifest, /READ_EXTERNAL_STORAGE" android:maxSdkVersion="28"/, "Android 8.0 refuses writes to Download without the read permission");
   assert.match(manifest, /android:name=".MainActivity"\s+android:exported="true"/);
   assert.match(manifest, /android:name=".SavedFiles"[\s\S]*?android:exported="false"[\s\S]*?android:grantUriPermissions="true"/);
   assert.match(manifest, /MetricsOptOut" android:value="true"/);

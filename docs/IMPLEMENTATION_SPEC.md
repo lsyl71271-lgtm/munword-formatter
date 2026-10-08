@@ -2247,7 +2247,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 
 | 文件 | 内容 |
 |---|---|
-| `AndroidManifest.xml` | 唯一权限 `WRITE_EXTERNAL_STORAGE`（`maxSdkVersion="28"`），**没有 `INTERNET`**；`<queries>` 声明“VIEW + DOCX”（Android 11+ 才能看到 WPS / Word 等）；`allowBackup=false`；WebView 元数据 `MetricsOptOut=true`、`EnableSafeBrowsing=false`；`MainActivity`（`exported=true`，`singleTask`，`configChanges` 含方向、屏幕尺寸、键盘、uiMode、字号，`adjustResize`），`MAIN/LAUNCHER` 与两个接收 DOCX MIME 的过滤器（`VIEW`、`SEND`）；`SavedFiles` 提供者（`exported=false`，`grantUriPermissions=true`） |
+| `AndroidManifest.xml` | 仅有的权限是 `READ_EXTERNAL_STORAGE` 与 `WRITE_EXTERNAL_STORAGE`（都是 `maxSdkVersion="28"`），**没有 `INTERNET`**；`<queries>` 声明“VIEW + DOCX”（Android 11+ 才能看到 WPS / Word 等）；`allowBackup=false`；WebView 元数据 `MetricsOptOut=true`、`EnableSafeBrowsing=false`；`MainActivity`（`exported=true`，`singleTask`，`configChanges` 含方向、屏幕尺寸、键盘、uiMode、字号，`adjustResize`），`MAIN/LAUNCHER` 与两个接收 DOCX MIME 的过滤器（`VIEW`、`SEND`）；`SavedFiles` 提供者（`exported=false`，`grantUriPermissions=true`） |
 | `res/` | 主题 `Theme.Material.Light.NoActionBar`：窗口背景与页面同色 `#EDF5FA`；Android 5 状态栏用深蓝（只能显示白色图标），6+ 用页面色加深色图标（`values-v23`）；自适应图标（背景渐变 + 矢量四方块，`mipmap-anydpi-v26`），旧版 48dp PNG 五种密度（`make-icons.mjs` 用 Chromium 渲染） |
 | `src/…/MainActivity.java` | 见 20.2 |
 | `src/…/SavedFiles.java` | 只读 `ContentProvider`：`content://org.pkunmun.formatter2026.files/{downloads|app}/<文件名>` → 公共 Download 或应用自己的 `files/Download`（规范化路径后必须正好在该目录下）；`…/media/<id>/<文件名>` → 本应用的 MediaStore 条目 `content://media/external/downloads/<id>`（转读，不把 MediaStore 地址交给别的应用）；`query` 只答 `DISPLAY_NAME`、`SIZE`；`openFile` 只允许 `"r"` |
@@ -2270,7 +2270,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
   - `openedName()`、`openedSize()`、`openedChunk(offset, length)`（base64，`NO_WRAP`，每次最多 786432 字节）、`openedDone()`（清除）。
 - **保存**（后台线程，完成后弹窗）：
   - API 29+：`ContentResolver.insert("content://media/external/downloads", {DISPLAY_NAME, MIME_TYPE, relative_path="Download/", is_pending=1})`，写入后 `is_pending=0`，失败删除该条目；回读系统实际的文件名（重名时系统改名）。
-  - API 23–28：没有权限时把任务排队并 `requestPermissions`；允许 → 公共 Download（重名加 “ (1)”、“ (2)”），`MediaScannerConnection.scanFile`；拒绝 → 应用自己的 `files/Download`。
+  - API 23–28：没有权限时把任务排队，并用 `requestPermissions` 一次请求读、写两项（同一个弹窗；Android 8.0 只授予请求的那一项，只有写权限时拒绝写入公共 Download）；允许 → 公共 Download（重名加 “ (1)”、“ (2)”），`MediaScannerConnection.scanFile`；拒绝 → 应用自己的 `files/Download`。
   - API 21–22：直接写公共 Download。
   - 以上任何一种抛出 `IOException`（没有挂载共享存储、存储已满等）时，改存应用自己的 `files/Download`，弹窗写明“手机的「下载」文件夹暂时无法写入”。
   - 弹窗：标题“已保存”，正文“文件：<名称>\n位置：<位置>。”（DOCX 另加“可以用 WPS Office 或 Microsoft Word 打开。”），按钮「打开」（`ACTION_VIEW` + 读授权；`queryIntentActivities` 后去掉本应用——它自己也接收 DOCX——剩一个就直接打开，多个用 `createChooser` + `EXTRA_INITIAL_INTENTS`，没有就说明安装 WPS / Word；Android 11+ 需要清单里对“VIEW + DOCX”的 `<queries>`）、「分享」（`ACTION_SEND` + `ClipData` + 读授权，系统分享面板，`EXTRA_EXCLUDE_COMPONENTS` 去掉本应用）、「完成」。两者都用 `SavedFiles` 地址（API 29+ 为 `media/<id>/<名称>`），`ActivityNotFoundException` 与 `SecurityException` 都转成提示，不会闪退。
