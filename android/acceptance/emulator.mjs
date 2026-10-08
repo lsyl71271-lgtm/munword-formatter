@@ -417,15 +417,26 @@ async function refusedStorage() {
 }
 
 // A finger's tap on a page element: its place on the page, scaled to the screen, inside the WebView's bounds.
+// (The page scrolls smoothly: wait until the element has stopped moving before measuring where to tap.)
 async function tapElement(selector) {
-  await cdp.eval(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" }), true`);
-  await sleep(800);
-  const box = await cdp.eval(`(function () { var r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2, scale: window.devicePixelRatio }; })()`);
+  const element = `document.querySelector(${JSON.stringify(selector)})`;
+  await cdp.eval(`${element}.scrollIntoView({ block: "center", behavior: "instant" }), true`);
+  const measure = `(function () { var r = ${element}.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
+    return { x: x, y: y, scale: window.devicePixelRatio, inside: !!hit && ${element}.contains(hit) }; })()`;
+  let box = await cdp.eval(measure);
+  for (let still = 0; still < 3; ) {
+    await sleep(300);
+    const next = await cdp.eval(measure);
+    still = Math.abs(next.y - box.y) < 1 ? still + 1 : 0;
+    box = next;
+  }
+  if (!box.inside) throw new Error(`${selector} is covered at its centre`);
   const view = findNode(uiNodes(), (node) => node.class === "android.webkit.WebView");
   const bounds = view && /\[(\d+),(\d+)\]/.exec(view.bounds);
   if (!bounds) throw new Error("the WebView is not on screen");
+  await cdp.eval(`window.__taps = []; document.addEventListener("click", function (e) { window.__taps.push((e.target.className || e.target.tagName) + " @" + Math.round(e.clientX) + "," + Math.round(e.clientY)); }, true), true`);
   shell(`input tap ${Math.round(Number(bounds[1]) + box.x * box.scale)} ${Math.round(Number(bounds[2]) + box.y * box.scale)}`);
+  return box;
 }
 
 // Tapping the upload area opens the system picker; cancelling it leaves the page able to open it again.
@@ -436,7 +447,8 @@ async function filePicker() {
     try {
       picker = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, `the file picker (${attempt})`);
     } catch (error) {
-      throw new Error(`${error.message}; the app logged: ${JSON.stringify(appLog().filter((line) => /file chooser/.test(line)))}`);
+      const taps = await cdp.eval("JSON.stringify(window.__taps || [])").catch(() => "?");
+      throw new Error(`${error.message}; the page saw clicks: ${taps}; the app logged: ${JSON.stringify(appLog().filter((line) => /file chooser/.test(line)))}`);
     }
     if (attempt === 1) { await sleep(1500); screencap("file-picker"); }
     await backToApp(`back from the file picker (${attempt})`);
