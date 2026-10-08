@@ -132,7 +132,7 @@ def main() -> int:
     device_rows = "\n".join(
         f"| Android {ANDROID[api]}（API {api}） | {report.get('webview')} | "
         + (f"全部 {len(report.get('cases', []))} 份原稿完整跑通；保存到「下载」、打开方式与分享传入" if report.get("mode") == "app" else "显示「更新系统 WebView」说明；保存到「下载」、打开方式与分享传入")
-        + ("；存储权限弹窗" if 23 <= api <= 28 else "") + " |"
+        + ("；存储权限弹窗" if any(step.get("name") == "storage permission prompt shown and allowed" for step in report.get("steps", [])) else "") + " |"
         for api, report in devices.items())
     notes = f"""## 下载
 

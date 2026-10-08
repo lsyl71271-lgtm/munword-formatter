@@ -51,6 +51,10 @@ const adb = (args, options = {}) => execFileSync(ADB, args, { encoding: "utf8", 
 const shell = (command) => adb(["shell", command]).replace(/\r/g, "");
 const quote = (text) => `'${String(text).replace(/'/g, `'\\''`)}'`;
 const sdk = Number(shell("getprop ro.build.version.sdk").trim());
+// The Android 8.0 emulator image's System UI crashes over and over once the permission screen comes up
+// (NavigationBarFragment.onKeyguardOccludedChanged), so there the permission is granted from adb beforehand; the
+// prompt itself is checked on Android 6.0 and 9.
+const PROMPT_UNUSABLE = sdk === 26;
 const screencap = (name) => {
   try {
     writeFileSync(path.join(out, `${name}.png`), execFileSync(ADB, ["exec-out", "screencap", "-p"], { maxBuffer: 64 << 20, timeout: 60000 }));
@@ -293,7 +297,7 @@ const BIG = (() => {
 async function bridgeSaves() {
   shell("rm -f /sdcard/Download/PKUNMUN-bridge-test*.docx");
   await saveThroughBridge("PKUNMUN-bridge-test.docx", BIG);
-  if (sdk >= 23 && sdk <= 28) await allowStoragePrompt();
+  if (sdk >= 23 && sdk <= 28 && !PROMPT_UNUSABLE) await allowStoragePrompt();
   const first = await savedDialog("first save");
   if (first.name !== "PKUNMUN-bridge-test.docx") throw new Error(`saved as ${first.name}`);
   // (Android 5's UI Automator shows Chinese as "?", so the wording is checked where it can be read.)
@@ -470,6 +474,10 @@ async function main() {
   if (/android\.permission\.INTERNET/.test(installed)) throw new Error("the app holds the INTERNET permission");
   step("installed", report.installed);
   shell("setprop debug.munword.devtools 1");
+  if (PROMPT_UNUSABLE) {
+    shell(`pm grant ${PACKAGE} android.permission.WRITE_EXTERNAL_STORAGE`);
+    step("storage permission granted from adb (this image's System UI crashes on the permission screen; the prompt is checked on Android 6.0 and 9)");
+  }
   shell("rm -f /sdcard/Download/*.docx");
   await launch();
   await connect();
