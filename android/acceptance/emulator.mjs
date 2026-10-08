@@ -225,10 +225,13 @@ async function launch() {
 // Older WebViews' DevTools refuse a message over 1 MB (WebView 44: "Too large read data is pending"), so bytes go
 // into the page, and text comes back out, in pieces.
 const PIECE = 256 * 1024;
-async function bytesInPage(bytes) {
+async function piecesInPage(bytes) {
   const base64 = Buffer.from(bytes).toString("base64");
   await cdp.eval("window.__pieces = [], true");
   for (let offset = 0; offset < base64.length; offset += PIECE) await cdp.eval(`window.__pieces.push(${JSON.stringify(base64.slice(offset, offset + PIECE))}), true`);
+}
+async function bytesInPage(bytes) {
+  await piecesInPage(bytes);
   // An expression for the bytes as a Uint8Array.
   return `(function () {
     var binary = atob(window.__pieces.join("")), data = new Uint8Array(binary.length);
@@ -245,7 +248,22 @@ async function textFromPage(expression) {
 }
 
 // Hands bytes to the page as a download (what the page does with a finished DOCX) through the real bridge.
+// Below the WebView floor the page shows only the update notice and cannot make a file, so there the app's save is
+// driven directly through its interface (begin / append / finish, as android/bridge.js calls it): WebView 39's
+// FileReader never finishes reading the test's blob, which no user can reach on that WebView anyway.
 async function saveThroughBridge(name, bytes) {
+  if (report.mode === "notice") {
+    await piecesInPage(bytes);
+    await cdp.eval(`(function () {
+      var bridge = window.MunwordAndroid, data = window.__pieces.join("");
+      window.__pieces = null;
+      var id = bridge.begin(${JSON.stringify(name)}, ${JSON.stringify(DOCX)}, ${bytes.length});
+      for (var offset = 0; offset < data.length; offset += 1048576) bridge.append(id, data.slice(offset, offset + 1048576));
+      bridge.finish(id);
+      return true;
+    })()`);
+    return;
+  }
   const data = await bytesInPage(bytes);
   await cdp.eval(`(function () {
     var data = ${data};
@@ -402,9 +420,17 @@ async function refusedStorage() {
 async function filePicker() {
   for (const attempt of [1, 2]) {
     await cdp.eval(`document.querySelector('input[type="file"]').click(), true`, { userGesture: true });
-    const picker = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, `the file picker (${attempt})`);
+    let picker;
+    try {
+      picker = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, `the file picker (${attempt})`);
+    } catch (error) {
+      throw new Error(`${error.message}; the app logged: ${JSON.stringify(appLog().filter((line) => /file chooser/.test(line)))}`);
+    }
     if (attempt === 1) { await sleep(1500); screencap("file-picker"); }
     await backToApp(`back from the file picker (${attempt})`);
+    // As a user would: tap again once the page is on screen and has the focus back.
+    await cdp.until("document.visibilityState === 'visible' && document.hasFocus()", 20000);
+    await sleep(1000);
     report.picker = picker;
   }
   if (!(await cdp.eval(`document.querySelectorAll(".typeCard").length === 6`))) throw new Error("the page changed after the picker was cancelled");

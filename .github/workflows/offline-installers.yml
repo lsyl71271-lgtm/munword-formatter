@@ -258,7 +258,7 @@ jobs:
           - { api: 24, release: '7.0' }
           - { api: 25, release: '7.1' }
           - { api: 26, release: '8.0' }
-          - { api: 27, release: '8.1' }
+          - { api: 27, release: '8.1', arch: x86 }             # no x86_64 image with Google APIs for 8.1
           - { api: 28, release: '9' }
           - { api: 29, release: '10' }
           - { api: 30, release: '11' }
@@ -300,7 +300,7 @@ jobs:
         with:
           api-level: ${{ matrix.api }}
           target: google_apis
-          arch: x86_64
+          arch: ${{ matrix.arch || 'x86_64' }}
           disable-animations: true
           sdcard-path-or-size: 256M   # shared storage, as phones have (Android 5 and 6 images have none without it)
           emulator-boot-timeout: 900

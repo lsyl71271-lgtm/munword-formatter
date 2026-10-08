@@ -230,6 +230,7 @@ public final class MainActivity extends Activity {
     private final class ChromeClient extends WebChromeClient {
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+            Log.i(TAG, "file chooser requested" + (chooserCallback != null ? " (the previous one still open)" : ""));
             if (chooserCallback != null) chooserCallback.onReceiveValue(null);
             chooserCallback = callback;
             Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
@@ -268,6 +269,7 @@ public final class MainActivity extends Activity {
         chooserCallback = null;
         if (callback == null) return;
         Uri uri = resultCode == RESULT_OK && data != null ? data.getData() : null;
+        Log.i(TAG, "file chooser " + (uri == null ? "cancelled" : "returned a file"));
         callback.onReceiveValue(uri == null ? null : new Uri[] {uri});
     }
 
