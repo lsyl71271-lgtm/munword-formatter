@@ -416,10 +416,22 @@ async function refusedStorage() {
   step("storage permission refused: saved in the app's own folder, the dialog says so, 分享 works", { uri: saved.uri, chooser });
 }
 
-// The page's file input opens the system picker; cancelling it leaves the page able to open it again.
+// A finger's tap on a page element: its place on the page, scaled to the screen, inside the WebView's bounds.
+async function tapElement(selector) {
+  await cdp.eval(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" }), true`);
+  await sleep(800);
+  const box = await cdp.eval(`(function () { var r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, scale: window.devicePixelRatio }; })()`);
+  const view = findNode(uiNodes(), (node) => node.class === "android.webkit.WebView");
+  const bounds = view && /\[(\d+),(\d+)\]/.exec(view.bounds);
+  if (!bounds) throw new Error("the WebView is not on screen");
+  shell(`input tap ${Math.round(Number(bounds[1]) + box.x * box.scale)} ${Math.round(Number(bounds[2]) + box.y * box.scale)}`);
+}
+
+// Tapping the upload area opens the system picker; cancelling it leaves the page able to open it again.
 async function filePicker() {
   for (const attempt of [1, 2]) {
-    await cdp.eval(`document.querySelector('input[type="file"]').click(), true`, { userGesture: true });
+    await tapElement(".dropzone");
     let picker;
     try {
       picker = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, `the file picker (${attempt})`);
@@ -428,13 +440,12 @@ async function filePicker() {
     }
     if (attempt === 1) { await sleep(1500); screencap("file-picker"); }
     await backToApp(`back from the file picker (${attempt})`);
-    // As a user would: tap again once the page is on screen and has the focus back.
-    await cdp.until("document.visibilityState === 'visible' && document.hasFocus()", 20000);
+    await cdp.until("document.visibilityState === 'visible'", 20000);
     await sleep(1000);
     report.picker = picker;
   }
   if (!(await cdp.eval(`document.querySelectorAll(".typeCard").length === 6`))) throw new Error("the page changed after the picker was cancelled");
-  step("file picker opens, and cancelling it leaves the page ready (twice)", { picker: report.picker });
+  step("file picker: tapping the upload area opens it, and cancelling leaves the page ready (twice)", { picker: report.picker });
 }
 
 // Android 8+: the page's process crashes; the app replaces the page instead of closing.

@@ -44,9 +44,8 @@ export class Cdp {
     });
   }
 
-  // userGesture: as if the user had tapped (a file input opens its chooser only then).
-  async eval(expression, { userGesture = false } = {}) {
-    const result = await this.send("Runtime.evaluate", { expression, returnByValue: true, ...(userGesture ? { userGesture: true } : {}) });
+  async eval(expression) {
+    const result = await this.send("Runtime.evaluate", { expression, returnByValue: true });
     if (result.exceptionDetails || result.wasThrown) {
       throw new Error(result.exceptionDetails?.exception?.description || result.result?.description || result.exceptionDetails?.text || "exception");
     }
