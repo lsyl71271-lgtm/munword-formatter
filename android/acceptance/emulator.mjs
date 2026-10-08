@@ -197,10 +197,12 @@ async function allowStoragePrompt() {
   step("storage permission prompt shown and allowed");
 }
 // Back from another app's screen (a viewer, the share sheet), pressed again if the first press came too early.
+// (Never pressed while the app itself is in front: there Back sends it to the background.)
 async function backToApp(what) {
   for (let attempt = 0; attempt < 6; attempt++) {
+    if (resumedActivity().startsWith(PACKAGE)) return true;
     shell("input keyevent 4");
-    try { return await waitFor(() => resumedActivity().startsWith(PACKAGE), 5000, what); } catch { /* not yet: press again */ }
+    try { return await waitFor(() => resumedActivity().startsWith(PACKAGE), 8000, what); } catch { /* not yet: press again */ }
   }
   throw new Error(`timed out waiting for ${what}`);
 }
