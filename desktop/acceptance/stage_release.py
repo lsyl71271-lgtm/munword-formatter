@@ -6,7 +6,8 @@ Refuses to stage anything unless the published files match downloads/SHA256SUMS.
 matched them (DMG and EXE byte for byte, the APK's contents and pinned signature), the oldest-Chromium checks
 passed (desktop page and Android page), both Wine prefixes passed every scenario, and every native Windows and
 macOS acceptance report and every Android emulator report says passed. Writes the installers, SHA256SUMS.txt,
-a verification ZIP (all reports, logs and screenshots) and notes.md for the release body.
+a verification ZIP (all reports, logs and screenshots), release-manifest.json, notes.md for the release body and
+tag.txt: v<version>, or v<version>.<revision> for an Android-only update (the APK's versionName).
 """
 from __future__ import annotations
 
@@ -48,6 +49,8 @@ def main() -> int:
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--repo", required=True, help="owner/name, for links to other releases")
+    parser.add_argument("--source-commit", default="", help="the commit that published these installers (downloads/SHA256SUMS.txt)")
+    parser.add_argument("--build-id", default="", help="the workflow run id and attempt")
     args = parser.parse_args()
     problems = []
 
@@ -108,6 +111,10 @@ def main() -> int:
     if not guide.is_file() or VERSION not in guide.read_text(encoding="utf-8-sig") or any(d not in guide.read_text(encoding="utf-8-sig") for d in sums.values()):
         problems.append(f"downloads/{GUIDE} is missing or does not name version {VERSION} and the current checksums")
 
+    version_name = apk_report.get("versionName") or VERSION
+    if version_name != VERSION and not version_name.startswith(VERSION + "."):
+        problems.append(f"the APK is version {version_name}, VERSION is {VERSION}")
+
     if problems:
         print("Not publishing:\n  " + "\n  ".join(problems))
         return 1
@@ -120,6 +127,23 @@ def main() -> int:
             if path.is_file() and path.suffix in (".json", ".txt", ".png") and "dist" not in path.parts:
                 bundle.write(path, "evidence/" + path.relative_to(args.artifacts).as_posix())
         bundle.writestr("build-provenance.json", json.dumps({"version": VERSION, "commit": args.commit, "run": args.run_url, "sha256": sums, "android_certificate": apk_report.get("certificate")}, indent=2))
+    tag = f"v{version_name}"
+    manifest = {
+        "schema": 1,
+        "tag": tag,
+        "engineVersion": VERSION,
+        "clientRevision": {"android": {"versionName": version_name, "versionCode": apk_report.get("versionCode")}},
+        # The commit that published these exact installer bytes, and the commit this run checked (they differ when
+        # only documentation changed in between).
+        "sourceCommit": args.source_commit or args.commit,
+        "validationCommit": args.commit,
+        "buildId": args.build_id,
+        "run": args.run_url,
+        "files": {name: {"sha256": sha256(args.out / name), "bytes": (args.out / name).stat().st_size} for name in (DMG, EXE, APK, GUIDE)},
+        "androidCertificate": apk_report.get("certificate"),
+    }
+    (args.out / "release-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (args.out / "tag.txt").write_text(tag + "\n", encoding="utf-8")
 
     def browsers(report):
         names = {"edge": "Edge", "chrome": "Chrome", "firefox": "Firefox", "safari": "Safari"}
@@ -165,7 +189,7 @@ DMG 约 0.8 MB，EXE 约 0.5 MB，APK 约 0.4 MB。排版完全在本机完成�
 
 ## 验收（本次构建）
 
-[工作流记录]({args.run_url})，源码提交 `{args.commit}`。
+[工作流记录]({args.run_url})；安装包来自提交 `{manifest['sourceCommit']}`，验收提交 `{args.commit}`；构建与校验值汇总见 `release-manifest.json`。
 
 - 从源码在 Linux 上重建，两个安装包与发布文件逐字节一致。
 - 14 份验收原稿（八种文书、中英文）逐份上传、识别、确认第三步可编辑、生成、读回、预览，外加模板新建；页面零网络请求。

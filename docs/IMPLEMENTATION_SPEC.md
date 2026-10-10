@@ -1,6 +1,6 @@
 # PKUNMUN 2026 文件自动排版系统 · 实现与需求规格
 
-> - 版本基线：v1.9.0（`VERSION`），安装包发布 `v1.9.0-desktop.2`。
+> - 版本基线：v2.0.0（`VERSION`），安装包发布在 tag `v2.0.0`。
 > - 读者：要维护、审查或从零复原本程序的程序员与 AI。
 > - 目标：只读本文就能理解每一处逻辑为什么存在、怎样实现、界面长什么样、本机应用怎样打包，并能写出行为一致的程序。
 
@@ -2136,7 +2136,7 @@ pnpm build:desktop  =  node desktop/build-desktop.mjs --publish
 在静态站的 `index.html` 上做五处改写：
 
 1. `/favicon.svg`、`/styles.css?v=…` 改为相对路径，使页面能从 `file://` 打开。
-2. `<script src="/app.js?v=…" defer>` 换成一段 **ES3 写的兼容加载器**：
+2. 网页版的兼容加载器换成桌面版的一份。两份都由 `local_web/compat-loader.mjs` 生成（`WEB_LOADER` 写在 `local_web/index.html` 里，`DESKTOP_LOADER` 在这里替换进去），检查和浏览器清单相同，只有措辞不同。**ES3 写的兼容加载器**：
    - 浏览器同时具备 `Array.prototype.findLast` 和 `window.CSSLayerBlockRule`（CSS 层叠层）时，才插入 `<script src="app.js">`。门槛约为 Chrome/Edge 99、Safari 15.4、Firefox 104。
    - 加载失败时显示“**程序文件不完整。** 请重新运行安装程序（macOS 请重新把程序拖进「应用程序」）。”
    - 浏览器太旧时显示一个白色说明框（最大宽 560px，圆角 12px）：
@@ -2341,7 +2341,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
   - 以上任何一种抛出 `IOException`（没有挂载共享存储、存储已满等）时，改存应用自己的 `files/Download`，弹窗写明“手机的「下载」文件夹暂时无法写入”。
   - 弹窗：标题“已保存”，正文“文件：<名称>\n位置：<位置>。”（DOCX 另加“可以用 WPS Office 或 Microsoft Word 打开。”），按钮「打开」（`ACTION_VIEW` + 读授权；`queryIntentActivities` 后去掉本应用——它自己也接收 DOCX——剩一个就直接打开，多个用 `createChooser` + `EXTRA_INITIAL_INTENTS`，没有就说明安装 WPS / Word；Android 11+ 需要清单里对“VIEW + DOCX”的 `<queries>`）、「分享」（`ACTION_SEND` + `ClipData` + 读授权，系统分享面板；Android 7+ 用 `EXTRA_EXCLUDE_COMPONENTS` 去掉本应用，Android 5–6 没有这个参数，改为 `queryIntentActivities` 去掉本应用后用 `createChooser` + `EXTRA_INITIAL_INTENTS` 逐个列出）、「完成」。两者都用 `SavedFiles` 地址（API 29+ 为 `media/<id>/<名称>`），`ActivityNotFoundException` 与 `SecurityException` 都转成提示，不会闪退。
 - **选择文件**：`onShowFileChooser` → `ACTION_GET_CONTENT`、`CATEGORY_OPENABLE`、`*/*`，`EXTRA_MIME_TYPES` = DOCX、`application/octet-stream`、`application/zip`；找不到时退到 `ACTION_OPEN_DOCUMENT`；取消时回调 `null`（必须回调，否则输入框不再响应）。
-- **打开方式 / 分享传入**：`onCreate` 与 `onNewIntent` 读取 `VIEW` 的 data 或 `SEND` 的 `EXTRA_STREAM`，处理后把 intent 改成 `MAIN`，回到应用时不再重复传入。`file://` 地址在 API 23–28 先请求存储权限。后台线程读 `DISPLAY_NAME` / `SIZE`，超过 25 MB 拒绝，读入内存；页面就绪（`onPageFinished`）后 `evaluateJavascript("window.__munwordReceive && window.__munwordReceive()")`。
+- **打开方式 / 分享传入**：`onCreate` 与 `onNewIntent` 读取 `VIEW` 的 data 或 `SEND` 的 `EXTRA_STREAM`，处理后把 intent 改成 `MAIN`，回到应用时不再重复传入。`file://` 地址在 API 23–28 先请求存储权限。每次传入在主线程上取下一个序号，后台线程读 `DISPLAY_NAME` / `SIZE`，超过 25 MB 拒绝，读入内存；读完时序号已不是最新（期间又传入了更新的文件）就丢弃，出错也不再提示。`openedName()` 取走当前文件，之后的 `openedSize` / `openedChunk` 都读这一份，读的过程中到达的新文件留到下一次交付；`openedDone()` 只在没有更新文件时清空。Activity 已销毁时不再弹窗、不再调用页面。页面就绪（`onPageFinished`）后 `evaluateJavascript("window.__munwordReceive && window.__munwordReceive()")`。
 - **生命周期**：返回键 `moveTaskToBack(true)`（保留进度）；`onPause/onResume` 转给 WebView；`onRenderProcessGone`（API 26+）销毁并重建 WebView，提示“页面意外关闭，已重新打开”，返回 `true`；Android 8.1+ 白色导航栏与深色按钮（标志位 `0x10`）。
 
 ### 20.3 `bridge.js`（页面一侧）
@@ -2351,6 +2351,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 - 包装 `URL.createObjectURL` / `revokeObjectURL`，记住每个 Blob 地址对应的 Blob。
 - 覆盖 `HTMLAnchorElement.prototype.click`：带 `download` 属性、地址是记住的 Blob 时，`FileReader.readAsDataURL` 读出，取逗号后的 base64，按 1048576 字符一块调用 `begin` / `append` / `finish`；读失败调用 `failed`。其他链接照常点击。
 - `window.__munwordReceive()`：按 786432 字节一块（3 的倍数，块间没有填充）读回、`atob` 成 `Uint8Array`，调用 `openedDone()`，构造 `File`（DOCX MIME），记为 `held` 并交付。
+- 代次：每传入一个文件、用户每亲手选一个文件，代次加一（`status.generation`），并清掉等待中的定时器。还在等待的交付和重新交付都属于开始时的代次，代次一过就停，所以旧文件永远不会盖掉新文件（Codex 的探针：输入框出现前传入 A → 输入框出现 → 传入 B → A 的重试晚到）。重新载入页面时脚本整个重来。
 - 交付：等页面的 `input[type=file]` 出现（每 100 ms，最多 10 秒），`new DataTransfer()` 放入文件，赋给 `input.files`。Chromium 69 等旧版本赋值时自己会派发真实的 `change` 事件，新版本不会：交付期间捕获阶段的监听器记下是否已有 `change`，没有才补派一个。
 - 保留：页面在点选文书类型时会清空文件（先选类型、后选文件的设计），而传入的文件先于类型到达。点击 `.typeCard` 后等 `.dropzone.hasFile` 消失（每 50 ms，最多 3 秒）再交付一次 `held`。用户自己选了文件（交付之外的可信 `change` 事件）时清除 `held`。
 
@@ -2395,6 +2396,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 
 **`pnpm build:static` → `static-site/`**：
 
+- `index.html` 来自 `local_web/index.html`，里面是共用的兼容加载器（`WEB_LOADER`，见第 19.2 节）：浏览器太旧时显示说明，`/app.js?v=…` 加载失败时显示“页面的程序文件没有加载成功。请刷新页面再试；网络不稳定时，可以改用离线安装包（断网也能用）。”，不会白屏。网页不加 `file://` 那套安全策略。
 - 文件全部来自白名单：页面、共用 JS/CSS、图标、许可证、`version.json`、`_headers`。
 - 不包含源码、Python API、原稿、`.env` 或托管配置。
 
@@ -2422,7 +2424,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 
 ### 22.0 `.github/workflows/source-checks.yml`
 
-每次推送和每个 PR 都运行，ubuntu-24.04，Node 24、pnpm 11.19.0、Python 3.12：
+每次推送和每个 PR 都运行；也是可复用工作流（`workflow_call`），`offline-installers` 在同一提交上调用它，发布前必须通过。并发组带上 `github.workflow`，被调用的那份不会取消独立运行的那份。ubuntu-24.04，Node 24、pnpm 11.19.0、Python 3.12：
 
 1. `pnpm install --frozen-lockfile`，安装 `backend/requirements.txt`，复制 `.openai/hosting.example.json`；
 2. `pnpm build:static`（同时生成共用离线资产）；
@@ -2442,7 +2444,8 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 | macos | macos-14、macos-15、macos-15-intel | `hdiutil verify`；中文文件名；`codesign --verify --deep --strict`；记录 Gatekeeper 判定；原生运行入口；LaunchServices 真实打开；Chrome / Firefox 跑全部原稿和模板，再跑复制到桌面的单文件页面；Safari 经本机 http 跑全流程；Safari 像用户那样从访达打开程序、DMG 里的网页和复制到桌面的网页，并通过辅助功能（pyobjc AX 树）读取 Safari 实际显示的内容（`acceptance/macos.py`） |
 | android | ubuntu-24.04 | 从 Ubuntu 安装 aapt、dalvik-exchange、zipalign、apksigner、libandroid-23-java、openjdk-21-jdk-headless；`build-desktop.mjs --only site`；`verify-apk.mjs`；Playwright Chromium 跑共享页面得到参考输出（`offline-smoke.mjs`）；`webview-floor.mjs`（第 20.6 节） |
 | android-devices | ubuntu-24.04 ×10 | 开启 KVM；`reactivecircus/android-emulator-runner@v2`（`google_apis`、x86_64、关闭动画、无快照），API 21、23、26、28、29、30、31、33、34、35，各用镜像自带的 WebView；`emulator.mjs` 测发布的 APK，参考输出来自 android 作业 |
-| release | ubuntu-24.04 | 仅在以上全部通过，且是 main / 开发分支推送或手动触发时运行，见下 |
+| source-checks | ubuntu-24.04 | 调用 `source-checks.yml`（第 22.0 节），检查本次提交 |
+| release | ubuntu-24.04 | 仅在以上全部（含 source-checks）通过，且是 `main` 的推送或在 `main` 上手动触发时运行；其他分支从不发布，它们的构建产物就是测试版，见下 |
 
 **浏览器全流程**（`acceptance/browser_flow.py`）：
 
@@ -2461,10 +2464,12 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
    - `PKUNMUN2026-Install-Guide.txt`（下载页显示名“安装教程（先看这个）.txt”）；
    - `SHA256SUMS.txt`；
    - `PKUNMUN2026-{版本}-Verification.zip`（全部报告、日志和截图）；
-   - 发布说明 `notes.md`。
-3. 发布到 tag `v{VERSION}-desktop.2`，标题“v{版本} · 离线安装包（macOS DMG、Windows EXE、Android APK；兼容 macOS 10.11、Windows 7、Android 5.0 起）”，标为 Latest。
-   - 同名 release 已存在且校验和相同 → 只替换附件、更新说明；
-   - 校验和不同 → 删除旧 release 和 tag 后重建，让 tag 指向通过验证的提交。
+   - 发布说明 `notes.md`；
+   - `release-manifest.json`：`tag`、`engineVersion`（VERSION）、`clientRevision.android`（versionName、versionCode）、`sourceCommit`（最后一次改动 `downloads/SHA256SUMS.txt` 的提交，即安装包字节的来源）、`validationCommit`（本次验收的提交）、`buildId`（运行编号.尝试次数）、各文件的 sha256 与大小、安卓签名证书指纹；
+   - `tag.txt`：`v{APK 的 versionName}`，即 `v{VERSION}`，只更新安卓时为 `v{VERSION}.{修订号}`。APK 版本与 VERSION 对不上时拒绝发布。
+3. 用 `tag.txt` 新建 release，标题“{tag} · 离线安装包（macOS DMG、Windows EXE、Android APK；兼容 macOS 10.11、Windows 7、Android 5.0 起）”，指向本次提交，标为 Latest。**已发布的 release 从不修改**：
+   - 同名 release 已存在且 `SHA256SUMS.txt` 相同（重跑，或 PR 合并后 main 上的同一批文件）→ 什么都不做；
+   - 不同 → 报错停止：要发布新文件就升 VERSION（只更新安卓时升 `ANDROID_REVISION`）。不覆盖附件，不删 tag，不移动 tag。
 4. 需要 `GH_REPO` 环境变量，因为该步骤在 checkout 目录之外运行，gh 无法从 git 读取仓库。
 
 ### 22.2 其他发布方式

@@ -12,8 +12,11 @@ name: PKUNMUN offline installers (DMG / EXE / APK)
 # - the Android page passes all inputs in Chromium 69 to current (67 gets the update notice), and the APK runs on
 #   Android 5.0 to 15 emulators with each system's own WebView: saving to Download, the storage prompt, open with /
 #   share, and every input through the full flow wherever the WebView is new enough (the notice elsewhere).
-# Only when all of that passes, pushes to main or the desktop branch publish the installers on the
-# GitHub Releases page (tag v<VERSION>-desktop.2).
+# Only when all of that passes, and the full source checks (source-checks.yml, called here) pass on the same
+# commit, a push to main (or a manual run on main) publishes the installers on the GitHub Releases page. Other
+# branches never publish: their runs' artifacts are the test builds. A release is never replaced: its tag is
+# v<version> (v<version>.<Android revision> for an Android-only update), and a tag that already exists with other
+# files stops the run instead of being overwritten. release-manifest.json records what was built and checked.
 
 on:
   push:
@@ -46,6 +49,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  source-checks:
+    name: Source checks on this commit
+    uses: ./.github/workflows/source-checks.yml
+
   reproduce:
     name: Rebuild from source and compare (Linux)
     runs-on: ubuntu-24.04
@@ -288,9 +295,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/previous"
-          # This version's release if there is one, else the latest release (the previous version's APK).
-          gh release download "v$(cat VERSION)-desktop.2" --repo "$GITHUB_REPOSITORY" --pattern PKUNMUN2026-Formatter-Android.apk --dir "$RUNNER_TEMP/previous" \
-            || gh release download --repo "$GITHUB_REPOSITORY" --pattern PKUNMUN2026-Formatter-Android.apk --dir "$RUNNER_TEMP/previous" \
+          # The latest release's APK: the version users have now.
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern PKUNMUN2026-Formatter-Android.apk --dir "$RUNNER_TEMP/previous" \
             || echo "No APK released yet: installed fresh only."
       - name: Hardware acceleration for the emulator
         run: |
@@ -320,8 +326,8 @@ jobs:
 
   release:
     name: Publish on GitHub Releases
-    needs: [reproduce, wine, windows, macos, android, android-devices]
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/munword-formatter-audit-e11sma'
+    needs: [source-checks, reproduce, wine, windows, macos, android, android-devices]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -331,31 +337,34 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the commit that published these installers (sourceCommit in the manifest)
       - uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/artifacts
-      - name: Stage installers, checksums, evidence and notes (refuses unless everything passed)
+      - name: Stage installers, checksums, evidence, manifest and notes (refuses unless everything passed)
         run: >
           python3 desktop/acceptance/stage_release.py --artifacts "$RUNNER_TEMP/artifacts" --out "$RUNNER_TEMP/release"
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --commit "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
-      - name: Create or update the release
+          --source-commit "$(git log -1 --format=%H -- downloads/SHA256SUMS.txt)" --build-id "$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+      - name: Create the release (an existing one is never changed)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}   # runs outside the checkout, so gh cannot read the repository from git
         run: |
-          version=$(cat VERSION)
-          tag="v${version}-desktop.2"
-          title="v${version} · 离线安装包（macOS DMG、Windows EXE、Android APK；兼容 macOS 10.11、Windows 7、Android 5.0 起）"
           cd "$RUNNER_TEMP/release"
-          assets=(PKUNMUN2026-Formatter-macOS.dmg PKUNMUN2026-Formatter-Windows-Setup.exe PKUNMUN2026-Formatter-Android.apk "PKUNMUN2026-Install-Guide.txt#安装教程（先看这个）.txt" SHA256SUMS.txt PKUNMUN2026-*-Verification.zip)
+          tag=$(cat tag.txt)
+          title="${tag} · 离线安装包（macOS DMG、Windows EXE、Android APK；兼容 macOS 10.11、Windows 7、Android 5.0 起）"
+          assets=(PKUNMUN2026-Formatter-macOS.dmg PKUNMUN2026-Formatter-Windows-Setup.exe PKUNMUN2026-Formatter-Android.apk "PKUNMUN2026-Install-Guide.txt#安装教程（先看这个）.txt" SHA256SUMS.txt release-manifest.json PKUNMUN2026-*-Verification.zip)
           if gh release view "$tag" >/dev/null 2>&1; then
-            # Same version, rebuilt installers: move the tag to the verified commit by recreating the release.
+            # Published releases are never replaced or moved: the same files (a re-run, or main after the PR) is
+            # nothing to do; other files under the same tag need a new version or Android revision.
             gh release download "$tag" --pattern SHA256SUMS.txt --dir previous
             if cmp -s previous/SHA256SUMS.txt SHA256SUMS.txt; then
-              gh release upload "$tag" "${assets[@]}" --clobber
-              gh release edit "$tag" --title "$title" --notes-file notes.md --latest
+              echo "$tag is already published with exactly these files; left unchanged."
               exit 0
             fi
-            gh release delete "$tag" --yes --cleanup-tag
+            echo "::error::$tag is already published with different files. Raise VERSION (or ANDROID_REVISION for an Android-only update) instead of replacing a release."
+            exit 1
           fi
           gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --title "$title" --notes-file notes.md --latest

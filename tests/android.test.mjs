@@ -67,6 +67,74 @@ test("what must run in any WebView is ES5: the bridge and the loader that shows 
   assert.match(html, /需要 69 或更高/);
 });
 
+// A page with the bridge and a fake activity: files "opened from another app" go through __munwordReceive, and every
+// file the page's input ends up with is recorded (jsdom has no DataTransfer, and its input.files takes only a FileList).
+async function bridgePage() {
+  const { JSDOM } = await import("jsdom");
+  const dom = new JSDOM(`<!doctype html><body></body>`, { runScripts: "outside-only" });
+  const { window } = dom;
+  let opened = null;
+  window.MunwordAndroid = {
+    openedName: () => opened ? opened.name : "",
+    openedSize: () => opened ? opened.bytes.length : 0,
+    openedChunk: (offset, length) => Buffer.from(opened.bytes.subarray(offset, offset + length)).toString("base64"),
+    openedDone: () => { opened = null; },
+  };
+  window.DataTransfer = class { constructor() { const list = []; this.files = list; this.items = { add: (file) => list.push(file) }; } };
+  const received = [];
+  Object.defineProperty(window.HTMLInputElement.prototype, "files", { configurable: true, get() { return this._files || []; }, set(list) { this._files = list; } });
+  window.document.addEventListener("change", (event) => received.push(event.target.files[0] && event.target.files[0].name));
+  window.eval(read("android/bridge.js"));
+  const open = (name) => { opened = { name, bytes: new TextEncoder().encode(name) }; window.__munwordReceive(); };
+  const addInput = () => { const input = window.document.createElement("input"); input.type = "file"; window.document.body.appendChild(input); return input; };
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  return { window, open, addInput, wait, received };
+}
+
+test("an older opened file never replaces a newer one, whatever its hand-over was waiting for", async () => {
+  // Codex's probe: A arrives before the page's file input exists, the input appears, B arrives; A's retry runs late.
+  const page = await bridgePage();
+  page.open("A.docx");
+  assert.deepEqual(page.received, []);
+  page.addInput();
+  page.open("B.docx");
+  assert.deepEqual(page.received, ["B.docx"]);
+  await page.wait(250);
+  assert.deepEqual(page.received, ["B.docx"], "the retry for A stopped once B arrived");
+
+  // A type change hands the kept file back once the page has cleared it; a newer file cancels a pending one.
+  const second = await bridgePage();
+  second.addInput();
+  const zone = second.window.document.createElement("div");
+  zone.className = "dropzone hasFile";
+  const card = second.window.document.createElement("button");
+  card.className = "typeCard";
+  second.window.document.body.append(zone, card);
+  second.open("A.docx");
+  card.dispatchEvent(new second.window.MouseEvent("click", { bubbles: true }));
+  second.open("B.docx");
+  zone.className = "dropzone";
+  await second.wait(150);
+  assert.deepEqual(second.received, ["A.docx", "B.docx"], "the redelivery of A that was waiting is gone");
+  card.dispatchEvent(new second.window.MouseEvent("click", { bubbles: true }));
+  await second.wait(100);
+  assert.deepEqual(second.received, ["A.docx", "B.docx", "B.docx"], "after the next type change the page gets B back");
+  assert.equal(second.window.__munwordBridge.generation, 2);
+});
+
+test("the activity reads opened files in order and hands the page one whole file at a time", () => {
+  const activity = read("android/src/org/pkunmun/formatter2026/MainActivity.java");
+  assert.match(activity, /sequence = \+\+openSequence/, "each open gets the next number");
+  assert.match(activity, /if \(sequence != openSequence\)/, "a slower read of an older file is dropped");
+  assert.match(activity, /readingBytes = openedBytes;/, "the page's first call takes the file the rest then come from");
+  // In any order: the emulator test asks for the size before the name (android/acceptance/emulator.mjs bridgeOpens).
+  for (const call of ["openedName", "openedSize", "openedChunk"]) {
+    assert.match(activity, new RegExp(`public \\w+ ${call}\\([^)]*\\) \\{\\s*synchronized \\(lock\\) \\{\\s*takeOpened\\(\\);`), `${call} takes the file first`);
+  }
+  assert.match(activity, /if \(openedBytes == readingBytes\)/, "a file that arrived during the read stays for the next hand-over");
+  assert.match(activity, /isFinishing\(\) \|\| isDestroyed\(\)/, "no dialog on a destroyed activity");
+});
+
 test("the manifest: no network, storage only up to Android 9, exported only where it must be", () => {
   const manifest = read("android/AndroidManifest.xml");
   assert.doesNotMatch(manifest, /android\.permission\.INTERNET/);

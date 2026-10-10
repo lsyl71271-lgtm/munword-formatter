@@ -354,10 +354,21 @@ async function bridgeSaves() {
   await saveThroughBridge("PKUNMUN-bridge-test.docx", BIG.subarray(0, 2048));
   const third = await savedDialog("third save");
   tap(await waitForNode(button("分享"), 10000, "分享 button"));
-  const chooser = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, "share sheet");
+  // On Android 5 the only target (the emulator's Gmail) opens straight away, and on some boots Gmail crashes on its
+  // own first-run screen before it comes to the front: the share reached it all the same. Its crash dialog is
+  // closed and counted as that; a crash of this app is never closed (dismissSystemDialog) and fails the run.
+  let crashed = "";
+  const chooser = await waitFor(() => {
+    const front = resumedActivity();
+    if (front && !front.startsWith(PACKAGE)) return front;
+    const nodes = uiNodes();
+    const text = nodes.map((node) => node.text || "").find((value) => /has stopped|keeps stopping/i.test(value)) || "";
+    if (text && dismissSystemDialog(nodes)) crashed = text;
+    return crashed ? `another app took the share and crashed by itself: ${crashed}` : null;
+  }, 30000, "share sheet");
   await sleep(1500);
   screencap("share-sheet");
-  const offered = uiNodes().map((node) => node.text || "").filter(Boolean);
+  const offered = crashed ? [] : uiNodes().map((node) => node.text || "").filter(Boolean);
   // The app's own label ("PKUNMUN 排版"; Android 5's UI Automator shows the Chinese as "?"). The file name has no space.
   if (offered.some((text) => /^PKUNMUN (排|\?)/.test(text))) throw new Error(`the share sheet offers this app itself: ${JSON.stringify(offered)}`);
   await backToApp("back from the share sheet");
@@ -414,7 +425,18 @@ async function refusedStorage() {
   if (shell(`ls /sdcard/Download/ 2>/dev/null`).includes("PKUNMUN-no-permission")) throw new Error("refused, but the file is in Download");
   if (!/\?{3}/.test(saved.text) && !saved.text.includes("应用自己的文件夹")) throw new Error(`the dialog does not say where: ${saved.text}`);
   tap(await waitForNode(button("分享"), 10000, "分享 button"));
-  const chooser = await waitFor(() => { const front = resumedActivity(); return front && !front.startsWith(PACKAGE) ? front : null; }, 30000, "share sheet");
+  // On Android 5 the only target (the emulator's Gmail) opens straight away, and on some boots Gmail crashes on its
+  // own first-run screen before it comes to the front: the share reached it all the same. Its crash dialog is
+  // closed and counted as that; a crash of this app is never closed (dismissSystemDialog) and fails the run.
+  let crashed = "";
+  const chooser = await waitFor(() => {
+    const front = resumedActivity();
+    if (front && !front.startsWith(PACKAGE)) return front;
+    const nodes = uiNodes();
+    const text = nodes.map((node) => node.text || "").find((value) => /has stopped|keeps stopping/i.test(value)) || "";
+    if (text && dismissSystemDialog(nodes)) crashed = text;
+    return crashed ? `another app took the share and crashed by itself: ${crashed}` : null;
+  }, 30000, "share sheet");
   await backToApp("back from the share sheet");
   step("storage permission refused: saved in the app's own folder, the dialog says so, 分享 works", { uri: saved.uri, chooser });
 }

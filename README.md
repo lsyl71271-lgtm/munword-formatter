@@ -1,6 +1,6 @@
 # PKUNMUN 2026 文件自动排版系统（Munword）
 
-当前版本 **v1.9.0**。
+当前版本 **v2.0.0**。
 
 把内容已经写好、格式却乱七八糟的模联文件交给它，它会按《PKUNMUN2026 学术标准手册》把文件排成规范格式：字体字号、缩进行距、条款编号、国家名单和签字空行一次到位。**正文一个字都不改**，生成的 DOCX 仍能在 Word / WPS 里继续编辑。
 
@@ -87,7 +87,7 @@
 | [网页版承载力与稳定性](docs/website-capacity.md) | 网页版能扛多少人、慢在哪里、什么情况下会出问题 |
 | [架构导航](docs/architecture.md) · [统一界面决策](docs/adr-0001-shared-daily-interface.md) | 模块边界与执行步骤 |
 | [学标对照](docs/handbook-alignment.md) | 每条规则对应手册哪一页 |
-| [版本说明 v1.9.0](docs/release-1.9.0.md) | 当前版本的改动与核查记录（更早的版本见 docs/） |
+| [版本说明 v2.0.0](docs/release-2.0.0.md) | 当前版本的改动与核查记录（更早的版本见 docs/） |
 | [desktop/README.md](desktop/README.md) | 桌面安装包的构建、验收与签名 |
 | [android/README.md](android/README.md) | 安卓安装包的构建、兼容性、验收与签名 |
 
@@ -164,7 +164,7 @@ python3 -m venv .venv
 .venv/bin/python backend/cli.py /path/to/input.docx --type draft-resolution --output-dir output/diagnosis --diagnose-only
 ```
 
-- 源码发布包：`pnpm build:local-tools && .venv/bin/python scripts/package-release.py --desktop --output output/Munword-1.9.0-desktop-source.zip`。包内有校验清单和依赖许可证，不含 `.env`、部署配置、缓存或用户文档。
+- 源码发布包：`pnpm build:local-tools && .venv/bin/python scripts/package-release.py --desktop --output output/Munword-2.0.0-desktop-source.zip`。包内有校验清单和依赖许可证，不含 `.env`、部署配置、缓存或用户文档。
 - 可选视觉验收：`docker compose -f deploy/visual-qa.compose.yaml up -d` 启动只监听本机的 Gotenberg，再运行 `scripts/visual-qa.py`；需要 `backend/requirements-qa.txt` 和 Poppler。它只报告字号、斜体与像素差异，不代表学标要求已全部自动验收。
 
 **旧版本机服务**（桌面安装包出现之前的安装方式，仍然保留）：
@@ -187,7 +187,7 @@ python3 scripts/audit-source.py
 ```
 
 - [`source-checks`](.github/workflows/source-checks.yml) 在每次推送和每个 PR 上运行以上全部检查。
-- [`offline-installers`](.github/workflows/offline-installers.yml) 在安装包（DMG / EXE / APK）或其页面来源改动时运行。
+- [`offline-installers`](.github/workflows/offline-installers.yml) 在安装包（DMG / EXE / APK）或其页面来源改动时运行。只有 `main` 会发布：全部安装与真机检查通过、并且同一提交的全部源码检查也通过后，才在 Releases 页新建 `v<版本>`；已发布的版本从不覆盖或移动，同一版本号换了文件会直接报错，必须升版本号。每个版本附 `release-manifest.json`（引擎版本、各客户端修订号、安装包来源提交、验收提交、构建编号与校验值）。
 - 标准测试只用仓库里的 14 份合成验收原稿和 `tests/fixtures/engine-parity.json`，不需要私人文件或云端凭据。
 - 自动化验收只检查第 03 步“可以编辑”，从不代填字段来掩盖识别错误。
 - 其他压力与比对脚本在 `scripts/`。需要私人样例的脚本通过 `MUNWORD_FIXTURE_ROOT` 定位，这些样例不随仓库分享。
