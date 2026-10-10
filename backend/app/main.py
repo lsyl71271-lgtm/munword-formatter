@@ -41,7 +41,7 @@ SERVICE_ID = "pkunmun-2026-formatter"
 app = FastAPI(
     title="PKUNMUN 2026 文件自动排版系统",
     version=APP_VERSION,
-    description="六种文件类型的独立 DOCX 解析、排版、校验与输出服务。",
+    description="八种文件类型（学标六种文书与外交协定、联合声明）的独立 DOCX 解析、排版、校验与输出服务。",
 )
 app.add_middleware(UploadLimitMiddleware)
 # The engine listens on 127.0.0.1 only, but a browser can still be pointed at

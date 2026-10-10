@@ -71,9 +71,9 @@ check "start menu shortcut" "$(ls "$U/AppData/Roaming/Microsoft/Windows/Start Me
 W reg export "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PKUNMUN2026Formatter" 'C:\uninstall-key.reg' /y >/dev/null
 REG=$(iconv -f UTF-16LE -t UTF-8 "$C/uninstall-key.reg" | tr -d '\r'); rm -f "$C/uninstall-key.reg"
 contains "uninstall entry name" "$REG" '"DisplayName"="PKUNMUN 2026 文件排版系统"'
-contains "uninstall entry version" "$REG" '"DisplayVersion"="1.8.5"'
+contains "uninstall entry version" "$REG" "\"DisplayVersion\"=\"$(cat "$ROOT/VERSION")\""
 check "no machine-wide uninstall entry" "$(W reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PKUNMUN2026Formatter" >/dev/null && echo present || echo absent)" absent
-check "site version" "$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$INST/site/version.json")" 1.8.5
+check "site version" "$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$INST/site/version.json")" "$(cat "$ROOT/VERSION")"
 
 echo "-- browser scenarios"
 reset_browsers

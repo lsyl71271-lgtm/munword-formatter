@@ -168,7 +168,7 @@ DMG 约 0.8 MB，EXE 约 0.5 MB，APK 约 0.4 MB。排版完全在本机完成�
 [工作流记录]({args.run_url})，源码提交 `{args.commit}`。
 
 - 从源码在 Linux 上重建，两个安装包与发布文件逐字节一致。
-- 11 份验收原稿（六种文书、中英文）逐份上传、识别、确认第三步可编辑、生成、读回、预览，外加模板新建；页面零网络请求。
+- 14 份验收原稿（八种文书、中英文）逐份上传、识别、确认第三步可编辑、生成、读回、预览，外加模板新建；页面零网络请求。
 - 浏览器门槛实测：{floor_rows}。
 - Wine：Windows 7 32 位、Windows 10 64 位各 {wine['win7'].split('passed ')[-1].split(',')[0]} 项场景全部通过（浏览器选择、安装路径、卸载）。
 - Android：从源码重建 APK，内容与发布文件逐项一致，签名证书与仓库登记的指纹一致（`android/signing-cert.sha256`）。手机页面在 Chromium {webview_rows} 中跑通全部原稿、成品与新版逐部件相同；Chromium {webview_notice} 显示「更新 WebView」说明。

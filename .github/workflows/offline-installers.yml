@@ -288,8 +288,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/previous"
+          # This version's release if there is one, else the latest release (the previous version's APK).
           gh release download "v$(cat VERSION)-desktop.2" --repo "$GITHUB_REPOSITORY" --pattern PKUNMUN2026-Formatter-Android.apk --dir "$RUNNER_TEMP/previous" \
-            || echo "No APK released for this version yet: installed fresh only."
+            || gh release download --repo "$GITHUB_REPOSITORY" --pattern PKUNMUN2026-Formatter-Android.apk --dir "$RUNNER_TEMP/previous" \
+            || echo "No APK released yet: installed fresh only."
       - name: Hardware acceleration for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
