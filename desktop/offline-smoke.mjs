@@ -64,7 +64,8 @@ try {
   ];
   const downloads = [];
   for (const [type, input] of cases) downloads.push(await runCase(page, pathToFileURL(path.join(site, "index.html")).href, type, input, input));
-  // A new standard file from the template panel.
+  // A new standard file from the template panel, for the default type (the last input left 联合声明 selected).
+  await page.locator(".typeCard").filter({ has: page.locator("b", { hasText: /^决议草案$/ }) }).click();
   await page.getByText("从规范模板新建文件", { exact: true }).click();
   const template = page.locator(".templatePanel");
   await template.locator("textarea").fill("第一条 要求建立合作机制。\n第二条 决定继续协商。");
