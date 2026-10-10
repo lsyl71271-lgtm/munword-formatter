@@ -18,6 +18,8 @@ DOCUMENT_PROFILES = _POLICY["documents"]
 HANDBOOK = _POLICY["handbook"]
 LANGUAGE_RULE = _POLICY["language"]
 EMBEDDED_SUBCLAUSE = _POLICY["embeddedSubclause"]
+# Diplomatic agreements and joint statements: parties, signature block and the two reference layouts.
+TREATIES = _POLICY["treaties"]
 ENGLISH_REGIONS = frozenset(
     name.casefold() for name in json.loads((_POLICY_PATH.parent / "region-names-en.json").read_text(encoding="utf-8"))
 )

@@ -43,6 +43,7 @@ const CASES = [
   ["工作文件", "04_English_Working_Paper"], ["指令草案", "05_中文指令草案"], ["指令草案", "06_English_Draft_Directive"],
   ["决议草案", "07_中文决议草案"], ["决议草案", "08_English_Draft_Resolution"], ["友好修正案", "09_中文友好修正案"],
   ["非友好修正案", "10_中文非友好修正案"], ["友好修正案", "11_English_Amendment"],
+  ["外交协定", "12_中文外交协定"], ["联合声明", "13_中文联合声明"], ["联合声明", "14_English_Joint_Statement"],
 ];
 mkdirSync(out, { recursive: true });
 
@@ -101,7 +102,7 @@ for (const [index, spec] of builds.entries()) {
     } else {
       for (const [type, input] of CASES) {
         await cdp.send("Page.navigate", { url });
-        await cdp.until(`document.querySelectorAll(".typeCard").length === 6`, 60000, PAGE_STATE);
+        await cdp.until(`document.querySelectorAll(".typeCard").length === 8`, 60000, PAGE_STATE);
         result.userAgent ??= await cdp.eval("navigator.userAgent");
         const bytes = readFileSync(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
         // As "open with" does: the file arrives first, then the user picks the document type; the file must stay.

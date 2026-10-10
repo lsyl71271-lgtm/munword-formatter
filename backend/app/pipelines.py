@@ -8,9 +8,11 @@ from pathlib import Path
 from docx import Document
 
 from .formatters import (
+    DiplomaticAgreementFormatter,
     DraftDirectiveFormatter,
     DraftResolutionFormatter,
     FriendlyAmendmentFormatter,
+    JointStatementFormatter,
     PositionPaperFormatter,
     UnfriendlyAmendmentFormatter,
     WorkingPaperFormatter,
@@ -21,6 +23,7 @@ from .docx_package import validate_docx_package
 from .models import FormatResult, IntermediateDocument, ValidationItem
 from .parser import DocxParser
 from .structure_repair import repair_structure_with_report
+from .treaty import is_treaty
 
 
 # Fields the step-03 review screen may change.
@@ -32,6 +35,8 @@ FILENAME_PREFIXES = {
     "draft-resolution": {"zh": "决议草案", "en": "Draft Resolution"},
     "friendly-amendment": {"zh": "友好修正案", "en": "Friendly Amendment"},
     "unfriendly-amendment": {"zh": "非友好修正案", "en": "Unfriendly Amendment"},
+    "diplomatic-agreement": {"zh": "外交协定", "en": "Diplomatic Agreement"},
+    "joint-statement": {"zh": "联合声明", "en": "Joint Statement"},
 }
 _UNSAFE_FILENAME_RE = re.compile(r"[\\/:*?\"<>|\x00-\x1f\x7f]")
 
@@ -52,6 +57,10 @@ class BasePipeline:
         """Repair high-confidence structural loss, then parse the repaired bytes."""
 
         validate_docx_package(content)
+        if is_treaty(self.document_type):
+            # No clause structure to repair: the title and signature block are read as written.
+            self._repair_problems = []
+            return content, self.parser.parse(content, self.document_type)
         repair = repair_structure_with_report(content, self.document_type)
         model = self.parser.parse(repair.content, self.document_type)
         model.repair_actions = [action.to_dict() for action in repair.actions]
@@ -83,6 +92,7 @@ class BasePipeline:
         session_label: str = "",
         submitting_country: str = "",
         version: str = "v1",
+        source_name: str = "",
     ) -> FormatResult:
         effective_content, model = self._analyze(content)
         original_fields = {key: getattr(model, key) for key in OVERRIDABLE_FIELDS}
@@ -107,7 +117,7 @@ class BasePipeline:
             validations.append(ValidationItem(
                 "repair-content", "结构修复严格内容校验", "error", "；".join(self._repair_problems[:6])
             ))
-        filename = self.filename(model, session_label, submitting_country, version)
+        filename = self.filename(model, session_label, submitting_country, version, source_name)
         return FormatResult(output, filename, model, validations, before, after)
 
     @staticmethod
@@ -131,8 +141,12 @@ class BasePipeline:
                 raise InvalidRequestError(f"{key} 含有 XML 不支持的字符，请删除无效字符后重试。")
             setattr(model, snake_key, value)
 
-    def filename(self, model: IntermediateDocument, session_label: str, submitting_country: str, version: str) -> str:
-        country = submitting_country or model.country or (model.sponsors[0] if model.sponsors else "待填写国家")
+    def filename(self, model: IntermediateDocument, session_label: str, submitting_country: str, version: str, source_name: str = "") -> str:
+        # A draft resolution keeps the name of the uploaded file (browser ``outputFilename``).
+        source = re.sub(r"\.docx$", "", source_name.strip(), flags=re.I)
+        if self.document_type == "draft-resolution" and _UNSAFE_FILENAME_RE.sub("-", source).strip()[:180]:
+            return _UNSAFE_FILENAME_RE.sub("-", source).strip()[:180] + ".docx"
+        country = re.sub(r"^the\s+", "", submitting_country or model.country or (model.sponsors[0] if model.sponsors else "待填写国家"), flags=re.I)
         parts = [FILENAME_PREFIXES[self.document_type]["zh" if model.language == "zh" else "en"]]
         if session_label:
             parts.append(session_label)
@@ -170,6 +184,16 @@ class UnfriendlyAmendmentPipeline(BasePipeline):
     document_type = "unfriendly-amendment"
 
 
+class DiplomaticAgreementPipeline(BasePipeline):
+    formatter_class = DiplomaticAgreementFormatter
+    document_type = "diplomatic-agreement"
+
+
+class JointStatementPipeline(BasePipeline):
+    formatter_class = JointStatementFormatter
+    document_type = "joint-statement"
+
+
 PIPELINES = {
     "position-paper": PositionPaperPipeline,
     "working-paper": WorkingPaperPipeline,
@@ -177,4 +201,6 @@ PIPELINES = {
     "draft-resolution": DraftResolutionPipeline,
     "friendly-amendment": FriendlyAmendmentPipeline,
     "unfriendly-amendment": UnfriendlyAmendmentPipeline,
+    "diplomatic-agreement": DiplomaticAgreementPipeline,
+    "joint-statement": JointStatementPipeline,
 }

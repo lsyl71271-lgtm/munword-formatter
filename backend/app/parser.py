@@ -10,6 +10,7 @@ from docx.oxml.ns import qn
 
 from .docx_view import active_num_id, body_paragraphs, visible_text
 from .models import Clause, DocumentType, IntermediateDocument
+from .treaty import is_treaty, recognize as recognize_treaty
 from .semantic_policy import (
     DOCUMENT_PROFILES,
     ENGLISH_REGIONS,
@@ -263,6 +264,8 @@ class DocxParser:
         texts = [visible_text(p).strip() for p in body_paragraphs(document)]
         joined = "\n".join(texts)
         language = detect_language(joined)
+        if is_treaty(document_type):
+            return recognize_treaty([visible_text(p) for p in body_paragraphs(document)], document_type, language)
         model = IntermediateDocument(
             document_type=document_type,
             language=language,

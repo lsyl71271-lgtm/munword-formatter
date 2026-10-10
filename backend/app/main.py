@@ -201,6 +201,7 @@ async def format_document(
             session_label=session_label,
             submitting_country=submitting_country,
             version=version,
+            source_name=file.filename or "",
         )
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=422, detail="识别结果 JSON 无效。") from exc

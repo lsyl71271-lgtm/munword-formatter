@@ -3,7 +3,7 @@
     python desktop/acceptance/browser_flow.py --browser edge (--page <site/index.html or 直接用浏览器打开.html> | --url <http URL>)
         --out <dir> [--quick]
 
-Every acceptance input (six document types, Chinese and English) goes through select type → upload →
+Every acceptance input (all eight document types, Chinese and English) goes through select type → upload →
 recognize → editable step 03 present (never filled in by the test) → generate (ZIP read back) → original
 and generated previews; then a new file from the template panel. The page must make no http(s) request
 and its Content-Security-Policy must refuse one. WebDriver cannot drive native file pickers in every
@@ -37,6 +37,7 @@ CASES = [
     ("工作文件", "04_English_Working_Paper"), ("指令草案", "05_中文指令草案"), ("指令草案", "06_English_Draft_Directive"),
     ("决议草案", "07_中文决议草案"), ("决议草案", "08_English_Draft_Resolution"), ("友好修正案", "09_中文友好修正案"),
     ("非友好修正案", "10_中文非友好修正案"), ("友好修正案", "11_English_Amendment"),
+    ("外交协定", "12_中文外交协定"), ("联合声明", "13_中文联合声明"), ("联合声明", "14_English_Joint_Statement"),
 ]
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 

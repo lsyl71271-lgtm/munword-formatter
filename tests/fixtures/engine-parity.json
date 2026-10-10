@@ -63,6 +63,24 @@
         "delegate": "示例代表",
         "sponsors": [],
         "signatories": []
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "02_English_Position_Paper.docx": {
@@ -117,6 +135,24 @@
         "topic": "Plastic Pollution",
         "country": "Japan",
         "delegate": "Sample Delegate",
+        "sponsors": [],
+        "signatories": []
+      },
+      "diplomatic-agreement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
         "sponsors": [],
         "signatories": []
       }
@@ -199,6 +235,24 @@
           "巴西联邦共和国"
         ],
         "signatories": []
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "04_English_Working_Paper.docx": {
@@ -278,6 +332,24 @@
           "Brazil",
           "Canada"
         ],
+        "signatories": []
+      },
+      "diplomatic-agreement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
         "signatories": []
       }
     },
@@ -377,6 +449,24 @@
           "加拿大",
           "澳大利亚"
         ]
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "06_English_Draft_Directive.docx": {
@@ -475,6 +565,24 @@
           "Canada",
           "Australia"
         ]
+      },
+      "diplomatic-agreement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "07_中文决议草案.docx": {
@@ -573,6 +681,24 @@
           "加拿大",
           "澳大利亚"
         ]
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "08_English_Draft_Resolution.docx": {
@@ -671,6 +797,24 @@
           "Australia",
           "France"
         ]
+      },
+      "diplomatic-agreement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "09_中文友好修正案.docx": {
@@ -757,6 +901,24 @@
         "signatories": [
           "加拿大"
         ]
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "10_中文非友好修正案.docx": {
@@ -843,6 +1005,24 @@
           "加拿大",
           "澳大利亚"
         ]
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
       }
     },
     "11_English_Amendment.docx": {
@@ -923,6 +1103,272 @@
         "signatories": [
           "Canada"
         ]
+      },
+      "diplomatic-agreement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      }
+    },
+    "12_中文外交协定.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国",
+          "加拿大"
+        ],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "巴西联邦共和国",
+          "加拿大"
+        ],
+        "signatories": []
+      }
+    },
+    "13_中文联合声明.docx": {
+      "position-paper": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "working-paper": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-directive": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-resolution": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "friendly-amendment": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "unfriendly-amendment": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "diplomatic-agreement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法兰西共和国",
+          "巴西联邦共和国",
+          "加拿大"
+        ],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "zh",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "日本国",
+          "法兰西共和国",
+          "巴西联邦共和国",
+          "加拿大"
+        ],
+        "signatories": []
+      }
+    },
+    "14_English_Joint_Statement.docx": {
+      "position-paper": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "working-paper": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-directive": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "draft-resolution": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "friendly-amendment": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "unfriendly-amendment": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [],
+        "signatories": []
+      },
+      "diplomatic-agreement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Trinidad and Tobago",
+          "Canada"
+        ],
+        "signatories": []
+      },
+      "joint-statement": {
+        "language": "en",
+        "committee": "",
+        "topic": "",
+        "country": "",
+        "delegate": "",
+        "sponsors": [
+          "Japan",
+          "Trinidad and Tobago",
+          "Canada"
+        ],
+        "signatories": []
       }
     }
   }

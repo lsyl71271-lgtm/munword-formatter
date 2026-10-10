@@ -11,6 +11,8 @@ DocumentType = Literal[
     "draft-resolution",
     "friendly-amendment",
     "unfriendly-amendment",
+    "diplomatic-agreement",
+    "joint-statement",
 ]
 
 

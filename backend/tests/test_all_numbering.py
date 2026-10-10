@@ -8,8 +8,12 @@ from docx.oxml.ns import qn
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'backend'))
 from app.pipelines import PIPELINES
+from app.treaty import is_treaty
 from app.numbering import sequence_issues
 from app.content_guard import verify_package
+
+# The handbook's six types; diplomatic agreements and joint statements have their own tests.
+HANDBOOK_TYPES = [kind for kind in PIPELINES if not is_treaty(kind)]
 
 TITLES = dict(zip(PIPELINES,['立场文件','工作文件','指令草案','决议草案','友好修正案','非友好修正案']))
 
@@ -17,7 +21,7 @@ def source(kind,lines,en=False):
     d=Document()
     titles=['Position Paper','Working Paper','Draft Directive','Draft Resolution','Friendly Amendment','Unfriendly Amendment']
     header=['Committee: General Assembly','Topic: Cooperation','Country: China','Sponsors: China','Signatories: France'] if en else ['委员会：联合国大会','议题：合作','国家：中国','起草国：中国','附议国：法国']
-    for t in [titles[list(PIPELINES).index(kind)] if en else TITLES[kind],*header,*lines]:
+    for t in [titles[HANDBOOK_TYPES.index(kind)] if en else TITLES[kind],*header,*lines]:
         d.add_paragraph(t)
     b=BytesIO();d.save(b);return b.getvalue()
 
@@ -28,7 +32,7 @@ def run(kind,data):
 
 class AllNumberingTests(unittest.TestCase):
     def test_all_types_check_even_without_numbering(self):
-        for kind in PIPELINES:
+        for kind in HANDBOOK_TYPES:
             with self.subTest(kind=kind):
                 r,d=run(kind,source(kind,['普通正文提到第一条和（一），不应改写。']))
                 self.assertTrue(any(v.code=='numbering-policy' and '未发现' in v.detail for v in r.validations))

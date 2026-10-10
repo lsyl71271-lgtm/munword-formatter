@@ -18,6 +18,7 @@ import type { CountryLanguage } from "./countries.ts";
 import { isPlainField } from "./field-policy.ts";
 import { applyNativeRules, validMarkerChange } from "./numbering.ts";
 import type { NativeRule } from "./numbering.ts";
+import policy from "../shared/document-policy.json" with { type: "json" };
 
 export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const FORMATTING = new Set(["pPr", "rPr", "tblPr", "trPr", "tcPr", "tblGrid", "sectPr", "tblPrEx"]);
@@ -201,7 +202,9 @@ function checkEdit(edit: Edit, oldSig: Token[], newSig: Token[], oldText: string
   if (kind === "ending") return key(withoutEnding(oldSig)) === key(withoutEnding(newSig)) ? "" : "句末以外的内容发生变化";
   if (kind === "marker") return key(normalizeMarker(oldSig)) === key(normalizeMarker(newSig)) ? "" : "编号以外的内容发生变化";
   if (kind === "dr-marker" || kind === "list-marker") return isPlain(oldSig) && isPlain(newSig) && validMarkerChange(oldText,newText) ? "" : "编号转换改变了条号数值、正文或受保护结构";
-  if (kind === "countries") return "";
+  if (kind === "countries" || kind === "signature") return "";
+  if (kind === "statement-number") return edit.expected != null && newText === edit.expected && STATEMENT_NUMBER.test(newText)
+    && newText.replace(STATEMENT_NUMBER, "") === oldText && key(structureOnly(oldSig)) === key(structureOnly(newSig)) ? "" : "编号以外的内容发生变化";
   if (kind === "country-name") return isPlainField(oldSig) && isPlain(newSig) && edit.country && !edit.country.manual
     && validCountryFieldChange(oldText, newText, edit.country.language) ? "" : "国家全称变更不能由共用名称表从原字段证明";
   if (!(kind === "field" && isPlainField(oldSig) && isPlain(newSig)) && key(structureOnly(oldSig)) !== key(structureOnly(newSig))) return "图片、域、链接或修订等内容结构发生变化";
@@ -222,6 +225,34 @@ function checkEdit(edit: Edit, oldSig: Token[], newSig: Token[], oldText: string
   return `未知的编辑类型 ${kind}`;
 }
 
+/** A joint statement paragraph may gain only a leading "N. " (shared/document-policy.json treaties). */
+const STATEMENT_NUMBER = /^\d{1,3}\. /;
+const SIGNATURE_LABEL = [new RegExp(policy.treaties.signature.labelPattern.zh), new RegExp(policy.treaties.signature.labelPattern.en, "i")];
+const isSignatureLabel = (token: string) => SIGNATURE_LABEL.some(pattern => pattern.test(token));
+/** Names and labels of a signature line: Chinese splits at any space, other text at tabs or wider gaps (names have single spaces). */
+const signatureTokens = (text: string) => (/[\u3400-\u9fff]/.test(text) ? text.split(/[\s\u3000]+/) : text.split(/\t+|\s{2,}|\u3000+/)).map(t => t.trim()).filter(Boolean);
+const tally = (values: string[]) => values.reduce((counts, value) => counts.set(value, (counts.get(value) || 0) + 1), new Map<string, number>());
+const textAndSpacing = (sig: Token[]) => sig.every(t => t[0] === "t" || WHITESPACE_NODES.has(JSON.stringify(t)));
+
+/** A rebuilt signature block: only the representatives' labels it lists may be added; every name and
+ * every label of the original block stays (shared/document-policy.json treaties.signature). */
+function checkSignatureBlock(before: Snapshot, removed: Element[], created: Element[], expected: string | null | undefined): string[] {
+  const problems: string[] = [];
+  let labels: string[] = [];
+  try { labels = JSON.parse(expected || "[]"); } catch { problems.push("签字栏授权记录损坏"); }
+  if (removed.some(el => !textAndSpacing(before.signatures.get(el)!))) problems.push("签字栏原稿含有文字以外的内容，不能重建");
+  if (created.some(el => !textAndSpacing(signature(el)))) problems.push("重建的签字栏含有文字以外的内容");
+  const old = removed.flatMap(el => signatureTokens(before.texts.get(el)!));
+  const now = created.flatMap(el => elementText(el).split(/[\t\n]/).map(t => t.trim()).filter(Boolean));
+  const allowed = new Set(labels);
+  const nowLabels = now.filter(t => allowed.has(t)), nowNames = now.filter(t => !allowed.has(t));
+  if (JSON.stringify(nowLabels) !== JSON.stringify(labels)) problems.push("签字栏的代表与授权的签署方不一致");
+  const oldLabels = tally(old.filter(isSignatureLabel)), kept = tally(nowLabels);
+  if ([...oldLabels].some(([label, count]) => (kept.get(label) || 0) < count)) problems.push("签字栏原有的代表被删除或改写");
+  if (!sameCounts(tally(old.filter(t => !isSignatureLabel(t))), tally(nowNames))) problems.push("签字栏的姓名被删除、改写或新增");
+  return problems;
+}
+
 /** Problems comparing the snapshot with the formatted document, as user-facing text. */
 export function verifyFormat(before: Snapshot, document: Document, editLog: Map<Element, Edit>, titles: string[], labels: string[]): string[] {
   const afterOrder = bodyBlocks(document), afterSet = new Set(afterOrder), beforeSet = new Set(before.order);
@@ -234,9 +265,11 @@ export function verifyFormat(before: Snapshot, document: Document, editLog: Map<
     if (!groups.has(name)) groups.set(name, { before: [], after: [], expected: edit.expected, country: edit.country });
     return groups.get(name)!;
   };
+  const signatureBlock = { removed: [] as Element[], created: [] as Element[], expected: null as string | null | undefined };
   for (const el of before.order) {
     const edit = editLog.get(el);
     if (edit?.kind === "countries") { const group = groupOf(edit); group.before.push(el); if (afterSet.has(el)) group.after.push(el); }
+    if (edit?.kind === "signature" && !afterSet.has(el)) { signatureBlock.removed.push(el); continue; }
     if (!afterSet.has(el)) {
       const removable = edit?.kind === "countries" || (edit?.kind === "empty-line" && isWhitespace(before.signatures.get(el)!));
       if (before.signatures.get(el)!.length && !removable) problems.push(`第 ${number.get(el)} 段被删除：${before.texts.get(el)!.slice(0, 30)}`);
@@ -255,8 +288,10 @@ export function verifyFormat(before: Snapshot, document: Document, editLog: Map<
     if (!edit?.created) problems.push(`输出中出现来源不明的段落：${elementText(el).slice(0, 30)}`);
     else if (edit.kind === "blank") { if (signature(el).length) problems.push("新增空行含有内容"); }
     else if (edit.kind === "countries") groupOf(edit).after.push(el);
+    else if (edit.kind === "signature") { signatureBlock.created.push(el); signatureBlock.expected = edit.expected; }
     else problems.push(`输出中新增段落的类型不被允许：${edit.kind}`);
   }
+  if (signatureBlock.removed.length || signatureBlock.created.length) problems.push(...checkSignatureBlock(before, signatureBlock.removed, signatureBlock.created, signatureBlock.expected));
   const position = new Map(afterOrder.map((el, index) => [el, index]));
   for (const [name, group] of groups) {
     const after = [...group.after].sort((a, b) => position.get(a)! - position.get(b)!);

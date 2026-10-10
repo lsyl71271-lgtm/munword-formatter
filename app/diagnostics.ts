@@ -5,7 +5,7 @@ import type { BrowserModel, BrowserValidation } from "./docx-browser.ts";
 export function buildDiagnosticReport(model: BrowserModel, validations: BrowserValidation[] = []) {
   const clauses = [...model.preambulatory_clauses, ...model.operative_clauses, ...model.body_clauses]
     .sort((a, b) => a.paragraph_index - b.paragraph_index);
-  const missing = rules.requiredFields[model.document_type].filter(key => {
+  const missing = (rules.requiredFields[model.document_type] as string[]).filter(key => {
     const value = model[key as keyof BrowserModel];
     return !value || (Array.isArray(value) && !value.length);
   });
@@ -14,7 +14,7 @@ export function buildDiagnosticReport(model: BrowserModel, validations: BrowserV
     document_type: model.document_type,
     language: model.language,
     paragraph_count: model.paragraphs.filter(text => text.trim()).length,
-    missing_fields: missing.map(key => ({ field: key, label: rules.fieldLabels[key as keyof typeof rules.fieldLabels] })),
+    missing_fields: missing.map(key => ({ field: key, label: (rules.typeFieldLabels as Record<string, Record<string, string>>)[model.document_type]?.[key] || rules.fieldLabels[key as keyof typeof rules.fieldLabels] })),
     warnings: model.warnings,
     clauses: clauses.map(clause => ({
       paragraph: clause.paragraph_index + 1, role: clause.kind, level: clause.level,

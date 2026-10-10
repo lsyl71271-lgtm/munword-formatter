@@ -30,6 +30,7 @@ from .numbering import apply_native_rules, valid_marker_change
 
 import difflib
 import hashlib
+import json
 import re
 import zipfile
 from collections import Counter
@@ -40,6 +41,7 @@ from .errors import InvalidDocxError
 from lxml import etree
 from docx.oxml.ns import qn
 from .countries import plan_countries, split_country_names, valid_country_field_change
+from .semantic_policy import TREATIES
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _W = f"{{{W_NS}}}"
@@ -244,6 +246,7 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
     if _wrappers(document) != before.wrappers:
         problems.append("内容控件或自定义 XML 容器发生变化")
     country_groups: dict = {}
+    signature_block: dict = {"removed": [], "created": [], "expected": None}
 
     def group_of(edit):
         return country_groups.setdefault(edit.key, {"before": [], "after": [], "expected": edit.expected, "country": edit.country})
@@ -255,6 +258,9 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
             group["before"].append(el)
             if el in after_set:
                 group["after"].append(el)
+        if edit and edit.kind == "signature" and el not in after_set:
+            signature_block["removed"].append(el)
+            continue
         if el not in after_set:
             removable = (edit and edit.kind == "countries") or (
                 edit and edit.kind == "empty-line" and is_whitespace(before.signatures[el])
@@ -285,8 +291,13 @@ def verify_format(before: Snapshot, document, edit_log: dict, *, allowed_titles:
                 problems.append("新增空行含有内容")
         elif edit.kind == "countries":
             group_of(edit)["after"].append(el)
+        elif edit.kind == "signature":
+            signature_block["created"].append(el)
+            signature_block["expected"] = edit.expected
         else:
             problems.append(f"输出中新增段落的类型不被允许：{edit.kind}")
+    if signature_block["removed"] or signature_block["created"]:
+        problems.extend(_check_signature_block(before, signature_block["removed"], signature_block["created"], signature_block["expected"]))
 
     position = {el: index for index, el in enumerate(after_order)}
     for key, group in country_groups.items():
@@ -335,8 +346,12 @@ def _check_edit(edit: Edit, old, new, old_text, new_text, allowed_titles, labels
         return "" if _normalize_marker(old) == _normalize_marker(new) else "编号以外的内容发生变化"
     if kind in ('dr-marker','list-marker'):
         return '' if _is_plain(old) and _is_plain(new) and valid_marker_change(old_text,new_text) else '编号转换改变了条号数值、正文或受保护结构'
-    if kind == "countries":
-        return ""  # checked per list in ``verify_format``
+    if kind in ("countries", "signature"):
+        return ""  # checked per list / per block in ``verify_format``
+    if kind == "statement-number":
+        ok = (edit.expected is not None and new_text == edit.expected and _STATEMENT_NUMBER.match(new_text)
+              and _STATEMENT_NUMBER.sub("", new_text, count=1) == old_text and _structure_only(old) == _structure_only(new))
+        return "" if ok else "编号以外的内容发生变化"
     if kind == "country-name":
         return "" if is_plain_field(old) and _is_plain(new) and edit.country and not edit.country["manual"] and valid_country_field_change(old_text, new_text, edit.country["language"]) else "国家全称变更不能由共用名称表从原字段证明"
     if not (kind == "field" and is_plain_field(old) and _is_plain(new)) and _structure_only(old) != _structure_only(new):
@@ -361,6 +376,57 @@ def _check_edit(edit: Edit, old, new, old_text, new_text, allowed_titles, labels
             return "补标签时原有文字发生变化"
         return ""
     return f"未知的编辑类型 {kind}"
+
+
+# A joint statement paragraph may gain only a leading "N. " (shared/document-policy.json treaties).
+_STATEMENT_NUMBER = re.compile(r"^\d{1,3}\. ")
+_SIGNATURE_LABEL = (
+    re.compile(TREATIES["signature"]["labelPattern"]["zh"]),
+    re.compile(TREATIES["signature"]["labelPattern"]["en"], re.I),
+)
+
+
+def _is_signature_label(token: str) -> bool:
+    return any(pattern.search(token) for pattern in _SIGNATURE_LABEL)
+
+
+def _signature_tokens(text: str) -> list:
+    """Names and labels of a signature line: Chinese splits at any space, other text at tabs or wider gaps (names have single spaces)."""
+
+    parts = re.split(r"[\s\u3000]+", text) if re.search(r"[\u3400-\u9fff]", text) else re.split(r"\t+|\s{2,}|\u3000+", text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _text_and_spacing(sig: tuple) -> bool:
+    return all(token[0] == "t" or token in _WHITESPACE_NODES for token in sig)
+
+
+def _check_signature_block(before: Snapshot, removed: list, created: list, expected) -> list:
+    """A rebuilt signature block: only the representatives' labels it lists may be added; every name and
+    every label of the original block stays (shared/document-policy.json treaties.signature)."""
+
+    problems: list = []
+    labels: list = []
+    try:
+        labels = json.loads(expected or "[]")
+    except ValueError:
+        problems.append("签字栏授权记录损坏")
+    if any(not _text_and_spacing(before.signatures[el]) for el in removed):
+        problems.append("签字栏原稿含有文字以外的内容，不能重建")
+    if any(not _text_and_spacing(signature(el)) for el in created):
+        problems.append("重建的签字栏含有文字以外的内容")
+    old = [token for el in removed for token in _signature_tokens(before.texts[el])]
+    now = [token.strip() for el in created for token in re.split(r"[\t\n]", element_text(el)) if token.strip()]
+    allowed = set(labels)
+    now_labels = [token for token in now if token in allowed]
+    now_names = [token for token in now if token not in allowed]
+    if now_labels != labels:
+        problems.append("签字栏的代表与授权的签署方不一致")
+    if Counter(token for token in old if _is_signature_label(token)) - Counter(now_labels):
+        problems.append("签字栏原有的代表被删除或改写")
+    if Counter(token for token in old if not _is_signature_label(token)) != Counter(now_names):
+        problems.append("签字栏的姓名被删除、改写或新增")
+    return problems
 
 
 def _longest_prefix(text: str, words):

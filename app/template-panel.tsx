@@ -25,12 +25,18 @@ export default function TemplatePanel({ type, onGenerated }: { type: BrowserDocu
     } catch (reason) { if (token === operation.current) setError(reason instanceof Error ? reason.message : "模板生成失败。"); }
     finally { if (token === operation.current) setPendingType(null); }
   }
-  const fields: [keyof TemplateInput, string][] = [["committee", "委员会"]];
-  if (type !== "draft-directive") fields.push(["topic", "议题"]);
-  if (type === "position-paper") fields.push(["country", "国家 / 席位"], ["delegate", "代表"]);
+  const treaty = type === "diplomatic-agreement" || type === "joint-statement";
+  const fields: [keyof TemplateInput, string][] = [];
+  // Treaties: the parties and subject make the title, and the formatter adds one signature line per party.
+  if (treaty) fields.push(["sponsors", "签署方（逗号分隔）"], ["topic", type === "joint-statement" ? "事由（如：海洋塑料污染治理）" : "事由（如：海上搜救合作）"]);
   else {
-    fields.push(["sponsors", "起草国（逗号分隔）"]);
-    if (type !== "working-paper") fields.push(["signatories", "附议国（逗号分隔）"]);
+    fields.push(["committee", "委员会"]);
+    if (type !== "draft-directive") fields.push(["topic", "议题"]);
+    if (type === "position-paper") fields.push(["country", "国家 / 席位"], ["delegate", "代表"]);
+    else {
+      fields.push(["sponsors", "起草国（逗号分隔）"]);
+      if (type !== "working-paper") fields.push(["signatories", "附议国（逗号分隔）"]);
+    }
   }
   return <details className="studioTool templatePanel"><summary>从规范模板新建文件</summary><p>独立于原稿修复。使用上方所选文种和现有学标规则，不生成或改写正文。每段一行，条款编号请按需要填写。</p><div className="formGrid">
     <label>语言<select value={input.language} onChange={event => update("language", event.target.value)}><option value="zh">中文</option><option value="en">English</option></select></label>

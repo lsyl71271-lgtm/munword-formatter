@@ -42,6 +42,7 @@ const CASES = [
   ["工作文件", "04_English_Working_Paper"], ["指令草案", "05_中文指令草案"], ["指令草案", "06_English_Draft_Directive"],
   ["决议草案", "07_中文决议草案"], ["决议草案", "08_English_Draft_Resolution"], ["友好修正案", "09_中文友好修正案"],
   ["非友好修正案", "10_中文非友好修正案"], ["友好修正案", "11_English_Amendment"],
+  ["外交协定", "12_中文外交协定"], ["联合声明", "13_中文联合声明"], ["联合声明", "14_English_Joint_Statement"],
 ];
 mkdirSync(out, { recursive: true });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -398,7 +399,7 @@ async function refusedStorage() {
   shell(`am force-stop ${PACKAGE}`); // (revoking stops the app on most versions; on the rest, this does)
   await launch();
   await connect();
-  await cdp.until(`document.querySelectorAll(".typeCard").length === 6 || (document.body && document.body.innerText.indexOf("WebView）版本太旧") >= 0)`, 90000, PAGE_STATE);
+  await cdp.until(`document.querySelectorAll(".typeCard").length === 8 || (document.body && document.body.innerText.indexOf("WebView）版本太旧") >= 0)`, 90000, PAGE_STATE);
   await saveThroughBridge("PKUNMUN-no-permission.docx", BIG.subarray(0, 3000));
   let tapped = false;
   await waitFor(() => {
@@ -458,7 +459,7 @@ async function filePicker() {
     await sleep(1000);
     report.picker = picker;
   }
-  if (!(await cdp.eval(`document.querySelectorAll(".typeCard").length === 6`))) throw new Error("the page changed after the picker was cancelled");
+  if (!(await cdp.eval(`document.querySelectorAll(".typeCard").length === 8`))) throw new Error("the page changed after the picker was cancelled");
   step("file picker: tapping the upload area opens it, and cancelling leaves the page ready (twice)", { picker: report.picker });
 }
 
@@ -468,7 +469,7 @@ async function pageProcessCrash() {
   await sleep(3000);
   await waitFor(() => resumedActivity().startsWith(PACKAGE), 20000, "the app still in front after the page crashed");
   await connect();
-  await cdp.until(`document.querySelectorAll(".typeCard").length === 6`, 90000, PAGE_STATE);
+  await cdp.until(`document.querySelectorAll(".typeCard").length === 8`, 90000, PAGE_STATE);
   const log = appLog().join("\n");
   if (!/render process gone, crash=true/.test(log)) throw new Error("the app did not see the page process crash");
   step("crashed page process: the app stays open and loads the page again");
@@ -523,7 +524,7 @@ async function appFlows() {
   for (const [index, [type, input]] of CASES.entries()) {
     await cdp.eval("location.reload(), true");
     await sleep(500);
-    await cdp.until(`document.querySelectorAll(".typeCard").length === 6`, 60000, PAGE_STATE);
+    await cdp.until(`document.querySelectorAll(".typeCard").length === 8`, 60000, PAGE_STATE);
     // As a user does: the type first, then the file (what the system file picker hands the page).
     await cdp.eval(`${typeCard(type)}.click(), true`);
     const bytes = readFileSync(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
@@ -553,7 +554,9 @@ async function appFlows() {
     const bytes = readFileSync(path.join(ROOT, "examples", "acceptance-inputs", `${input}.docx`));
     await saveThroughBridge(`${input}.docx`, bytes);
     const kept = await savedDialog(`${input} to open`);
-    if (kept.name !== `${input}.docx`) throw new Error(`${input} kept as ${kept.name}`);
+    // A draft resolution's output keeps the uploaded name, so the run above already put one under this name
+    // in Download: the system numbers the copy ("… (1).docx").
+    if (!new RegExp(`^${input}(?: \\(\\d+\\))?\\.docx$`).test(kept.name)) throw new Error(`${input} kept as ${kept.name}`);
     tap(await waitForNode(button("完成"), 10000, "完成 button"));
     documents[input] = { name: kept.name, bytes };
   }
@@ -618,10 +621,10 @@ async function main() {
   shell("rm -f /sdcard/Download/*.docx");
   await launch();
   await connect();
-  await cdp.until(`document.querySelectorAll(".typeCard").length === 6 || (document.body && document.body.innerText.indexOf("WebView）版本太旧") >= 0)`, 90000, PAGE_STATE);
+  await cdp.until(`document.querySelectorAll(".typeCard").length === 8 || (document.body && document.body.innerText.indexOf("WebView）版本太旧") >= 0)`, 90000, PAGE_STATE);
   report.userAgent = await cdp.eval("navigator.userAgent");
   report.webview = Number((/Chrome\/(\d+)/.exec(report.userAgent) || [])[1]);
-  report.mode = await cdp.eval(`document.querySelectorAll(".typeCard").length === 6 ? "app" : "notice"`);
+  report.mode = await cdp.eval(`document.querySelectorAll(".typeCard").length === 8 ? "app" : "notice"`);
   const expected = report.webview >= FLOOR ? "app" : "notice";
   screencap(`start-${report.mode}`);
   if (report.mode !== expected) throw new Error(`WebView ${report.webview} shows the ${report.mode}, expected the ${expected}`);
