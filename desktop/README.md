@@ -11,7 +11,7 @@
   - 写入 `Content-Security-Policy`；
   - 用一段 ES3 写的加载脚本代替 `<script src="app.js">`；
   - 修改 `<noscript>` 提示语。
-- **旧浏览器**：加载脚本先检查 `Array.prototype.findLast` 和 CSS 层叠层（Chrome/Edge 99、Safari 15.4、Firefox 104 起都有），满足才加载 `app.js`。否则在页面里用中文说明该装哪个浏览器，IE 也能显示，不会白屏或样式错乱。
+- **旧浏览器**（检查和说明与网页版共用 `local_web/compat-loader.mjs`）：加载脚本先检查 `Array.prototype.findLast` 和 CSS 层叠层（Chrome/Edge 99、Safari 15.4、Firefox 104 起都有），满足才加载 `app.js`。否则在页面里用中文说明该装哪个浏览器，IE 也能显示，不会白屏或样式错乱。
 - **禁止联网**：`Content-Security-Policy` 设为 `connect-src 'none'`，禁止 fetch/XHR/WebSocket、远程图片和字体，也禁止表单提交。即使页面代码尝试联网，浏览器也会拒绝。`desktop/offline-smoke.mjs` 专门验证这一点。
 - **macOS**：
   - 程序入口 `Contents/MacOS/PKUNMUN2026` 是 `macos/launcher-stub.c` 编译的通用二进制（arm64 + x86_64，x86_64 支持 10.11 起）。只用纯脚本做入口时，Apple 芯片会把程序当成 Intel 程序，没装 Rosetta 的 Mac 会先要求安装 Rosetta。

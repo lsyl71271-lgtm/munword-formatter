@@ -33,7 +33,7 @@ export const UNSIGNED_NAME = "PKUNMUN2026-Formatter-Android-unsigned.apk";
 export const MIN_SDK = 21; // Android 5.0
 export const TARGET_SDK = 34; // Android 14
 const [major, minor, patch] = VERSION.split(".").map(Number);
-// Android-only updates of the same program version (the first 1.9.0 APK is versionCode 1090001, revision 1): each
+// Android-only updates of the same program version (the first 2.0.0 APK is versionCode 2000001, revision 1): each
 // raises the revision, so phones install it over the previous APK. Back to 1 with the next VERSION.
 export const ANDROID_REVISION = 1;
 export const VERSION_CODE = (major * 10000 + minor * 100 + patch) * 100 + ANDROID_REVISION;

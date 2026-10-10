@@ -22,7 +22,7 @@
 
 ## 版本说明（新 → 旧）
 
-[1.9.0](release-1.9.0.md) · [1.8.5](release-1.8.5.md) · [1.8.4](release-1.8.4.md) · [1.8.3](release-1.8.3.md) · [1.8.2](release-1.8.2.md) · [1.8.1](release-1.8.1.md) · [1.8.0](release-1.8.0.md) · [1.7.2](release-1.7.2.md) · [1.7.1](release-1.7.1.md) · [1.7.0](release-1.7.0.md) · [1.6.3](release-1.6.3.md)
+[2.0.0](release-2.0.0.md) · [1.9.0](release-1.9.0.md) · [1.8.5](release-1.8.5.md) · [1.8.4](release-1.8.4.md) · [1.8.3](release-1.8.3.md) · [1.8.2](release-1.8.2.md) · [1.8.1](release-1.8.1.md) · [1.8.0](release-1.8.0.md) · [1.7.2](release-1.7.2.md) · [1.7.1](release-1.7.1.md) · [1.7.0](release-1.7.0.md) · [1.6.3](release-1.6.3.md)
 
 ## 历史记录
 
