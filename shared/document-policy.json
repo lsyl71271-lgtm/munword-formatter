@@ -79,6 +79,14 @@
    "unfriendly-amendment": {
     "zh": "修正案",
     "en": "Amendment"
+   },
+   "diplomatic-agreement": {
+    "zh": "外交协定",
+    "en": "Diplomatic Agreement"
+   },
+   "joint-statement": {
+    "zh": "联合声明",
+    "en": "Joint Statement"
    }
   },
   "numbering": {
@@ -534,6 +542,14 @@
   "unfriendly-amendment": {
    "zh": "非友好修正案",
    "en": "Unfriendly Amendment"
+  },
+  "diplomatic-agreement": {
+   "zh": "外交协定",
+   "en": "Diplomatic Agreement"
+  },
+  "joint-statement": {
+   "zh": "联合声明",
+   "en": "Joint Statement"
   }
  },
  "metadata": {
@@ -910,6 +926,140 @@
     "committee",
     "topic"
    ]
+  },
+  "diplomatic-agreement": {},
+  "joint-statement": {}
+ },
+ "treaties": {
+  "source": "外交协定按用户提供的外交协定 PDF 范例实测（WPS，A4，宋体）；联合声明按用户提供的联合声明 DOCX 范例的段落属性。范例本身不收入仓库。英文版沿用同一版式，西文字体 Times New Roman。",
+  "types": [
+   "diplomatic-agreement",
+   "joint-statement"
+  ],
+  "titleWords": {
+   "zh": [
+    "联合声明",
+    "共同声明",
+    "联合公报",
+    "声明",
+    "宣言",
+    "协定",
+    "协议",
+    "条约",
+    "公约",
+    "议定书",
+    "备忘录",
+    "换文"
+   ],
+   "en": [
+    "Joint Statement",
+    "Joint Declaration",
+    "Joint Communiqu[eé]",
+    "Statement",
+    "Declaration",
+    "Communiqu[eé]",
+    "Agreement",
+    "Treaty",
+    "Convention",
+    "Protocol",
+    "Memorandum of Understanding",
+    "Memorandum",
+    "Exchange of Notes"
+   ]
+  },
+  "parties": {
+   "zhSubjectStart": "关于|就|有关",
+   "zhSeparators": "[、，,；;]|以及|及|与|同|(?<!共)和(?!平)",
+   "zhTrailing": "(?:之间|间|双方|三方|四方|各方)$",
+   "enLead": "\\b(?:between|among|amongst|of|by)\\s+",
+   "enSubjectStart": "\\s+(?:on|concerning|regarding|relating to|in respect of|with respect to)\\s+",
+   "enSeparators": "\\s*,\\s*(?:and\\s+)?|\\s+and\\s+",
+   "note": "签署方从标题读出：中文取“关于 / 就 / 有关”之前的部分（标题分两段且第二段以它们开头时取第一段），英文取 between / of … on 之间的部分；拼起来才是共用国家表中已知名称的相邻片段（如“大不列颠及北爱尔兰联合王国”“Trinidad and Tobago”）重新合并。第 03 步可以修改。"
+  },
+  "signature": {
+   "label": {
+    "zh": "{party}代表",
+    "en": "Representative of {party}"
+   },
+   "labelPattern": {
+    "zh": "代表[:：]?$",
+    "en": "^(?:Representative of|On behalf of|For)\\b|\\bRepresentative[:：]?$"
+   },
+   "maxPerRow": 3,
+   "minGapEm": 1.0,
+   "scanParagraphs": 8,
+   "note": "签字栏：每一方一个“XX代表”，与标题识别（或第 03 步确认）的签署方数量、顺序一致；每行最多 3 方，4 方排 2+2、5 方 3+2，依此类推，一行放不下时再多分一行；下一行是对应代表的姓名，居中对齐在“代表”正下方；原稿已写的“代表”和姓名保留，缺的“代表”补上，缺的姓名留空供签字。原稿签字栏含图片、域、链接或修订时保留原样并提示。"
+  },
+  "layouts": {
+   "diplomatic-agreement": {
+    "evidence": "PDF 实测：标题 16 磅加粗居中，两行基线间距 31.2；正文 12 磅，基线间距 23.4（1.5 倍），首行缩进 24（2 字），两端对齐；“第X章”加粗居中；签字栏“代表”一行、姓名一行，同一行距；段前段后为 0。",
+    "titleSizePt": 16,
+    "line": {
+     "rule": "exact",
+     "pitchPt": {
+      "zh": {
+       "title": 31.2,
+       "body": 23.4
+      },
+      "en": {
+       "title": 27.6,
+       "body": 20.7
+      }
+     }
+    },
+    "spacingTwips": {
+     "title": [
+      0,
+      0
+     ],
+     "body": [
+      0,
+      0
+     ],
+     "signature": [
+      0,
+      0
+     ]
+    },
+    "bodyFirstLinePt": 24,
+    "bodyAlign": "both",
+    "chapter": "^\\s*(?:第[一二三四五六七八九十百零〇两\\d]+[章编]|第[一二三四五六七八九十百零〇两\\d]+部分|(?:Chapter|Part)\\s+(?:[IVXLC]+|\\d+)\\b)",
+    "numberStatements": false
+   },
+   "joint-statement": {
+    "evidence": "DOCX 段落属性：标题两段，16 磅加粗居中；全部正文段段前 340、段后 330 twips，单倍行距（auto 240），左对齐；开头段（日期、“共同声明如下：”）不编号；其后各段编号“1.”（十进制，编号后空格）；引用的公约条文不编号，左缩进 1 字（12 磅），斜体；签字栏居中，1.5 倍行距（auto 360），段后 0。",
+    "titleSizePt": 16,
+    "line": {
+     "rule": "auto",
+     "title": 240,
+     "body": 240,
+     "signature": 360
+    },
+    "spacingTwips": {
+     "title": [
+      340,
+      330
+     ],
+     "body": [
+      340,
+      330
+     ],
+     "signature": [
+      0,
+      0
+     ]
+    },
+    "bodyFirstLinePt": 0,
+    "bodyAlign": "left",
+    "chapter": null,
+    "numberStatements": true,
+    "numberFormat": "{n}. ",
+    "opening": "[：:]$|如下|as follows|hereby",
+    "quote": {
+     "indentPt": 12,
+     "italic": true
+    }
+   }
   }
  }
 }

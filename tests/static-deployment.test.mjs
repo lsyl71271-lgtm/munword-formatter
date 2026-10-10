@@ -46,7 +46,7 @@ test("published bundle recognizes and downloads DOCX without API calls or step 0
     window.File.prototype.arrayBuffer = async () => source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
     window.eval(script);
     await waitFor(() => window.document.querySelector('input[type="file"]'));
-    assert.equal(window.document.querySelectorAll(".typeCard").length, 6);
+    assert.equal(window.document.querySelectorAll(".typeCard").length, 8);
     const button = text => [...window.document.querySelectorAll("button")].find(el => el.textContent.includes(text));
     const picker = window.document.querySelector('input[type="file"]');
     Object.defineProperty(picker, "files", { value: [new window.File([source], "sample.docx")] });

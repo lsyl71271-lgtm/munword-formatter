@@ -156,7 +156,7 @@ test("40 deterministic fragmentation and extreme-size stress variants preserve c
   }
 });
 
-const types = ["position-paper", "position-paper", "working-paper", "working-paper", "draft-directive", "draft-directive", "draft-resolution", "draft-resolution", "friendly-amendment", "unfriendly-amendment", "friendly-amendment"];
+const types = ["position-paper", "position-paper", "working-paper", "working-paper", "draft-directive", "draft-directive", "draft-resolution", "draft-resolution", "friendly-amendment", "unfriendly-amendment", "friendly-amendment", "diplomatic-agreement", "joint-statement", "joint-statement"];
 const fixtureDir = new URL("../examples/acceptance-inputs/", import.meta.url);
 for (const [index, filename] of (await readdir(fixtureDir)).filter(name => name.endsWith(".docx")).sort().entries()) {
   test(`committed fixture ${filename}: text/control preservation and repeat formatting`, async () => {

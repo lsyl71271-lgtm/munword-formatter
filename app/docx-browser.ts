@@ -8,7 +8,7 @@ import regionNames from "../shared/region-names-en.json" with { type: "json" };
 import { COUNTRY_DATA_DATE, countryWarnings, planCountries, resolveCountry, splitCountryNames } from "./countries.ts";
 import { InvalidRequestError, validateReview } from "./request-validation.ts";
 import { applyNativeRules, markerOf, markerText, nativeFamily, nativeLevel, nativeRangeReason, planHierarchy, numberingProfile, validMarkerChange, sequenceIssues } from "./numbering.ts";
-import type { NativeRule, NumberedItem } from "./numbering.ts";
+import type { NativeRule, NumberedItem, NumberingType } from "./numbering.ts";
 
 export type BrowserDocumentType =
   | "position-paper"
@@ -16,7 +16,12 @@ export type BrowserDocumentType =
   | "draft-directive"
   | "draft-resolution"
   | "friendly-amendment"
-  | "unfriendly-amendment";
+  | "unfriendly-amendment"
+  | "diplomatic-agreement"
+  | "joint-statement";
+
+/** Options of a format run; ``sourceName`` is the uploaded file's name (a draft resolution keeps it). */
+export type FormatOptions = { sessionLabel: string; submittingCountry: string; version: string; preserveCountryOrder?: boolean; normalizePunctuation?: boolean; sourceName?: string };
 
 export type BrowserClause = {
   text: string;
@@ -383,6 +388,7 @@ export function parseDocxInBrowser(content: ArrayBuffer, documentType: BrowserDo
 
 /** Recognition on an already parsed main document; reads it, never changes it. */
 function recognize(document: Document, documentType: BrowserDocumentType): BrowserModel {
+  if (isTreaty(documentType)) return recognizeTreaty(document, documentType);
   const sourceParagraphs = flowParagraphs(document);
   const paragraphs = sourceParagraphs.map(paragraphText);
   const nonEmpty = paragraphs.map((text, index) => ({ text: text.trim(), index })).filter((item) => item.text);
@@ -688,10 +694,13 @@ function repairMissingFirstSection(document: Document, documentType: BrowserDocu
   return true;
 }
 
-function outputFilename(model: BrowserModel, session: string, submitting: string, version: string) {
-  const country = submitting || model.country || model.sponsors[0] || "待填写国家";
-  return [typeTitle(model.document_type, model.language), session, country, version || "v1"]
-    .filter(Boolean).join(" ").replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, "-").slice(0, 180) + ".docx";
+const safeFilename = (name: string) => name.replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, "-").trim().slice(0, 180);
+/** A draft resolution keeps the uploaded file's name; the others are named "<type> [session] <country> <version>". */
+function outputFilename(model: BrowserModel, options: FormatOptions) {
+  const source = options.sourceName?.trim().replace(/\.docx$/i, "");
+  if (model.document_type === "draft-resolution" && source && safeFilename(source)) return `${safeFilename(source)}.docx`;
+  const country = (options.submittingCountry || model.country || model.sponsors[0] || "待填写国家").replace(/^the\s+/i, "");
+  return safeFilename([typeTitle(model.document_type, model.language), options.sessionLabel, country, options.version || "v1"].filter(Boolean).join(" ")) + ".docx";
 }
 
 // ===================================================================== format
@@ -1729,7 +1738,7 @@ function numberingMarkers(ctx: Ctx) {
 }
 
 function continuity(ctx: Ctx, blocks: Block[]) {
-  const profile=numberingProfile(ctx.type), section="sectionPattern" in profile ? new RegExp(profile.sectionPattern) : null;
+  const profile=numberingProfile(ctx.type as NumberingType), section="sectionPattern" in profile ? new RegExp(profile.sectionPattern) : null;
   const items=blocks.map(b=>{
     const text=paragraphText(b.p), marker=b.role==="item" && attached(b) ? markerOf(text,b.level>=2) : null;
     return {text,family:marker?.family || "",value:marker?.value ?? null,level:b.level,reset:ctx.type!=="draft-resolution" && (b.role==="part" || b.role!=="item" && Boolean(section?.test(text)))};
@@ -1826,7 +1835,7 @@ const EDIT_NOTES: Record<string, string> = {
  * are checked together. Native changes are independently reconstructed by
  * the package guard, never exempted from it. */
 function documentNumbering(ctx: Ctx, blocks: Block[]) {
-  const profile=numberingProfile(ctx.type), resolution=ctx.type==="draft-resolution";
+  const profile=numberingProfile(ctx.type as NumberingType), resolution=ctx.type==="draft-resolution";
   const sectionPattern="sectionPattern" in profile ? new RegExp(profile.sectionPattern) : null;
   const xml = ctx.parts["word/numbering.xml"] ? new DOMParser().parseFromString(decodeXml(ctx.parts["word/numbering.xml"]),"application/xml") : null;
   const items: NumberedItem[] = blocks.map(b=>{
@@ -1837,7 +1846,7 @@ function documentNumbering(ctx: Ctx, blocks: Block[]) {
     const family=marker?.family || (eligible && active && xml ? nativeFamily(xml,active.numId,active.ilvl) : "");
     return {text,family,value:marker?.value ?? null,level:b.level,key:active ? `${active.numId}:${active.ilvl}` : undefined,top:family==="article" || family==="decimal" && !/^[（(]/.test(text.trim()) && b.level===0,reset:!resolution && (b.role==="part" || section)};
   });
-  const plan=planHierarchy(items,ctx.language,ctx.type), rules:NativeRule[]=[], notes:string[]=[], rewrites:{b:Block;marker:NonNullable<ReturnType<typeof markerOf>>;level:number}[]=[];
+  const plan=planHierarchy(items,ctx.language,ctx.type as NumberingType), rules:NativeRule[]=[], notes:string[]=[], rewrites:{b:Block;marker:NonNullable<ReturnType<typeof markerOf>>;level:number}[]=[];
   const uncertain=(index:number)=>{
     blocks[index].uncertainNumbering=true;
     blocks[index].level=items[index].level;
@@ -1856,7 +1865,7 @@ function documentNumbering(ctx: Ctx, blocks: Block[]) {
     b.level=decision.level;
     b.role="item";
     if (marker) {
-      const target=markerText(ctx.language,b.level,marker.value,ctx.type);
+      const target=markerText(ctx.language,b.level,marker.value,ctx.type as NumberingType);
       if (!target) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：该序号超出当前文种可安全表示的范围，保留原样，请人工确认。`);return;}
       if (target && item.text.slice(0,marker.length).trim()!==target) {
         if (!validMarkerChange(item.text,target+item.text.slice(marker.length))) {uncertain(index);notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号字母与罗马数字的序号解释有歧义，保留原样，请人工确认。`);return;}
@@ -1866,7 +1875,7 @@ function documentNumbering(ctx: Ctx, blocks: Block[]) {
     } else if (active && xml) {
       const key=`${active.numId}:${active.ilvl}`, existing=candidates.get(key);
       if (existing) {existing.blocks.push(b);existing.levels.add(b.level);}
-      else candidates.set(key,{rule:{id:active.numId,ilvl:active.ilvl,level:b.level,language:ctx.language,type:ctx.type},blocks:[b],levels:new Set([b.level])});
+      else candidates.set(key,{rule:{id:active.numId,ilvl:active.ilvl,level:b.level,language:ctx.language,type:ctx.type as NumberingType},blocks:[b],levels:new Set([b.level])});
     }
   });
   for (const [key,candidate] of candidates) {
@@ -1882,7 +1891,7 @@ function documentNumbering(ctx: Ctx, blocks: Block[]) {
   }
   return {rules,notes,label:profile.label,checked:items.filter(i=>i.family).length,apply:()=>{
     for (const {b,marker,level} of rewrites) {
-      const old=paragraphText(b.p), target=markerText(ctx.language,level,marker.value,ctx.type)!, next=target + old.slice(marker.length);
+      const old=paragraphText(b.p), target=markerText(ctx.language,level,marker.value,ctx.type as NumberingType)!, next=target + old.slice(marker.length);
       if (rewriteLogged(ctx,b.p,next,resolution ? "dr-marker" : "list-marker")) notes.push(`第 ${sourceNumber(ctx,b.p)} 段：编号“${old.slice(0,marker.length).trim()}” → “${target}”，序号数值不变。`);
     }
     if (xml && rules.length) {const before=new XMLSerializer().serializeToString(xml);applyNativeRules(xml,rules);ctx.parts["word/numbering.xml"]=encoder.encode(new XMLSerializer().serializeToString(xml));if(before!==new XMLSerializer().serializeToString(xml)) notes.push("按当前文种及父子层级纠正原生编号样式；保留列表标识、序号、起始值与重启规则。");}
@@ -1903,14 +1912,448 @@ function editSummary(editLog: Map<Element, Edit>, repaired: boolean, split: bool
   return notes;
 }
 
-export function formatDocxInBrowser(
-  content: ArrayBuffer,
-  model: BrowserModel,
-  options: { sessionLabel: string; submittingCountry: string; version: string; preserveCountryOrder?: boolean; normalizePunctuation?: boolean },
-) {
+// ===================================================================== treaties
+// Diplomatic agreements and joint statements (shared/document-policy.json → treaties).
+// They have no header fields: the title names the parties, and the signature block at
+// the end carries one representative per party. The layouts follow the two reference
+// documents; the text is never rewritten except for the signature labels a party
+// lacks and, in a joint statement without numbering, the "N. " before each paragraph.
+
+type TreatyType = "diplomatic-agreement" | "joint-statement";
+type TreatyLine = { rule: "exact"; pitchPt: Record<"zh" | "en", Record<"title" | "body", number>> }
+  | { rule: "auto"; title: number; body: number; signature: number };
+type TreatyLayout = {
+  titleSizePt: number; line: TreatyLine; spacingTwips: Record<"title" | "body" | "signature", number[]>;
+  bodyFirstLinePt: number; bodyAlign: string; chapter: string | null; numberStatements: boolean;
+  numberFormat?: string; opening?: string; quote?: { indentPt: number; italic: boolean };
+};
+type TreatyPolicy = {
+  types: string[]; titleWords: Record<"zh" | "en", string[]>; parties: Record<string, string>;
+  signature: { label: Record<"zh" | "en", string>; labelPattern: Record<"zh" | "en", string>; maxPerRow: number; minGapEm: number; scanParagraphs: number };
+  layouts: Record<TreatyType, TreatyLayout>;
+};
+const TREATY = (policyData as unknown as { treaties: TreatyPolicy }).treaties;
+export const isTreaty = (type: string): type is TreatyType => TREATY.types.includes(type);
+const TREATY_TITLE = {
+  zh: new RegExp(`(?:${TREATY.titleWords.zh.join("|")})[”"」』）)]*$`),
+  en: new RegExp(`\\b(?:${TREATY.titleWords.en.join("|")})\\b`, "i"),
+};
+const SENTENCE_MARK = /[。；;！？!?]/;
+const titleLike = (text: string) => text.length <= 160 && !SENTENCE_MARK.test(text) && !/^(?:鉴于|whereas\b)/i.test(text);
+
+/** Leading title paragraphs: up to three short lines ending (Chinese) or containing (English) a title word. */
+function treatyTitleIndices(nonEmpty: { text: string; index: number }[], language: "zh" | "en"): number[] {
+  const lines: number[] = [];
+  for (const item of nonEmpty.slice(0, 3)) {
+    if (!titleLike(item.text)) break;
+    lines.push(item.index);
+    if (TREATY_TITLE[language].test(item.text)) return lines;
+  }
+  return lines.slice(0, 1);
+}
+
+const knownName = (name: string, language: "zh" | "en") => resolveCountry(name, language).status !== "unknown";
+/** Party names in a title's party list; a separator inside a known name ("大不列颠及北爱尔兰联合王国", "Trinidad and Tobago") does not split it. */
+function splitParties(head: string, language: "zh" | "en"): string[] {
+  const P = TREATY.parties;
+  const parts = head.split(new RegExp(`(${language === "zh" ? P.zhSeparators : P.enSeparators})`, language === "en" ? "i" : ""));
+  const pieces = parts.filter((_, index) => index % 2 === 0), separators = parts.filter((_, index) => index % 2 === 1);
+  const clean = (value: string) => language === "zh" ? value.trim().replace(new RegExp(P.zhTrailing), "").trim() : value.trim().replace(/[,，]+$/, "").trim();
+  const parties: string[] = [];
+  for (let index = 0; index < pieces.length; index++) {
+    let current = pieces[index];
+    while (index + 1 < pieces.length && !knownName(clean(current), language) && knownName(clean(current + separators[index] + pieces[index + 1]), language)) {
+      current += separators[index] + pieces[index + 1];
+      index++;
+    }
+    if (clean(current)) parties.push(clean(current));
+  }
+  return parties;
+}
+
+/** The parties named by the title (shared policy treaties.parties). */
+export function treatyParties(titles: string[], language: "zh" | "en"): string[] {
+  const P = TREATY.parties;
+  if (!titles.length) return [];
+  let head = "";
+  if (language === "zh") {
+    if (titles.length > 1 && new RegExp(`^(?:${P.zhSubjectStart})`).test(titles[1].trim())) head = titles[0];
+    else {
+      const joined = titles.join("");
+      // No "关于 / 就": the parties are what precedes the title word ("…和美利坚合众国联合声明").
+      // A title without a treaty word ("工作文件") names no parties.
+      head = new RegExp(`^(.*?)(?:${P.zhSubjectStart})`).exec(joined)?.[1] ?? (TREATY_TITLE.zh.test(joined) ? joined.replace(TREATY_TITLE.zh, "") : "");
+    }
+  } else {
+    const text = titles.join(" ").replace(/\s+/g, " ").trim();
+    const listed = new RegExp(`${P.enLead}(.+?)(?:${P.enSubjectStart}|$)`, "i").exec(text);
+    const word = TREATY_TITLE.en.exec(text);
+    head = listed ? listed[1] : word && word.index > 0 ? text.slice(0, word.index) : "";
+  }
+  return splitParties(head, language);
+}
+
+const SIG = TREATY.signature;
+const SIG_LABEL = { zh: new RegExp(SIG.labelPattern.zh), en: new RegExp(SIG.labelPattern.en, "i") };
+const signatureTokens = (text: string, language: "zh" | "en") => text.trim().split(language === "zh" ? /[\s　]+/ : /\t+|\s{2,}|　+/).filter(Boolean);
+const labelTokens = (text: string, language: "zh" | "en") => {
+  const tokens = signatureTokens(text, language);
+  return tokens.length && tokens.every(token => SIG_LABEL[language].test(token)) ? tokens : null;
+};
+const signatureLike = (text: string) => text.length <= 160 && !SENTENCE_MARK.test(text) && !/[，,]$/.test(text);
+
+/** Index of the first representatives' line of the closing signature block, or -1. */
+function signatureStart(texts: string[], language: "zh" | "en"): number {
+  let start = -1, seen = 0;
+  for (let index = texts.length - 1; index >= 0; index--) {
+    const text = texts[index].trim();
+    if (!text) continue;
+    if (++seen > SIG.scanParagraphs || !signatureLike(text)) break;
+    if (labelTokens(text, language)) start = index;
+  }
+  return start;
+}
+
+function recognizeTreaty(document: Document, documentType: TreatyType): BrowserModel {
+  const source = flowParagraphs(document), paragraphs = source.map(paragraphText);
+  const nonEmpty = paragraphs.map((text, index) => ({ text: text.trim(), index })).filter(item => item.text);
+  const language = detectLanguage(nonEmpty.map(item => item.text).join("\n"));
+  const titleIndices = treatyTitleIndices(nonEmpty, language);
+  const titles = titleIndices.map(index => paragraphs[index].trim());
+  const parties = treatyParties(titles, language);
+  const closing = signatureStart(paragraphs, language);
+  const body = nonEmpty.filter(item => !titleIndices.includes(item.index) && (closing < 0 || item.index < closing))
+    .map(item => ({ text: item.text, level: 0, kind: "body", paragraph_index: item.index, confidence: 0.9 }));
+  const warnings: string[] = [];
+  if (!titles.length) warnings.push("未识别到标题；请确认原稿第一段是标题。");
+  if (parties.length < 2) warnings.push("未能从标题识别出至少两个签署方；请在第 03 步填写签署方，签字栏按填写的签署方生成。");
+  return {
+    document_type: documentType, language, title: titles.join(language === "zh" ? "" : " "), committee: "", topic: "", delegate: "", country: "",
+    sponsors: parties, signatories: [], preambulatory_clauses: [], operative_clauses: [], body_clauses: body, max_numbering_level: 0, warnings, paragraphs,
+  };
+}
+
+type SignatureEntry = { label: string; name: string };
+const LINE_EM = LINE_WIDTH_EM + 1;
+const tabWidthEm = (text: string) => [...text].reduce((total, ch) => total + (ch === "\t" ? 2 : widthEm(ch)), 0);
+/** Centre (in em from the left margin) of each token of a line as Word would place it. */
+function tokenCentres(p: Element, text: string, tokens: string[]): number[] {
+  const centres: number[] = [];
+  let cursor = 0, position = 0;
+  for (const token of tokens) {
+    const at = text.indexOf(token, cursor);
+    position += tabWidthEm(text.slice(cursor, at));
+    centres.push(position + tabWidthEm(token) / 2);
+    position += tabWidthEm(token);
+    cursor = at + token.length;
+  }
+  const total = position + tabWidthEm(text.slice(cursor));
+  const pPr = directChild(p, "pPr"), align = wordAttribute(pPr && directChild(pPr, "jc"), "val");
+  const offset = align === "center" ? (LINE_EM - total) / 2 : align === "right" || align === "end" ? LINE_EM - total : 0;
+  return centres.map(centre => centre + offset);
+}
+
+/** Labels and names of the original block, each name under the label it was written beneath. */
+function readSignatureBlock(block: Element[], language: "zh" | "en"): { entries: SignatureEntry[]; inferred: boolean } | null {
+  const entries: SignatureEntry[] = [];
+  let group: { labels: string[]; centres: number[]; named: boolean } | null = null, inferred = false;
+  for (const p of block) {
+    const text = paragraphText(p);
+    if (!text.trim()) continue;
+    const labels = labelTokens(text, language);
+    if (labels) {
+      group = { labels, centres: tokenCentres(p, text, labels), named: false };
+      entries.push(...labels.map(label => ({ label, name: "" })));
+      continue;
+    }
+    const names = signatureTokens(text, language);
+    if (!group || group.named || names.length > group.labels.length) return null;
+    const first = entries.length - group.labels.length;
+    if (names.length === group.labels.length) names.forEach((name, index) => { entries[first + index].name = name; });
+    else {
+      // Fewer names than representatives: each goes under the nearest label, in order.
+      inferred = true;
+      const centres = tokenCentres(p, text, names);
+      let next = 0;
+      names.forEach((name, index) => {
+        let best = next;
+        for (let column = next; column <= group!.labels.length - (names.length - index); column++) {
+          if (Math.abs(group!.centres[column] - centres[index]) < Math.abs(group!.centres[best] - centres[index])) best = column;
+        }
+        entries[first + best].name = name;
+        next = best + 1;
+      });
+    }
+    group.named = true;
+  }
+  return { entries, inferred };
+}
+
+const partyKey = (value: string) => value.trim().replace(/^the\s+/i, "").replace(/\s+/g, " ").toLowerCase();
+function labelParty(label: string, language: "zh" | "en") {
+  return language === "zh" ? label.replace(/代表[:：]?$/, "") : label.replace(/^(?:Representative of|On behalf of|For)\s+/i, "").replace(/\s*Representative[:：]?$/i, "");
+}
+
+/** One entry per party, in the parties' order; the original's labels and names are kept, and a
+ * representative the original names for no listed party is kept after them. */
+function signatureEntries(parties: string[], original: SignatureEntry[], language: "zh" | "en"): SignatureEntry[] {
+  const used = new Set<number>();
+  const entries = parties.map(party => {
+    const found = original.findIndex((entry, index) => !used.has(index) && partyKey(labelParty(entry.label, language)) === partyKey(party));
+    if (found >= 0) { used.add(found); return { ...original[found] }; }
+    return { label: SIG.label[language].replace("{party}", party), name: "" };
+  });
+  return [...entries, ...original.filter((_, index) => !used.has(index))];
+}
+
+/** Rows of at most maxPerRow representatives, as even as possible (4 → 2+2, 5 → 3+2), with a row more when one does not fit. */
+function signatureRows(entries: SignatureEntry[]): SignatureEntry[][] {
+  const width = (entry: SignatureEntry) => Math.max(widthEm(entry.label), widthEm(entry.name));
+  const fits = (row: SignatureEntry[]) => row.reduce((total, entry) => total + width(entry), 0) + (row.length - 1) * SIG.minGapEm <= LINE_EM;
+  for (let count = Math.ceil(entries.length / SIG.maxPerRow); count <= entries.length; count++) {
+    const base = Math.floor(entries.length / count), extra = entries.length % count;
+    const rows: SignatureEntry[][] = [];
+    let start = 0;
+    for (let row = 0; row < count; row++) { const size = base + (row < extra ? 1 : 0); rows.push(entries.slice(start, start += size)); }
+    if (rows.every(fits)) return rows;
+  }
+  return entries.map(entry => [entry]);
+}
+
+/** Tab stops (twips) centring each column, the free width shared out evenly around the columns. */
+function columnStops(row: SignatureEntry[]): number[] {
+  const widths = row.map(entry => Math.max(widthEm(entry.label), widthEm(entry.name)));
+  const gap = Math.max(0, LINE_EM - widths.reduce((a, b) => a + b, 0)) / row.length;
+  let start = gap / 2;
+  return widths.map(width => { const centre = start + width / 2; start += width + gap; return Math.round(centre * BODY_PT * 20); });
+}
+
+type TreatyCtx = Ctx & { layout: TreatyLayout; titles: Set<Element> };
+
+function treatyLine(ctx: TreatyCtx, p: Element, role: "title" | "body" | "signature", extraBefore = 0) {
+  const pPr = pPrOf(p);
+  const spacing = pChild(pPr, "spacing");
+  for (const name of ["beforeAutospacing", "afterAutospacing", "beforeLines", "afterLines"]) removeWordAttribute(spacing, name);
+  const [before, after] = ctx.layout.spacingTwips[role];
+  setWordAttribute(spacing, "before", String(before + extraBefore));
+  setWordAttribute(spacing, "after", String(after));
+  const line = ctx.layout.line;
+  if (line.rule === "exact") {
+    setWordAttribute(spacing, "line", String(Math.round(line.pitchPt[ctx.language][role === "title" ? "title" : "body"] * 20)));
+    setWordAttribute(spacing, "lineRule", holdsInlineObject(p) ? "atLeast" : "exact");
+  } else {
+    setWordAttribute(spacing, "line", String(line[role]));
+    setWordAttribute(spacing, "lineRule", "auto");
+  }
+}
+
+function treatyIndent(p: Element, left: number, firstLine: number) {
+  const ind = pChild(pPrOf(p), "ind");
+  for (const name of Array.from(ind.attributes).map(a => a.localName)) removeWordAttribute(ind, name);
+  setWordAttribute(ind, "left", String(left));
+  setWordAttribute(ind, "right", "0");
+  setWordAttribute(ind, "firstLine", String(firstLine));
+}
+
+function treatyParagraph(ctx: TreatyCtx, p: Element, role: "title" | "body" | "signature", align: string, left = 0, firstLine = 0) {
+  const pPr = pPrOf(p);
+  removeChildren(pPr, PARAGRAPH_CLEAN);
+  for (const [tag, value] of Object.entries({ pageBreakBefore: "0", keepLines: "0", keepNext: role === "title" ? "1" : "0" })) setWordAttribute(pChild(pPr, tag), "val", value);
+  treatyLine(ctx, p, role);
+  setWordAttribute(pChild(pPr, "jc"), "val", align);
+  treatyIndent(p, left, firstLine);
+}
+
+/** The signature block rebuilt with one representative per party; the original block is replaced only when it is plain text. */
+function treatySignature(ctx: TreatyCtx, paragraphs: Element[], texts: string[]): string[] {
+  const notes: string[] = [];
+  const parties = ctx.model.sponsors.map(party => party.trim()).filter(Boolean);
+  const start = signatureStart(texts, ctx.language);
+  const block = start >= 0 ? paragraphs.slice(start) : [];
+  if (block.some(p => hasComplexContent(p) || carriesSemanticMarks(p))) {
+    for (const p of block) if (paragraphText(p).trim()) treatyParagraph(ctx, p, "signature", "center");
+    ctx.warnings.push("签字栏含有图片、域、链接、修订或隐藏文字，已保留原样未重建；请人工核对代表数量。");
+    return notes;
+  }
+  const read = block.length ? readSignatureBlock(block, ctx.language) : { entries: [], inferred: false };
+  if (!read) {
+    for (const p of block) if (paragraphText(p).trim()) treatyParagraph(ctx, p, "signature", "center");
+    ctx.warnings.push("签字栏的姓名行无法与代表行一一对应，已保留原样；请人工核对。");
+    return notes;
+  }
+  // Every treaty has at least two parties: with fewer (the warning asks for them in step 03) no block is added.
+  if (!read.entries.length && parties.length < 2) return notes;
+  const entries = signatureEntries(parties, read.entries, ctx.language);
+  const added = entries.filter(entry => !read.entries.some(original => original.label === entry.label)).map(entry => entry.label);
+  const extra = read.entries.filter(entry => !parties.some(party => partyKey(labelParty(entry.label, ctx.language)) === partyKey(party)));
+  const body = elements(ctx.document, "body")[0];
+  const anchor = block[0] ?? Array.from(body.children).find(child => child.namespaceURI === WORD_NS && child.localName === "sectPr") ?? null;
+  const labels: string[] = [];
+  const created: Element[] = [];
+  signatureRows(entries).forEach((row, index) => {
+    const stops = columnStops(row);
+    for (const role of ["labels", "names"] as const) {
+      const p = ctx.document.createElementNS(WORD_NS, "w:p");
+      const pPr = p.appendChild(ctx.document.createElementNS(WORD_NS, "w:pPr"));
+      const tabs = pChild(pPr, "tabs");
+      for (const stop of stops) {
+        const tab = tabs.appendChild(ctx.document.createElementNS(WORD_NS, "w:tab"));
+        setWordAttribute(tab, "val", "center");
+        setWordAttribute(tab, "pos", String(stop));
+      }
+      const pitch = ctx.layout.line.rule === "exact" ? Math.round(ctx.layout.line.pitchPt[ctx.language].body * 20) : 312;
+      treatyLine(ctx, p, "signature", role === "labels" && index > 0 ? pitch : 0);
+      setWordAttribute(pChild(pPr, "jc"), "val", "left");
+      treatyIndent(p, 0, 0);
+      const values = row.map(entry => role === "labels" ? entry.label : entry.name);
+      formatRun(appendRun(p, values.map(value => `\t${value}`).join("")), ctx, { bold: false, italic: false, underline: false });
+      if (role === "labels") labels.push(...values);
+      body.insertBefore(p, anchor);
+      created.push(p);
+    }
+  });
+  for (const p of block) { logEdit(ctx, p, "signature", "signature"); p.remove(); }
+  for (const p of created) logEdit(ctx, p, "signature", "signature", JSON.stringify(labels), true);
+  const count = entries.length;
+  notes.push(`签字栏按${parties.length ? "签署方" : "原稿"}排为 ${count} 方：${entries.map(entry => labelParty(entry.label, ctx.language)).join(ctx.language === "zh" ? "、" : ", ")}${added.length ? `；补上：${added.join(ctx.language === "zh" ? "、" : ", ")}` : ""}${block.length ? "；原稿已写的代表与姓名保留" : "；原稿没有签字栏，姓名处留空供签字"}`);
+  if (read.inferred) ctx.warnings.push("签字栏中原稿姓名少于代表，已按位置放在最近的代表下方；请核对姓名与代表是否对应。");
+  if (extra.length) ctx.warnings.push(`原稿签字栏中的 ${extra.map(entry => entry.label).join("、")} 与识别的签署方对不上，已保留在末尾；请核对第 03 步的签署方。`);
+  return notes;
+}
+
+/** Joint statement numbering: "N. " before each statement paragraph when the original numbers none of them. */
+function statementNumbers(ctx: TreatyCtx, items: Element[]): string | null {
+  const format = ctx.layout.numberFormat || "{n}. ";
+  const numbered = items.filter(p => activeNumbering(p) || /^\s*\d{1,3}\s*[.、．)]/.test(paragraphText(p)));
+  if (numbered.length === items.length || !items.length) return null;
+  if (numbered.length) {
+    ctx.warnings.push("联合声明的段落部分有编号、部分没有，已保留原样未补编号；请人工核对。");
+    return null;
+  }
+  let added = 0;
+  items.forEach((p, index) => {
+    const before = paragraphText(p), next = format.replace("{n}", String(index + 1)) + before;
+    const marks = paragraphMarks(p), backup = Array.from(p.childNodes).map(node => node.cloneNode(true));
+    if (editVisibleText(p, next) && paragraphText(p) === next && marksKept(marks, p)) { logEdit(ctx, p, "statement-number", "", next); added++; return; }
+    for (const child of Array.from(p.childNodes)) p.removeChild(child);
+    for (const child of backup) p.appendChild(child);
+    protect(ctx, p, "该段无法安全加入编号，已保留原样");
+  });
+  return added ? `联合声明 ${added} 段按范例加上编号“1.”“2.”……` : null;
+}
+
+function treatyLayout(ctx: TreatyCtx, paragraphs: Element[]): string[] {
+  const notes: string[] = [];
+  const texts = paragraphs.map(paragraphText);
+  const nonEmpty = texts.map((text, index) => ({ text: text.trim(), index })).filter(item => item.text);
+  const titleIndices = treatyTitleIndices(nonEmpty, ctx.language);
+  const closing = signatureStart(texts, ctx.language);
+  const end = closing >= 0 ? closing : texts.length;
+  const layout = ctx.layout;
+  for (const index of titleIndices) {
+    const p = paragraphs[index];
+    ctx.titles.add(p);
+    treatyParagraph(ctx, p, "title", "center");
+    for (const run of visibleRuns(p)) formatRun(run, ctx, { bold: true }, layout.titleSizePt);
+  }
+  const chapter = layout.chapter ? new RegExp(layout.chapter, "i") : null;
+  const opening = layout.opening ? new RegExp(layout.opening, "i") : null;
+  const body = paragraphs.slice(0, end).filter((p, index) => !titleIndices.includes(index) && texts[index].trim());
+  const statementItems: Element[] = [];
+  let quoteDepth = 0;
+  body.forEach((p, position) => {
+    const text = paragraphText(p).trim();
+    const opens = (text.match(/[“「『"]/g) || []).length, closes = (text.match(/[”」』"]/g) || []).length;
+    const quoted = Boolean(layout.quote) && (quoteDepth > 0 || /^[“「『"]/.test(text));
+    quoteDepth = Math.max(0, quoteDepth + opens - closes);
+    if (chapter?.test(text) && text.length <= 80 && !SENTENCE_MARK.test(text)) {
+      treatyParagraph(ctx, p, "body", "center");
+      for (const run of visibleRuns(p)) formatRun(run, ctx, { bold: true });
+    } else if (quoted) {
+      treatyParagraph(ctx, p, "body", layout.bodyAlign, Math.round(layout.quote!.indentPt * 20), 0);
+      if (layout.quote!.italic) for (const run of visibleRuns(p)) formatRun(run, ctx, { italic: true });
+    } else if (layout.numberStatements && position === 0 && opening?.test(text)) {
+      treatyParagraph(ctx, p, "body", layout.bodyAlign);
+    } else {
+      treatyParagraph(ctx, p, "body", layout.bodyAlign, 0, Math.round(layout.bodyFirstLinePt * 20));
+      if (layout.numberStatements) statementItems.push(p);
+    }
+  });
+  if (layout.numberStatements) { const note = statementNumbers(ctx, statementItems); if (note) notes.push(note); }
+  // Empty paragraphs between the title and the signature block are dropped, as in both references.
+  const root = elements(ctx.document, "body")[0];
+  paragraphs.slice(0, end).forEach((p, index) => {
+    if (texts[index].trim() || p.parentElement !== root || carriesHiddenStructure(p) || activeNumbering(p) || !isWhitespace(signature(p))) return;
+    logEdit(ctx, p, "empty-line");
+    p.remove();
+  });
+  notes.push(...treatySignature(ctx, paragraphs, texts));
+  return notes;
+}
+
+function treatySizeIssues(ctx: TreatyCtx) {
+  let issues = 0;
+  for (const p of paragraphElements(ctx.document)) {
+    const expected = ctx.titles.has(p) ? ctx.layout.titleSizePt : BODY_PT;
+    for (const run of visibleRuns(p)) {
+      if (!paragraphText(run).trim()) continue;
+      const raw = wordAttribute(directChild(rPrOf(run), "sz"), "val");
+      if (!raw || Math.abs(Number(raw) / 2 - expected) > 0.05) issues++;
+    }
+  }
+  return issues;
+}
+
+function formatTreaty(content: ArrayBuffer, model: BrowserModel, options: FormatOptions) {
+  const type = model.document_type as TreatyType;
+  const originalBytes = new Uint8Array(content.slice(0));
+  const { parts, document } = parsePackage(content);
+  const recognized = { ...recognizeTreaty(document, type), language: model.language };
+  const ctx: TreatyCtx = {
+    document, parts, model, recognized, original: recognized, type, language: model.language,
+    spec: specFor("position-paper", model.language), eastAsia: model.language === "zh" ? HB.fonts.zh : HB.fonts.en,
+    normalizePunctuation: false, preserveCountryOrder: true, changed: new Set(), editLog: new Map(), source: flowParagraphs(document),
+    warnings: recognized.warnings.filter(warning => !warning.startsWith("未能从标题识别") || model.sponsors.length < 2), protectedNotes: [], countryChanges: [],
+    headerEnd: 0, layout: TREATY.layouts[type], titles: new Set(),
+  };
+  const snapshot = takeSnapshot(document);
+  const keptHidden = stripUniformDamage(document, parts);
+  const marks = semanticMarks(document);
+  configurePage(document);
+  configureStyles(parts, ctx);
+  for (const p of elements(document, "p")) for (const run of visibleRuns(p)) formatRun(run, ctx);
+  const notes = treatyLayout(ctx, flowParagraphs(document));
+  handbookNotes(parts, ctx.eastAsia);
+  normalizeFontParts(parts, ctx.language);
+
+  const problems = [...verifyFormat(snapshot, document, ctx.editLog, [], []), ...verifyMarks(marks, document)];
+  parts["word/document.xml"] = encoder.encode(new XMLSerializer().serializeToString(document));
+  const output = zipSync(parts, { level: 6 });
+  const packageProblems = verifyPackage(originalBytes, output);
+  const sizeIssues = treatySizeIssues(ctx);
+  const title = TREATY_TITLE_NAMES(type);
+  const validations: BrowserValidation[] = [
+    { code: "docx_package", label: "DOCX 包结构", status: "pass", detail: "必要的 Word 部件完整。" },
+    { code: "structural_edits", label: "结构与人工修改记录", status: notes.length ? "warning" : "pass", detail: notes.join("；") || "未改写正文文字。" },
+    { code: "content", label: "逐段严格内容校验（文字、域、链接、书签、脚注、修订、隐藏与删除线）", status: problems.length ? "error" : "pass", detail: problems.slice(0, 6).join("；") || `正文文字未改动；只允许签字栏补上缺少的代表${ctx.layout.numberStatements ? "和联合声明段落编号" : ""}。` },
+    { code: "package", label: "链接目标、关系与嵌入资源逐项保留", status: packageProblems.length ? "error" : "pass", detail: packageProblems.slice(0, 6).join("；") || "每个关系的目标、类型、模式及每个图片 / 嵌入对象的字节均与原稿一致。" },
+    { code: "font_size", label: "标题与正文字号", status: sizeIssues ? "error" : "pass", detail: sizeIssues ? `仍有 ${sizeIssues} 个文本片段未达到规定字号。` : `标题 ${ctx.layout.titleSizePt} 磅加粗居中、正文 ${BODY_PT} 磅（${title}版式）。` },
+    { code: "browser_private", label: "本地处理", status: "pass", detail: "文件在当前浏览器中处理，未发送到外部排版服务。" },
+  ];
+  for (const note of keptHidden) validations.push({ code: "hidden-text", label: "隐藏文字与删除线按原稿保留", status: "warning", detail: note });
+  for (const note of ctx.protectedNotes) validations.push({ code: "content-protected", label: "为保护原有内容，部分段落未自动改写", status: "warning", detail: note });
+  for (const detail of ctx.warnings) validations.push({ code: "structure_review", label: "结构识别待确认", status: "warning", detail });
+  const errors = validations.filter(item => item.status === "error");
+  if (errors.length) throw new ContentCheckError(`安全校验未通过，已中止下载：${errors.map(item => `${item.label}（${item.detail}）`).join("；")}`);
+  const outputBuffer = output.slice().buffer as ArrayBuffer;
+  return { blob: new Blob([outputBuffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), filename: outputFilename(model, options), validations };
+}
+const TREATY_TITLE_NAMES = (type: TreatyType) => POLICY.titles[type].zh;
+
+export function formatDocxInBrowser(content: ArrayBuffer, model: BrowserModel, options: FormatOptions) {
   try {
     validateReview(model);
-    return formatInner(content, model, options);
+    return isTreaty(model.document_type) ? formatTreaty(content, model, options) : formatInner(content, model, options);
   } catch (reason) {
     if (reason instanceof InvalidRequestError) throw reason;
     if (reason instanceof InvalidDocxError) throw new Error(`文件无法读取：${reason.message}`);
@@ -1921,11 +2364,7 @@ export function formatDocxInBrowser(
   }
 }
 
-function formatInner(
-  content: ArrayBuffer,
-  model: BrowserModel,
-  options: { sessionLabel: string; submittingCountry: string; version: string; preserveCountryOrder?: boolean; normalizePunctuation?: boolean },
-) {
+function formatInner(content: ArrayBuffer, model: BrowserModel, options: FormatOptions) {
   const originalBytes = new Uint8Array(content.slice(0));
   const { parts, document } = parsePackage(content);
   const original = recognize(document, model.document_type);
@@ -2011,5 +2450,5 @@ function formatInner(
   const errors = validations.filter(item => item.status === "error");
   if (errors.length) throw new ContentCheckError(`安全校验未通过，已中止下载：${errors.map(item => `${item.label}（${item.detail}）`).join("；")}`);
   const outputBuffer = output.slice().buffer as ArrayBuffer;
-  return { blob: new Blob([outputBuffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), filename: outputFilename(model, options.sessionLabel, options.submittingCountry, options.version), validations };
+  return { blob: new Blob([outputBuffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), filename: outputFilename(model, options), validations };
 }

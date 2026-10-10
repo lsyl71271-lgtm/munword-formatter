@@ -1,7 +1,7 @@
 "use client";
 
 import { DragEvent, useMemo, useRef, useState } from "react";
-import { formatDocxInBrowser, parseDocxInBrowser } from "./docx-browser";
+import { formatDocxInBrowser, isTreaty, parseDocxInBrowser } from "./docx-browser";
 import type { BrowserDocumentType as DocumentType, BrowserModel as Model, BrowserValidation as Validation } from "./docx-browser";
 import DocxPreview from "./docx-preview";
 import TemplatePanel from "./template-panel";
@@ -17,6 +17,8 @@ const DOCUMENT_TYPES: Array<{ id: DocumentType; zh: string; en: string; badge: s
   { id: "draft-resolution", zh: "决议草案", en: "Draft Resolution", badge: "DR" },
   { id: "friendly-amendment", zh: "友好修正案", en: "Friendly Amendment", badge: "FA" },
   { id: "unfriendly-amendment", zh: "非友好修正案", en: "Unfriendly Amendment", badge: "UA" },
+  { id: "diplomatic-agreement", zh: "外交协定", en: "Diplomatic Agreement", badge: "DA" },
+  { id: "joint-statement", zh: "联合声明", en: "Joint Statement", badge: "JS" },
 ];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
@@ -92,8 +94,12 @@ export default function Home() {
   // dropped a separator or space typed at the end ("法国，" → "法国").
   const [countryDrafts, setCountryDrafts] = useState({ sponsors: "", signatories: "" });
   const diagnostic = useMemo(() => model ? buildDiagnosticReport(model, validations) : null, [model, validations]);
+  const treaty = isTreaty(documentType);
+  // A draft resolution keeps the uploaded file's name, so session, country and version are not asked for.
+  const keepsSourceName = documentType === "draft-resolution";
   const countryReview = useMemo(() => {
-    if (!model) return null;
+    // Treaty parties are written into the signature block as recognized; no country-name expansion.
+    if (!model || isTreaty(model.document_type)) return null;
     const fields = ["country", "sponsors", "signatories"] as const;
     return { changes: fields.flatMap(key => {
       const values = key === "country" ? [model.country] : model[key];
@@ -210,7 +216,9 @@ export default function Home() {
       if (!API_URL) {
         const content = await file.arrayBuffer();
         if (operation !== operationRef.current) return;
-        const result = formatDocxInBrowser(content, model, { sessionLabel, submittingCountry, version, normalizePunctuation, preserveCountryOrder: preserveOrder });
+        const result = formatDocxInBrowser(content, model, keepsSourceName
+          ? { sessionLabel: "", submittingCountry: "", version: "", normalizePunctuation, preserveCountryOrder: preserveOrder, sourceName: file.name }
+          : { sessionLabel, submittingCountry, version, normalizePunctuation, preserveCountryOrder: preserveOrder, sourceName: file.name });
         if (operation !== operationRef.current) return;
         setValidations(result.validations);
         setFormatted({ blob: result.blob, filename: result.filename });
@@ -233,9 +241,9 @@ export default function Home() {
       form.append("overrides_json", JSON.stringify(overrides));
       form.append("preserve_country_order", String(preserveOrder));
       form.append("normalize_punctuation", String(normalizePunctuation));
-      form.append("session_label", sessionLabel);
-      form.append("submitting_country", submittingCountry);
-      form.append("version", version);
+      form.append("session_label", keepsSourceName ? "" : sessionLabel);
+      form.append("submitting_country", keepsSourceName ? "" : submittingCountry);
+      form.append("version", keepsSourceName ? "" : version);
       const response = await fetch(`${API_URL}/api/format/${documentType}`, { method: "POST", body: form, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       if (operation !== operationRef.current) return;
       if (!response.ok) {
@@ -341,11 +349,12 @@ export default function Home() {
             </div>}
             <div className="formGrid">
               <label>语言<select value={model.language} onChange={(e) => updateModel("language", e.target.value as "zh" | "en")}><option value="zh">中文</option><option value="en">English</option></select></label>
-              <label>委员会<input value={model.committee} onChange={(e) => updateModel("committee", e.target.value)} /></label>
-              <label>议题<input value={model.topic} onChange={(e) => updateModel("topic", e.target.value)} /></label>
+              {treaty && <label className="wide">签署方（逗号分隔，签字栏按此生成）<input value={countryDrafts.sponsors} onChange={(e) => updateCountries("sponsors", e.target.value)} /></label>}
+              {!treaty && <><label>委员会<input value={model.committee} onChange={(e) => updateModel("committee", e.target.value)} /></label>
+              <label>议题<input value={model.topic} onChange={(e) => updateModel("topic", e.target.value)} /></label></>}
               {documentType === "position-paper" && <><label>国家 / 席位<input value={model.country} onChange={(e) => updateModel("country", e.target.value)} /></label><label>代表<input value={model.delegate} onChange={(e) => updateModel("delegate", e.target.value)} /></label></>}
-              {documentType !== "position-paper" && <label className="wide">起草国（逗号分隔）<input value={countryDrafts.sponsors} onChange={(e) => updateCountries("sponsors", e.target.value)} /></label>}
-              {!["position-paper", "working-paper"].includes(documentType) && <label className="wide">附议国（逗号分隔）<input value={countryDrafts.signatories} onChange={(e) => updateCountries("signatories", e.target.value)} /></label>}
+              {!treaty && documentType !== "position-paper" && <label className="wide">起草国（逗号分隔）<input value={countryDrafts.sponsors} onChange={(e) => updateCountries("sponsors", e.target.value)} /></label>}
+              {!treaty && !["position-paper", "working-paper"].includes(documentType) && <label className="wide">附议国（逗号分隔）<input value={countryDrafts.signatories} onChange={(e) => updateCountries("signatories", e.target.value)} /></label>}
             </div>
             {model.warnings.length > 0 && <div className="warningList"><b>需要确认</b>{model.warnings.map((warning, index) => <p key={index}>△ {warning}</p>)}</div>}
             {diagnostic && <details className="studioTool"><summary>识别依据与诊断报告</summary><p>已识别 {diagnostic.paragraph_count} 个非空段落、{diagnostic.clauses.length} 个正文或条款。结构校验：{diagnostic.structure_status === "checked" ? "已检查" : "尚未执行"}；视觉核验：尚未执行。规则置信值不是格式正确率。</p>
@@ -365,7 +374,7 @@ export default function Home() {
                 {model.committee && <p><strong>{model.language === "zh" ? "委员会：" : "Committee: "}</strong>{model.committee}</p>}
                 {model.topic && <p><strong>{model.language === "zh" ? "议题：" : "Topic: "}</strong>{model.topic}</p>}
                 {model.country && <p><strong>{model.language === "zh" ? "国家/席位：" : "Country: "}</strong>{model.country}</p>}
-                {model.sponsors.length > 0 && <p><strong>{model.language === "zh" ? "起草国：" : "Sponsors: "}</strong><em>{model.sponsors.join(model.language === "zh" ? "；" : "; ")}</em></p>}
+                {model.sponsors.length > 0 && <p><strong>{treaty ? (model.language === "zh" ? "签署方：" : "Parties: ") : model.language === "zh" ? "起草国：" : "Sponsors: "}</strong><em>{model.sponsors.join(model.language === "zh" ? "；" : "; ")}</em></p>}
                 {model.signatories.length > 0 && <p><strong>{model.language === "zh" ? "附议国：" : "Signatories: "}</strong><em>{model.signatories.join(model.language === "zh" ? "；" : "; ")}</em></p>}
                 <div className="clausePreview">{clauses.map((clause, index) => <p className={`clause level${clause.level} ${clause.kind}`} key={`${clause.paragraph_index}-${index}`}><span>{clause.kind === "preambulatory" ? "P" : clause.kind === "operative" ? "O" : "·"}</span>{clause.text}<small>{Math.round(clause.confidence * 100)}%</small></p>)}</div>
               </article>
@@ -373,11 +382,12 @@ export default function Home() {
 
             <div className="generationPanel">
               <div className="options">
+                {keepsSourceName ? <p className="sourceName">成稿文件名沿用上传的原文件名：<b>{file?.name}</b></p> : <>
                 <label>提交会期<input placeholder="例如：第三会期 / S3" value={sessionLabel} onChange={(e) => { discardPending(); setSessionLabel(e.target.value); }} /></label>
-                <label>提交国家<input placeholder="用于文件名" value={submittingCountry} onChange={(e) => { discardPending(); setSubmittingCountry(e.target.value); }} /></label>
-                <label>版本号<input value={version} onChange={(e) => { discardPending(); setVersion(e.target.value); }} /></label>
-                <label className="check"><input type="checkbox" checked={normalizePunctuation} onChange={(e) => { discardPending(); setNormalizePunctuation(e.target.checked); }} /><span>按规则规范条款末尾标点</span></label>
-                <label className="check"><input type="checkbox" checked={preserveOrder} onChange={(e) => { discardPending(); setPreserveOrder(e.target.checked); }} /><span>高级：保持国家原顺序</span></label>
+                <label>{treaty ? "文件名中的签署方" : "提交国家"}<input placeholder="用于文件名" value={submittingCountry} onChange={(e) => { discardPending(); setSubmittingCountry(e.target.value); }} /></label>
+                <label>版本号<input value={version} onChange={(e) => { discardPending(); setVersion(e.target.value); }} /></label></>}
+                {!treaty && <><label className="check"><input type="checkbox" checked={normalizePunctuation} onChange={(e) => { discardPending(); setNormalizePunctuation(e.target.checked); }} /><span>按规则规范条款末尾标点</span></label>
+                <label className="check"><input type="checkbox" checked={preserveOrder} onChange={(e) => { discardPending(); setPreserveOrder(e.target.checked); }} /><span>高级：保持国家原顺序</span></label></>}
               </div>
               <button className="primaryButton generate" type="button" disabled={busy} onClick={formatAndDownload}>{busy ? "正在生成…" : "生成并下载 DOCX"}<span>↓</span></button>
             </div>

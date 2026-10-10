@@ -1,6 +1,6 @@
 // Real-browser check of the offline desktop page (dist/desktop/site) opened from file://.
 // Fails if the page makes ANY non-file request, throws, or cannot finish the whole flow for every one of
-// the 11 acceptance inputs (six document types, Chinese and English): select type → upload → recognize →
+// the 14 acceptance inputs (all eight document types, Chinese and English): select type → upload → recognize →
 // editable step 03 present → generate/download (ZIP read back) → original and generated previews; then a
 // new file from the template panel. Also checks that an outdated browser gets the explanation instead of
 // the app, and runs all inputs again on the disk image's single-file page copied on its own.
@@ -60,10 +60,12 @@ try {
     ["工作文件", "04_English_Working_Paper"], ["指令草案", "05_中文指令草案"], ["指令草案", "06_English_Draft_Directive"],
     ["决议草案", "07_中文决议草案"], ["决议草案", "08_English_Draft_Resolution"], ["友好修正案", "09_中文友好修正案"],
     ["非友好修正案", "10_中文非友好修正案"], ["友好修正案", "11_English_Amendment"],
+    ["外交协定", "12_中文外交协定"], ["联合声明", "13_中文联合声明"], ["联合声明", "14_English_Joint_Statement"],
   ];
   const downloads = [];
   for (const [type, input] of cases) downloads.push(await runCase(page, pathToFileURL(path.join(site, "index.html")).href, type, input, input));
-  // A new standard file from the template panel.
+  // A new standard file from the template panel, for the default type (the last input left 联合声明 selected).
+  await page.locator(".typeCard").filter({ has: page.locator("b", { hasText: /^决议草案$/ }) }).click();
   await page.getByText("从规范模板新建文件", { exact: true }).click();
   const template = page.locator(".templatePanel");
   await template.locator("textarea").fill("第一条 要求建立合作机制。\n第二条 决定继续协商。");
@@ -119,4 +121,4 @@ if (network.length || errors.length || csp.length) {
   console.error("Offline page is not self-contained", { network, errors, csp });
   process.exit(1);
 }
-console.log("offline desktop page: all 11 inputs and a template passed from file:// with zero network requests; the single-file page passed them too; outdated-browser notice works");
+console.log("offline desktop page: all 14 inputs and a template passed from file:// with zero network requests; the single-file page passed them too; outdated-browser notice works");

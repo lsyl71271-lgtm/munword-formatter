@@ -6,9 +6,12 @@
     "draft-directive": ["committee", "sponsors", "signatories"],
     "draft-resolution": ["committee", "topic", "sponsors", "signatories"],
     "friendly-amendment": ["committee", "topic", "sponsors", "signatories"],
-    "unfriendly-amendment": ["committee", "topic", "sponsors", "signatories"]
+    "unfriendly-amendment": ["committee", "topic", "sponsors", "signatories"],
+    "diplomatic-agreement": ["sponsors"],
+    "joint-statement": ["sponsors"]
   },
   "fieldLabels": {"committee": "委员会", "topic": "议题", "country": "国家或席位", "sponsors": "起草国", "signatories": "附议国"},
+  "typeFieldLabels": {"diplomatic-agreement": {"sponsors": "签署方"}, "joint-statement": {"sponsors": "签署方"}},
   "roleLabels": {"body": "正文", "preambulatory": "序言性条款", "operative": "行动性条款", "heading": "标题", "unknown": "待确认"},
   "roleReasons": {
     "body": "按当前文种正文区域识别；普通正文的置信值不是视觉验收分数。",

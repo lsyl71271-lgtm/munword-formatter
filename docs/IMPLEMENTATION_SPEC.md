@@ -1,6 +1,6 @@
 # PKUNMUN 2026 文件自动排版系统 · 实现与需求规格
 
-> - 版本基线：v1.8.5（`VERSION`），桌面安装包发布 `v1.8.5-desktop.2`。
+> - 版本基线：v1.9.0（`VERSION`），安装包发布 `v1.9.0-desktop.2`。
 > - 读者：要维护、审查或从零复原本程序的程序员与 AI。
 > - 目标：只读本文就能理解每一处逻辑为什么存在、怎样实现、界面长什么样、本机应用怎样打包，并能写出行为一致的程序。
 
@@ -15,6 +15,7 @@
 - [6. 解析与样式继承显式化（`docx-browser.ts:parsePackage`）](#6-解析与样式继承显式化docx-browsertsparsepackage)
 - [7. 识别算法（`docx-browser.ts:recognize`）](#7-识别算法docx-browsertsrecognize)
 - [8. 排版流水线（`docx-browser.ts:formatDocxInBrowser` → `formatInner`）](#8-排版流水线docx-browsertsformatdocxinbrowser--formatinner)
+- [8A. 外交协定与联合声明（`docx-browser.ts:formatTreaty`）](#8a-外交协定与联合声明docx-browsertsformattreaty)
 - [9. 学标版式参数（`shared/document-policy.json` → `handbook`）](#9-学标版式参数shareddocument-policyjson--handbook)
 - [10. 编号系统（`app/numbering.ts`，镜像 `backend/app/numbering.py`）](#10-编号系统appnumberingts镜像-backendappnumberingpy)
 - [11. 国家名称（`app/countries.ts`、`shared/country-names.json`）](#11-国家名称appcountriestssharedcountry-namesjson)
@@ -67,11 +68,11 @@
 
 - **输入**：一份 `.docx`，不超过 20 MiB。
   - 不支持 `.doc`、PDF、纯文本、加密文档。
-- **用户选择**：六种文种之一；语言由程序识别，用户可改。
-- **输出**：`.docx` 文件，文件名形如 `决议草案 S3 法兰西共和国 v1.docx`。
+- **用户选择**：八种文种之一；语言由程序识别，用户可改。
+- **输出**：`.docx` 文件，文件名形如 `立场文件 S3 法兰西共和国 v1.docx`；决议草案沿用上传文件的原名。
 - **附带结果**：一组校验结果（✓/△/×），和一份可下载的诊断报告 JSON。
 
-### 1.3 六种文种
+### 1.3 八种文种
 
 | 内部 id | 徽标 | 中文 | 英文 | 学标页 |
 |---|---|---|---|---|
@@ -81,8 +82,10 @@
 | `draft-resolution` | DR | 决议草案 | Draft Resolution | 41–47（默认选中） |
 | `friendly-amendment` | FA | 友好修正案 | Friendly Amendment | 52–53 |
 | `unfriendly-amendment` | UA | 非友好修正案 | Unfriendly Amendment | 52–53 |
+| `diplomatic-agreement` | DA | 外交协定 | Diplomatic Agreement | 用户提供的 PDF 范例 |
+| `joint-statement` | JS | 联合声明 | Joint Statement | 用户提供的 DOCX 范例 |
 
-两种修正案共用一套版式规格（`amendment`）。
+两种修正案共用一套版式规格（`amendment`）。外交协定和联合声明不属于学标手册，规则在 `document-policy.json` 的 `treaties` 一节，排版走单独的流水线（第 8A 节）。
 
 ### 1.4 设计原则（需求层面的硬约束）
 
@@ -139,7 +142,7 @@ app/                    React 界面与浏览器引擎（TypeScript）
   page.tsx              唯一的界面组件 <Home/>
   globals.css           全部样式（含 Tailwind 4 的 reset）
   layout.tsx            Next/vinext 外壳：<title>、lang="zh-CN"、og 图
-  docx-browser.ts       浏览器引擎：解析、识别、排版、校验（约 2000 行）
+  docx-browser.ts       浏览器引擎：解析、识别、排版、校验（约 2400 行，含外交协定 / 联合声明一节）
   docx-safety.ts        ZIP/XML 安全读取、文本切分工具
   content-guard.ts      内容签名、编辑白名单、包级校验
   numbering.ts          编号系列、层级规划、原生编号转换
@@ -155,10 +158,11 @@ app/                    React 界面与浏览器引擎（TypeScript）
   chatgpt-auth.ts       保留的脚手架，未启用
 backend/                Python 兼容引擎、FastAPI 服务、CLI
   app/main.py           HTTP 服务
-  app/pipelines.py      六个文种的流水线
+  app/pipelines.py      八个文种的流水线
   app/parser.py         识别
+  app/treaty.py         外交协定 / 联合声明：签署方、签字栏识别与分行
   app/structure_repair.py  结构修复
-  app/formatters/       排版（base.py、handbook_pass.py 等）
+  app/formatters/       排版（base.py、handbook_pass.py、treaty.py 等）
   app/content_guard.py  内容保护
   cli.py                批处理
   run.py                uvicorn 启动（127.0.0.1:8000）
@@ -170,7 +174,7 @@ downloads/              已发布的 DMG、EXE、APK、SHA256SUMS.txt、安装�
 scripts/                构建、打包、审计、回归脚本
 windows/                本机服务版的 PowerShell 安装/启动脚本
 templates/pkunmun2026/  Python 流水线的模板目录参数（目前只有说明文件，版式全部来自 shared/）
-examples/acceptance-inputs/  11 份验收原稿（六种文种、中英文）
+examples/acceptance-inputs/  14 份验收原稿（八种文种、中英文）
 tests/                  Node 测试（*.test.mjs）与引擎一致性夹具
 backend/tests/          Python unittest
 worker/, build/, db/, drizzle/  vinext/Cloudflare 入口与保留的 D1 脚手架（未启用）
@@ -417,6 +421,7 @@ docs/                   架构、ADR、学标对照、版本说明、审计报�
     - “起草国/附议国将按国家标识合并 N 个重复项”；
     - 待确认名称的警告（棕色字）。
 - 表单（3 列）：
+  - 外交协定、联合声明只有语言 select 和“签署方（逗号分隔，签字栏按此生成）”（跨 2 列，草稿存 `countryDrafts.sponsors`）；没有国家提示框；以下各项只用于学标六种文书；
   - 语言 select（中文/English）、委员会、议题；
   - 立场文件另有“国家 / 席位”“代表”；
   - 非立场文件有“起草国（逗号分隔）”（跨 2 列）；
@@ -444,10 +449,9 @@ docs/                   架构、ADR、学标对照、版本说明、审计报�
     - 起草国、附议国：以“；”或“; ”连接，粗斜体；
     - 条款：每条前面一个标记（P=序言，O=行动，·=其他），右侧显示置信度百分比；每深一级缩进 15px。
 - 生成面板 `generationPanel`：
-  - “提交会期”（占位“例如：第三会期 / S3”）；
-  - “提交国家”（占位“用于文件名”，识别后默认填 `country || sponsors[0]`）；
-  - “版本号”（默认 `v1`）；
-  - 复选框“按规则规范条款末尾标点”（默认勾选）、“高级：保持国家原顺序”（默认不勾）；
+  - 决议草案不显示会期、国家、版本号三项，改为一行“成稿文件名沿用上传的原文件名：**{文件名}**”（`p.sourceName`）；
+  - 其他文种：“提交会期”（占位“例如：第三会期 / S3”）；“提交国家”（外交协定、联合声明叫“文件名中的签署方”；占位“用于文件名”，识别后默认填 `country || sponsors[0]`）；“版本号”（默认 `v1`）；
+  - 复选框“按规则规范条款末尾标点”（默认勾选）、“高级：保持国家原顺序”（默认不勾）；外交协定、联合声明不显示这两项；
   - 主按钮“生成并下载 DOCX ↓”，处理中显示“正在生成…”。
 
 **04 校验结果（`validationSection`，有校验结果时出现）**
@@ -536,7 +540,7 @@ docs/                   架构、ADR、学标对照、版本说明、审计报�
 **生成 `formatAndDownload()`**
 
 - 浏览器模式：
-  1. `formatDocxInBrowser(content, model, {sessionLabel, submittingCountry, version, normalizePunctuation, preserveCountryOrder})`；
+  1. `formatDocxInBrowser(content, model, {sessionLabel, submittingCountry, version, normalizePunctuation, preserveCountryOrder, sourceName: file.name})`；决议草案的会期、国家、版本号传空（API 模式同样）；
   2. 设置校验结果和 `formatted`；
   3. 触发下载；
   4. `stage="done"`。
@@ -1404,8 +1408,9 @@ Word 允许列表编号和粗斜体写在**段落样式**里，而不在段落�
 
 **文件名 `outputFilename`**：
 
+- 决议草案：上传文件名（`options.sourceName`）去掉 `.docx` 后，替换非法字符、截到 180 字符，加 `.docx`；没有可用的原名时才按下面的规则。
 - 组成：`[titles[文种][语言], 提交会期, 国家, 版本号 || "v1"]`，去掉空项，用空格连接。
-  - 国家 = 提交国家 || 国家字段 || 第一个起草国 || “待填写国家”。
+  - 国家 = 提交国家 || 国家字段 || 第一个起草国 || “待填写国家”，去掉开头的英文冠词 the。
 - 把 `\ / : * ? " < > |` 和控制字符替换为“-”，截到 180 字符，加 `.docx`。
 - 例：“决议草案 S3 法兰西共和国 v1.docx”。
 
@@ -1418,6 +1423,64 @@ Word 允许列表编号和粗斜体写在**段落样式**里，而不在段落�
 | `ProtectedContentError` | “为保护原有内容已中止输出：第 N 段：{原因}” |
 | `ContentCheckError` | “安全校验未通过，已中止下载：…” |
 | 其他 | “程序内部错误（不是文件本身的问题），请把该文件反馈给维护者。{错误名}: {前 200 字}” |
+
+## 8A. 外交协定与联合声明（`docx-browser.ts:formatTreaty`）
+
+两种文书不属于学标手册，没有页首字段：标题写明签署方，文末签字栏每一方一位代表。规则全部在 `shared/document-policy.json` → `treaties`；Python 镜像为 `backend/app/treaty.py`（识别与签字栏计算）和 `backend/app/formatters/treaty.py`（排版）。两套引擎对 14 份验收原稿按两种文书排版，段落、对齐、行距、缩进、制表位、字号和强调逐段相同。
+
+### 8A.1 识别（`recognizeTreaty`）
+
+1. 流式段落、语言判定同第 7.1、7.2 节；跳过结构修复。
+2. **标题** `treatyTitleIndices`：前 3 个非空段中，不超过 160 字、不含 `。；;！？!?`、不以“鉴于 / whereas”开头的连续短段；遇到含标题词的段为止（中文标题词须在段末，可跟右引号或右括号；英文用单词边界）。没有标题词时只取第一段。标题词表在 `treaties.titleWords`（联合声明、共同声明、联合公报、声明、宣言、协定、协议、条约、公约、议定书、备忘录、换文；英文对应词）。
+3. **签署方** `treatyParties(titles, language)`：
+   - 中文：标题有两段且第二段以“关于 / 就 / 有关”开头时取第一段；否则取整个标题中这三个词之前的部分；都没有时取标题词之前的部分；连标题词也没有（例如“工作文件”）时没有签署方。
+   - 英文：取 `between / among / amongst / of / by` 之后、`on / concerning / regarding / relating to / in respect of / with respect to` 之前的部分；没有时取标题词之前的部分。
+   - 按分隔符切分（中文 `[、，,；;]|以及|及|与|同|(?<!共)和(?!平)`；英文逗号、`, and`、` and `）。相邻片段拼起来在共用国家表里能解析（`resolveCountry(...).status !== "unknown"`）而单独不能时合并，所以“大不列颠及北爱尔兰联合王国”“Trinidad and Tobago”不会被拆开。中文去掉末尾的“之间 / 间 / 双方 / 三方 / 四方 / 各方”。
+4. **签字栏起点** `signatureStart`：从文末往前看至多 8 个非空段，每段不超过 160 字、不含句末标点、不以逗号结尾；其中每个记号都是“代表”行的段（中文 `代表[:：]?$`；英文 `^(Representative of|On behalf of|For)\b` 或 `\bRepresentative[:：]?$`）里最靠前的一段。记号的切分：中文按任意空白，英文按制表符、两个以上空格或全角空格（姓名内部可以有单个空格）。
+5. 模型：`title` 为标题段拼接，`sponsors` 为签署方，`body_clauses` 为标题与签字栏之间的非空段（kind `body`，置信 0.9）。没有标题时警告“未识别到标题…”；签署方少于两个时警告“未能从标题识别出至少两个签署方；请在第 03 步填写签署方，签字栏按填写的签署方生成。”（第 03 步签署方已有两个以上时，生成时不再重复这条警告）。
+
+### 8A.2 版式（`treaties.layouts`）
+
+| 项目 | 外交协定（PDF 实测） | 联合声明（DOCX 段落属性） |
+|---|---|---|
+| 标题 | 16 pt 加粗居中，keepNext | 同左 |
+| 行距 | 固定：中文标题 31.2 pt、正文 23.4 pt；英文 27.6 / 20.7 pt。段内有图片等对象时改为“至少” | 自动：标题、正文 240（单倍），签字栏 360（1.5 倍） |
+| 段前 / 段后（twips） | 全部 0 / 0 | 标题、正文 340 / 330；签字栏 0 / 0 |
+| 正文 | 12 pt，首行缩进 24 pt（480 twips），两端对齐 | 12 pt，无首行缩进，左对齐 |
+| 章节 | 匹配 `第X章 / 第X编 / 第X部分 / Chapter N / Part N`、不超过 80 字且无句末标点的段：加粗居中 | — |
+| 开头段 | — | 第一段正文以冒号结尾或含“如下 / as follows / hereby”：不编号 |
+| 编号 | — | 其余正文段编号“1. ”（见 8A.4） |
+| 引文 | — | 以左引号开头的段（直到引号闭合）：左缩进 12 pt（240 twips）、斜体，不编号 |
+
+- 每段先去掉 `pStyle`、边框、底纹、自定义制表位、大纲级别等（与第 8.13 节同一张表），`pageBreakBefore` / `keepLines` 设 0，缩进属性全部重写为 `left`、`right=0`、`firstLine`。
+- 页面、样式表、所有 run 的字体字号同第 8.4–8.6 节；整篇隐藏 / 删除线损伤同第 8.3 节；脚注、尾注与字体部件同第 8.19–8.20 节。
+- 标题与签字栏之间的空段删除（记 `empty-line`），条件同第 8.18 节：直接位于 body 下、没有隐藏结构、不在原生列表里、签名只含空白。
+
+### 8A.3 签字栏（`treatySignature`）
+
+1. 原签字栏（8A.1 第 4 步起到文末）含图片、域、链接、修订、隐藏或删除线时：只套签字栏的段落格式（居中），警告“签字栏含有图片、域、链接、修订或隐藏文字，已保留原样未重建；请人工核对代表数量。”
+2. **读原签字栏** `readSignatureBlock`：每个“代表”行之后至多一行姓名。姓名数等于代表数时一一对应；少于代表数时按每个记号在行中的水平位置（字宽同第 8.15 节 `widthEm`，制表符计 2 em，并按段落对齐方式平移）放到最近的代表下方，保持先后顺序，并警告“签字栏中原稿姓名少于代表…”；多于代表数或姓名行前没有代表行时无法对应，保留原样并警告。
+3. **条目** `signatureEntries`：按签署方顺序，每方一条。原签字栏里代表名（去掉“代表 / Representative of …”后，忽略开头的 the 与大小写）与该方相同的条目原样沿用（包括姓名）；没有的新建“{签署方}代表”/“Representative of {party}”，姓名为空。原签字栏里对不上任何签署方的代表保留在末尾并警告。
+4. 没有原签字栏且签署方少于两个时不新建签字栏。
+5. **分行** `signatureRows`：行数从 ⌈n/3⌉ 起逐个增加，每行人数尽量平均（4 → 2+2，5 → 3+2）；一行的宽度 = 各条目 max(代表宽, 姓名宽) 之和 + 每个间隔 1 em，不超过版心宽度（`(页宽 − 左右边距) / 12 pt` em）时采用；都放不下时每行一人。
+6. **制表位** `columnStops`：版心剩余宽度平均分给各列两侧，每列中心设一个居中制表位（twips = em × 12 × 20，四舍五入）。
+7. 每行写两段：代表行 `\t代表1\t代表2…`、姓名行 `\t姓名1\t姓名2…`（空姓名照样占一个制表位）。两段都左对齐、无缩进，行距与段前段后用“签字栏”一项；第二行起的代表行段前再加一行（固定行距时为正文行距，自动行距时 312 twips）。run 设本文字体字号，不加粗、不斜体、无下划线。
+8. 新段插在原签字栏第一段之前（没有原签字栏时插在 body 的 `sectPr` 之前），然后删除原签字栏各段。原段记 `signature`；新段记 `signature`、`created`，`expected` 为全部代表名的 JSON 数组。
+9. 修改记录：“签字栏按签署方排为 N 方：…；补上：…；原稿已写的代表与姓名保留”（或“原稿没有签字栏，姓名处留空供签字”）。
+
+### 8A.4 联合声明编号（`statementNumbers`）
+
+- 参与编号的是开头段、引文和章节以外的正文段。
+- 全部已有编号（原生编号，或段首 `\d{1,3}` 加 `.、．)`）：不动。
+- 部分有、部分没有：不补，警告“联合声明的段落部分有编号、部分没有，已保留原样未补编号；请人工核对。”
+- 都没有：依次在段首加“1. ”“2. ”……（`editVisibleText`，失败或会丢掉隐藏 / 删除线标记时恢复原段并记入受保护提示），记 `statement-number`，`expected` 为新全文。
+
+### 8A.5 校验与输出
+
+- 严格内容校验 `verifyFormat`（第 12 节；标题词、标签表为空）与 `verifyMarks`，包级校验 `verifyPackage`。
+- 字号校验：标题段每个有字的 run 为 16 pt，其余 12 pt。
+- 校验项：`docx_package`、`structural_edits`（修改记录）、`content`、`package`、`font_size`（“标题 16 磅加粗居中、正文 12 磅（{文种}版式）。”）、`browser_private`，以及 `hidden-text`、`content-protected`、`structure_review` 提示。任何一项为 × 时抛出 `ContentCheckError`，不给文件。
+- 文件名同第 8.21 节 `outputFilename`。
 
 ## 9. 学标版式参数（`shared/document-policy.json` → `handbook`）
 
@@ -1708,6 +1771,8 @@ lvlText 含“第%…条”时为 article。
 | `label-restore` | 补标签 | 结构不变；新文本等于授权的 `expected`，且以原文字结尾 |
 | `field` | 第 03 步修改 | 新段必须是纯文字，新文本等于 `expected`；旧段是普通字段，或结构不变 |
 | `blank` | 新建空行 | 只能是新建段落，且签名为空 |
+| `signature` | 外交协定 / 联合声明的签字栏重建 | 单段不查，由签字栏整体检查负责（`checkSignatureBlock`）：删掉的原段和新建段都只含文字和制表符；新建段里的代表正好等于 `expected`（JSON 数组）；原有代表一个不少；姓名的多重集合不变 |
+| `statement-number` | 联合声明段落编号 | 新文本等于 `expected`，以 `^\d{1,3}\. ` 开头，去掉它后与原文完全相同，结构不变 |
 | `empty-line` | 删除原空段 | 原段签名只含空白 |
 
 除 `ending`、`marker`、`dr-marker`、`list-marker`、`countries`、`country-name` 和“普通字段 → 纯文字”的 `field` 外，其余编辑都要求 `structureOnly` 前后相同，即图片、域、链接、修订等结构不变。
@@ -1851,21 +1916,22 @@ lvlText 含“第%…条”时为 article。
    - 语言只能是 zh / en；
    - 每个值是字符串，不超过 100000 字符，且能写进 XML；
    - 正文为空时报错“请先填写正文；程序不会替你编写内容。”
-2. 页首字段按文种取：
+2. 外交协定、联合声明：面板只有“签署方（逗号分隔）”和“事由”。签署方为空时报错“请填写签署方；签字栏按签署方生成。”`treatyTitle` 按范例写标题：中文协定“甲、乙与丙关于{事由}协定”，中文联合声明两段“甲、乙、丙”+“就{事由}的联合声明”，英文“Agreement between A, B and C on …”/“Joint Statement of … on …”；生成后把 `model.sponsors` 设为签署方，签字栏由第 8A 节生成。以下第 3 步的页首字段和第 5 步的 `title` 只用于学标六种文书。
+3. 页首字段按文种取：
    - 委员会；
    - 议题（指令草案没有）；
    - 立场文件：国家、代表；
    - 其他文种：起草国；工作文件以外再加附议国；
    - 只输出有值的字段，格式“标签：{key}”。
-3. 生成一个最小 DOCX：
+4. 生成一个最小 DOCX：
    - `[Content_Types].xml`、`_rels/.rels`、`word/_rels/document.xml.rels`；
    - `word/styles.xml`：docDefaults 字体为 Times New Roman + 东亚字体，12 pt，段落间距 0/0/240 auto；另有一个 Normal 样式；
    - `word/document.xml`：标题段 `{title}`、页首段、正文占位 `{@bodyXml}`、`<w:sectPr/>`。
    - 自带样式表，是为了让两个引擎和 Word 都从本文字体起步，而不是各自不同的内置默认。
-4. 用 docxtemplater（`paragraphLoop`、`linebreaks`）渲染：
+5. 用 docxtemplater（`paragraphLoop`、`linebreaks`）渲染：
    - `title` = 输出标题词；
    - `bodyXml` = 正文按换行拆成多个段落的 XML，文字已转义。
-5. 走正常的 `parseDocxInBrowser` → 把 `model.language` 设为用户所选 → `formatDocxInBrowser`（规范标点开）。返回值与正常排版相同。
+6. 走正常的 `parseDocxInBrowser` → 把 `model.language` 设为用户所选 → `formatDocxInBrowser`（规范标点开）。返回值与正常排版相同。
 
 **面板行为**：
 
@@ -1910,7 +1976,7 @@ lvlText 含“第%…条”时为 article。
    - “恢复被删除的自动编号首项”；
    - “补齐（一）标记”；
    - “拆分嵌套条款”。
-6. **文件名**用 `FILENAME_PREFIXES`，与浏览器略有不同：
+6. **文件名**：决议草案用上传文件名（`run(..., source_name=file.filename)`，规则同浏览器）；其他文种用 `FILENAME_PREFIXES`，与浏览器略有不同：
    - 英文工作文件为“WP”；
    - 修正案区分“友好修正案 / 非友好修正案”“Friendly / Unfriendly Amendment”。
 
@@ -1921,7 +1987,7 @@ lvlText 含“第%…条”时为 article。
 | `GET /` | 本机页面 `local_web/index.html`（no-store） | HTML | — |
 | `GET /app.js`、`/styles.css` | `public/local-app.js`、`public/local-styles.css` | JS / CSS | 503：“请先运行 pnpm build:local-tools，或使用包含离线界面的本机发布包。” |
 | `GET /favicon.svg`、`/studio-tools.js` | 图标；保留的旧资源 | SVG / JS | `studio-tools.js` 缺失时 404 |
-| `GET /api/health` | 健康检查 | `{"status":"ok","service":"pkunmun-2026-formatter","version":"1.8.5","pipelines":[六个 id]}` | — |
+| `GET /api/health` | 健康检查 | `{"status":"ok","service":"pkunmun-2026-formatter","version":"1.9.0","pipelines":[八个 id]}` | — |
 | `POST /api/parse/{type}` | 表单 `file` | 模型 JSON + `diagnostics` | 404 不支持的文种；415 非 .docx；413 超过 20 MB；422 文件无法读取；500 内部错误 |
 | `POST /api/format/{type}` | 表单：`file`、`overrides_json`、`preserve_country_order`、`normalize_punctuation`、`session_label`、`submitting_country`、`version` | DOCX 二进制 | 409：`{"detail":{"message":"格式校验未通过，已中止输出。","validations":[…]}}`；422 / 500 同上 |
 
@@ -2322,7 +2388,7 @@ APK 约 0.4 MB：包名 `org.pkunmun.formatter2026`，桌面名称「PKUNMUN 排
 
 - `tests/android.test.mjs`（`node --test`，CI 的 source-checks 单独一步；不进 `test:unit`，因为 `package.json` 的哈希记录在桌面安装包的构建记录里，改它会改变 DMG / EXE）：`legacyCss` 各项降级；在去掉新内置函数的 `vm` 环境里加载 `polyfills.js` 后行为与原生一致、不可枚举；`bridge.js` 与加载器能按 ES5 解析；清单（无联网、存储到 28、导出设置、接收 DOCX）；`MainActivity` 关闭文件访问、调试受 adb 属性控制、没有 lambda；校验值行的更新规则；已发布 APK 的校验值、条目和版本。
 - `acceptance/verify-apk.mjs`：从源码重建未签名 APK，与发布 APK 去掉 v1 签名文件后的全部条目逐字节比较；v1/v2/v3 签名与证书固定值；`aapt dump badging` 读回包名、版本、`sdkVersion:'21'`、`targetSdkVersion:'34'`、权限只有存储（≤28）、桌面名称；`SHA256SUMS.txt` 与安装教程含 APK 校验值。写 `apk.json`。
-- `acceptance/webview-floor.mjs`：下载 Chromium 快照 67、69、79、83、88、95、99、109（位置号见脚本）加当前 Chromium，以 390×844 手机视口打开手机版页面并注入桥的替身。67 必须显示 WebView 说明且不加载 `app.js`；其余对 11 份原稿：先经 `__munwordReceive` 传入文件，再点选文书类型，确认文件仍在，识别、确认第 03 步可编辑、生成，替身收到的字节数正确，DOCX 与共享页面在当前 Chromium 中的输出（`output/desktop-smoke/`）逐部件相同。写 `webview-floor.json`。
+- `acceptance/webview-floor.mjs`：下载 Chromium 快照 67、69、79、83、88、95、99、109（位置号见脚本）加当前 Chromium，以 390×844 手机视口打开手机版页面并注入桥的替身。67 必须显示 WebView 说明且不加载 `app.js`；其余对 14 份原稿：先经 `__munwordReceive` 传入文件，再点选文书类型，确认文件仍在，识别、确认第 03 步可编辑、生成，替身收到的字节数正确，DOCX 与共享页面在当前 Chromium 中的输出（`output/desktop-smoke/`）逐部件相同。写 `webview-floor.json`。
 - `acceptance/emulator.mjs`：一台 adb 设备上安装发布的 APK（不带 `-g`），`setprop debug.munword.devtools 1`，经 `/proc/net/unix` 找到 `webview_devtools_remote_<pid>` 并转发，用 DevTools 驱动页面，用 `uiautomator dump` 找原生弹窗按钮并 `input tap`，`adb pull` 读回 Download 里的文件。检查项见 `android/README.md`；写 `emulator.json`、截图和 logcat。
 
 ## 21. 网页部署
@@ -2443,13 +2509,14 @@ python scripts/audit-source.py
 | template-race | 模板生成的竞态 |
 | dr-numbering、all-numbering | 六个文种的编号转换、层级规划、原生编号 |
 | edge-cases | 边界情况 |
+| treaty | 外交协定与联合声明：签署方识别（含带分隔符的国名）、两种版式、签字栏补齐与换行、第 03 步改签署方、少于两方不造签字栏、守卫拒绝删改姓名和改动正文、决议草案文件名、模板新建 |
 | android | 手机版页面的样式降级与内置函数补丁；桥和加载器是 ES5；清单承诺；校验值行；已发布 APK（第 20.6 节） |
 | desktop | 离线页面 CSP 与相对路径；加载器在新旧浏览器中的行为和语法兼容；单文件页面；macOS 入口的架构和最低系统；启动脚本在多种 shell 下的浏览器选择和 URL 编码；安装脚本设置；已发布安装包的校验和与版本 |
-| rendered-html | 服务端渲染出产品页，有六个文种 |
+| rendered-html | 服务端渲染出产品页 |
 | static-deployment | 静态资源白名单；发布包能在不调用 API、不填写第 03 步的情况下识别并下载 |
 
-- **Python 测试**（`backend/tests/test_*.py`）：pipelines、policy、handbook、content_protection、countries、security、local_app、local_build、python39_compatibility 等 22 个文件。
-- **验收原稿**：`examples/acceptance-inputs/` 共 11 份。
+- **Python 测试**（`backend/tests/test_*.py`）：pipelines、policy、handbook、content_protection、countries、security、local_app、local_build、python39_compatibility、treaty 等 23 个文件。
+- **验收原稿**：`examples/acceptance-inputs/` 共 14 份（学标六种文书 11 份，外交协定 1 份，联合声明 2 份）。
   - 中英文立场文件、工作文件、指令草案、决议草案；
   - 中文友好修正案、中文非友好修正案、英文修正案。
   - 所有端到端测试都只用规则处理它们，不得写针对样例的代码。
@@ -2457,7 +2524,7 @@ python scripts/audit-source.py
 
 ## 24. 验收标准（复原后的程序应满足）
 
-1. 11 份验收原稿在两种引擎中都能识别、生成，校验结果无 ×；输出能被 Word / WPS / LibreOffice 正常打开。
+1. 14 份验收原稿在两种引擎中都能识别、生成，校验结果无 ×；输出能被 Word / WPS / LibreOffice 正常打开。
 2. **成稿再处理一遍**（选同一文种）后，没有新的文字改动：幂等。
 3. **内容零改动**：对任一输入，除第 12.3 节白名单内的变化外，`verifyFormat`、`verifyMarks`、`verifyPackage` 都不报告问题。人为改动正文必须被拦截。
 4. 隐藏文字、删除线、修订、域、超链接、书签、图片、脚注、批注、页眉页脚，排版前后都存在且语义不变。

@@ -11,15 +11,19 @@ from docx.oxml.ns import qn
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'backend'))
 from app.pipelines import PIPELINES
+from app.treaty import is_treaty
 from app.numbering import marker_of, valid_marker_change
 from app.docx_package import validate_docx_package
 from app.errors import InvalidDocxError
+
+# The handbook's six types; diplomatic agreements and joint statements have their own tests.
+HANDBOOK_TYPES = [kind for kind in PIPELINES if not is_treaty(kind)]
 
 TITLES = ['立场文件', '工作文件', '指令草案', '决议草案', '友好修正案', '非友好修正案']
 
 def source(kind):
     document = Document()
-    for text in [TITLES[list(PIPELINES).index(kind)], '委员会：联合国大会', '议题：合作', '国家：中国', '代表：测试', '起草国：中国', '附议国：法国']:
+    for text in [TITLES[HANDBOOK_TYPES.index(kind)], '委员会：联合国大会', '议题：合作', '国家：中国', '代表：测试', '起草国：中国', '附议国：法国']:
         document.add_paragraph(text)
     return document
 
@@ -36,7 +40,7 @@ class EdgeCaseTests(unittest.TestCase):
 
     def test_decimal_quantities_and_compound_outlines_are_preserved(self):
         lines = ['1.5 亿美元用于合作。', '1.1 资金安排', '1.2.3 项目说明', '2．5 吨物资。']
-        for kind in PIPELINES:
+        for kind in HANDBOOK_TYPES:
             with self.subTest(kind=kind):
                 document = source(kind)
                 for text in [*lines, '3. 要求落实。']:

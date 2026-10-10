@@ -57,6 +57,30 @@ CASES = {
         "friendly-amendment",
         ["Friendly Amendment [number]", "Committee: General Assembly", "Topic: Plastic Pollution", "Sponsors: Japan", "Signatories: Canada", "1. Add the phrase “within existing resources” to operative clause 2."],
     ),
+    # Three parties in the title, two representatives in the signature block: the third is added.
+    "12_中文外交协定": (
+        "diplomatic-agreement",
+        ["日本国、巴西联邦共和国与加拿大关于海洋塑料污染监测合作的协定", "",
+         "鉴于塑料污染跨越国界，日本国、巴西联邦共和国与加拿大（以下简称“三方”）愿意加强监测合作，达成协议如下：",
+         "第一章 合作范围", "第一条 三方共同建立海洋塑料污染监测数据交换机制；", "第二条 三方每年共同发布一次监测报告。",
+         "第二章 生效与期限", "第三条 本协定自三方完成各自国内程序并相互通知之日起生效，有效期五年。",
+         "本协定于2026年5月1日签订，一式三份，每份均以中文、英文和葡萄牙文写成，三种文本同等作准。", "",
+         "日本国代表        巴西联邦共和国代表", "示例甲        示例乙"],
+    ),
+    # Four parties over a two-line title and no signature block: two rows of two, names left blank.
+    "13_中文联合声明": (
+        "joint-statement",
+        ["日本国、法兰西共和国、巴西联邦共和国、加拿大", "就海洋塑料污染治理的联合声明",
+         "2026年5月1日，四方在东京举行会谈，共同声明如下：", "四方重申对《联合国海洋法公约》的承诺。",
+         "“各国有保护和保全海洋环境的义务。”", "四方同意每年举行一次部长级会议。"],
+    ),
+    "14_English_Joint_Statement": (
+        "joint-statement",
+        ["Joint Statement of Japan, Trinidad and Tobago and Canada on Ocean Plastic Monitoring",
+         "The parties hereby declare as follows:", "The parties will share monitoring data every quarter.",
+         "The parties will publish a joint report each year.",
+         "Representative of Japan    Representative of Canada", "Sample Delegate A    Sample Delegate B"],
+    ),
 }
 
 
@@ -71,6 +95,7 @@ def main() -> None:
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--outputs-only", action="store_true", help="Keep the checked-in input bytes unchanged")
+    parser.add_argument("--only", nargs="*", default=None, help="Write only these inputs (names without .docx); the others keep their bytes")
     args = parser.parse_args()
     inputs = ROOT / "examples" / "acceptance-inputs"
     outputs = ROOT / "examples" / "acceptance-outputs"
@@ -79,12 +104,14 @@ def main() -> None:
     template_dir = ROOT / "templates" / "pkunmun2026"
     for name, (document_type, paragraphs) in CASES.items():
         source = inputs / f"{name}.docx"
+        if args.only is not None and name not in args.only:
+            continue
         if not args.outputs_only:
             make_docx(paragraphs, source)
         content = source.read_bytes()
         result = PIPELINES[document_type](template_dir).run(content, submitting_country="日本国", version="v1")
         (outputs / result.filename.replace(".docx", f"_{name}.docx")).write_bytes(result.content)
-    print(f"Generated {len(CASES)} input and {len(CASES)} output DOCX samples.")
+    print(f"Generated {len(CASES) if args.only is None else len(args.only)} input and output DOCX samples.")
 
 
 if __name__ == "__main__":

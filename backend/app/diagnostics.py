@@ -16,7 +16,7 @@ def build_diagnostic_report(model: IntermediateDocument, validations: list[Valid
         "schema_version": POLICY["schemaVersion"],
         "document_type": model.document_type, "language": model.language,
         "paragraph_count": sum(bool(text.strip()) for text in model.paragraphs),
-        "missing_fields": [{"field": key, "label": POLICY["fieldLabels"][key]} for key in POLICY["requiredFields"][model.document_type] if not getattr(model, key)],
+        "missing_fields": [{"field": key, "label": POLICY.get("typeFieldLabels", {}).get(model.document_type, {}).get(key, POLICY["fieldLabels"][key])} for key in POLICY["requiredFields"][model.document_type] if not getattr(model, key)],
         "warnings": model.warnings,
         "clauses": [{"paragraph": item.paragraph_index + 1, "role": item.kind, "level": item.level,
                      "confidence": item.confidence, "text": item.text,
