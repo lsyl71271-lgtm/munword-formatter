@@ -1,4 +1,4 @@
 # PKUNMUN 2026 文件排版系统 2.0.0 — offline installers
-7dc106c8396092ff1f3bc2ff6821b51b702ae116d67f6607440cd6c8f87780ec  PKUNMUN2026-Formatter-Android.apk
+a7dc89b55027de816dbaa5e875f6808164eb317c868215ae4219356424ba16f0  PKUNMUN2026-Formatter-Android.apk
 48d8c645ad22f400d0760c5b6ce7f16b581789c7fb4696bbef83cc161ff64527  PKUNMUN2026-Formatter-Windows-Setup.exe
 9ed22563a6fc56a604d82ca5c1c840223026014fa0df10feb94bf0bd61ffa6d1  PKUNMUN2026-Formatter-macOS.dmg

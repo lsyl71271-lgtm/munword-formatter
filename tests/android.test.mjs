@@ -126,7 +126,11 @@ test("the activity reads opened files in order and hands the page one whole file
   const activity = read("android/src/org/pkunmun/formatter2026/MainActivity.java");
   assert.match(activity, /sequence = \+\+openSequence/, "each open gets the next number");
   assert.match(activity, /if \(sequence != openSequence\)/, "a slower read of an older file is dropped");
-  assert.match(activity, /readingBytes = openedBytes;/, "openedName() takes the file the chunks then come from");
+  assert.match(activity, /readingBytes = openedBytes;/, "the page's first call takes the file the rest then come from");
+  // In any order: the emulator test asks for the size before the name (android/acceptance/emulator.mjs bridgeOpens).
+  for (const call of ["openedName", "openedSize", "openedChunk"]) {
+    assert.match(activity, new RegExp(`public \\w+ ${call}\\([^)]*\\) \\{\\s*synchronized \\(lock\\) \\{\\s*takeOpened\\(\\);`), `${call} takes the file first`);
+  }
   assert.match(activity, /if \(openedBytes == readingBytes\)/, "a file that arrived during the read stays for the next hand-over");
   assert.match(activity, /isFinishing\(\) \|\| isDestroyed\(\)/, "no dialog on a destroyed activity");
 });

@@ -97,8 +97,8 @@ public final class MainActivity extends Activity {
     private int nextSaving = 1;
     private String openedName;
     private byte[] openedBytes;
-    // The page reads one opened file at a time: openedName() takes it, and the chunks come from that copy even if a
-    // newer file arrives in the meantime (that one is handed over next).
+    // The page reads one opened file at a time: the first of openedName / openedSize / openedChunk takes it, and the
+    // rest come from that copy even if a newer file arrives in the meantime (that one is handed over next).
     private String readingName;
     private byte[] readingBytes;
     // Each "open with" / "share" gets the next number on the main thread; a slower read of an older one is dropped.
@@ -354,11 +354,17 @@ public final class MainActivity extends Activity {
             reportFailure(safeName(name), message);
         }
 
+        /** Called holding the lock: the file the page reads now, taken by its first call (in whatever order). */
+        private void takeOpened() {
+            if (readingBytes != null) return;
+            readingName = openedName;
+            readingBytes = openedBytes;
+        }
+
         @JavascriptInterface
         public String openedName() {
             synchronized (lock) {
-                readingName = openedName;
-                readingBytes = openedBytes;
+                takeOpened();
                 return readingName == null ? "" : readingName;
             }
         }
@@ -366,6 +372,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public int openedSize() {
             synchronized (lock) {
+                takeOpened();
                 return readingBytes == null ? 0 : readingBytes.length;
             }
         }
@@ -374,6 +381,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public String openedChunk(int offset, int length) {
             synchronized (lock) {
+                takeOpened();
                 if (readingBytes == null || offset < 0 || offset >= readingBytes.length || length <= 0) return "";
                 int count = Math.min(Math.min(length, OPEN_CHUNK), readingBytes.length - offset);
                 return Base64.encodeToString(readingBytes, offset, count, Base64.NO_WRAP);
