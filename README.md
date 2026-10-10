@@ -170,7 +170,7 @@ python3 -m venv .venv
 **旧版本机服务**（桌面安装包出现之前的安装方式，仍然保留）：
 
 - 根目录的 `首次安装.command`（macOS）和 `Windows 首次安装.bat` 会安装 Python 依赖，并配置持续运行的本机服务（127.0.0.1:8000）。
-- 页面和排版同样在浏览器里完成。普通用户请改用上面的桌面安装包。
+- 页面和排版同样在浏览器里完成。普通用户请改用上面的桌面安装包；已装旧版的，按 [从旧版本机服务换到桌面安装包](docs/migrate-from-local-service.md) 换装并删除旧版。
 
 ### 测试与持续集成
 
@@ -187,7 +187,7 @@ python3 scripts/audit-source.py
 ```
 
 - [`source-checks`](.github/workflows/source-checks.yml) 在每次推送和每个 PR 上运行以上全部检查。
-- [`offline-installers`](.github/workflows/offline-installers.yml) 在安装包（DMG / EXE / APK）或其页面来源改动时运行。只有 `main` 会发布：全部安装与真机检查通过、并且同一提交的全部源码检查也通过后，才在 Releases 页新建 `v<版本>`；已发布的版本从不覆盖或移动，同一版本号换了文件会直接报错，必须升版本号。每个版本附 `release-manifest.json`（引擎版本、各客户端修订号、安装包来源提交、验收提交、构建编号与校验值）。
+- [`offline-installers`](.github/workflows/offline-installers.yml) 在安装包（DMG / EXE / APK）或其页面来源改动时运行。只有 `main` 会发布：全部安装与真机检查通过、并且同一提交的全部源码检查也通过后，才在 Releases 页新建 `v<版本>`；已发布的版本从不覆盖或移动，同一版本号换了文件会直接报错，必须升版本号。每个版本附 `release-manifest.json`（引擎版本、各客户端修订号、安装包来源提交、验收提交、构建编号与校验值）。工作流从不修改已发布的版本；要在平台层面也锁住（管理员也不能手动改），仓库所有者可在 GitHub 的 Settings → General → Releases 打开 immutable releases。
 - 标准测试只用仓库里的 14 份合成验收原稿和 `tests/fixtures/engine-parity.json`，不需要私人文件或云端凭据。
 - 自动化验收只检查第 03 步“可以编辑”，从不代填字段来掩盖识别错误。
 - 其他压力与比对脚本在 `scripts/`。需要私人样例的脚本通过 `MUNWORD_FIXTURE_ROOT` 定位，这些样例不随仓库分享。

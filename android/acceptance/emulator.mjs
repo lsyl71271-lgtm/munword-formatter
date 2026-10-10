@@ -606,6 +606,19 @@ async function appFlows() {
   if (!(await cdp.eval(resolution))) throw new Error("share changed the document type");
   const shared = await recognizeAndGenerate("08_English_Draft_Resolution");
   step("share into the running app: the document arrives and formats like the reference", { saved: shared.saved });
+
+  // Two documents sent straight after each other: the page ends up with the last one, and keeps it through a type
+  // change (an older hand-over still under way must never replace it; android/bridge.js generations).
+  const [last, earlier] = [documents["07_中文决议草案"], documents["08_English_Draft_Resolution"]];
+  sendIntent("SEND", shareUri(earlier.name));
+  sendIntent("VIEW", shareUri(last.name));
+  await arrived(last.name, last.bytes.length);
+  await sleep(3000);
+  await arrived(last.name, last.bytes.length);
+  await cdp.eval(`${typeCard("立场文件")}.click(), true`);
+  await sleep(3500);
+  await arrived(last.name, last.bytes.length);
+  step("two documents in quick succession: the last one wins and stays through a type change", { kept: last.name });
 }
 
 async function main() {

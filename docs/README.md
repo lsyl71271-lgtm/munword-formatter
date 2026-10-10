@@ -15,6 +15,7 @@
 | [IMPLEMENTATION_SPEC.md](IMPLEMENTATION_SPEC.md) | 实现与需求规格：每一处逻辑、界面、本机应用、构建与测试，足以从零复原本程序 |
 | [architecture.md](architecture.md) | 模块边界与端到端执行步骤 |
 | [adr-0001-shared-daily-interface.md](adr-0001-shared-daily-interface.md) | 决策记录：网页、本机、桌面（以及后来的安卓）共用一套界面和一个浏览器引擎 |
+| [migrate-from-local-service.md](migrate-from-local-service.md) | 已装旧版本机服务（Python 后台服务）的用户怎样换到桌面安装包、删除旧版 |
 | [handbook-alignment.md](handbook-alignment.md) | 每条排版规则对应学标手册的哪一页 |
 | [../desktop/README.md](../desktop/README.md) | 桌面安装包的构建、验收与签名 |
 | [../android/README.md](../android/README.md) | 安卓安装包的组成、旧 WebView 兼容层、构建、签名与验收 |
