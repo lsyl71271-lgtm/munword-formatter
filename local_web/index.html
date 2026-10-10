@@ -10,6 +10,26 @@
 <body>
   <div id="root"><p>正在加载 Munword 共用界面…</p></div>
   <noscript>请启用 JavaScript。本机单机版与网页版使用同一界面，文件在浏览器内处理。</noscript>
-  <script src="/app.js" defer></script>
+  <script>
+    (function () {
+      var root = document.getElementById("root");
+      var box = '<div style="max-width:560px;margin:48px auto;padding:24px 28px;border:1px solid #d0d5dd;border-radius:12px;background:#fff;color:#1d2939;font:15px/1.75 sans-serif">';
+      if (typeof Array.prototype.findLast === "function" && typeof window.CSSLayerBlockRule !== "undefined") {
+        var script = document.createElement("script");
+        script.src = "/app.js";
+        script.onerror = function () {
+          root.innerHTML = box + "<b>页面的程序文件没有加载成功。</b><br>请刷新页面再试；网络不稳定时，可以改用离线安装包（断网也能用）。</div>";
+        };
+        document.body.appendChild(script);
+        return;
+      }
+      root.innerHTML = box + "<b>这个浏览器版本太旧，无法运行排版系统。</b><br>" +
+        "请安装或更新以下任一浏览器，然后重新打开本网页（排版在浏览器里完成，文件不会上传）：<br>" +
+        "· Windows 10 / 11：Microsoft Edge 或 Google Chrome 最新版<br>" +
+        "· Windows 7 / 8.1：Google Chrome 109 或 Firefox ESR 115<br>" +
+        "· macOS 10.15 及以上：系统更新后的 Safari（15.4 或更高）<br>" +
+        "· macOS 10.11–10.14：Google Chrome 或 Firefox</div>";
+    })();
+  </script>
 </body>
 </html>

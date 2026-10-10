@@ -27,7 +27,8 @@ class LocalAppTests(unittest.TestCase):
 
         self.assertEqual(page.status_code, 200)
         self.assertIn("本机单机版", page.text)
-        self.assertIn('src="/app.js"', page.text)
+        # Loaded by the shared browser check (local_web/compat-loader.mjs) once the browser is new enough.
+        self.assertIn('script.src = "/app.js";', page.text)
         self.assertEqual(script.status_code, 200)
         self.assertTrue("UN-M49-156" in script.text)
         self.assertTrue("中华人民共和国" in script.text)

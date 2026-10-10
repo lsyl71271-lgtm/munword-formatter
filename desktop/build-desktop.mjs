@@ -27,6 +27,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, closeSync, copyFileSync, cpSync, existsSync, lstatSync, lutimesSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, symlinkSync, truncateSync, utimesSync, writeFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DESKTOP_LOADER, OUTDATED_BROWSER_MESSAGE } from "../local_web/compat-loader.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DESKTOP = path.join(ROOT, "desktop");
@@ -50,38 +51,15 @@ const EPOCH = Number(process.env.SOURCE_DATE_EPOCH || execFileSync("git", ["log"
 // Scripts and styles keep the browser default so the bundle loads identically in Safari, Chrome and Edge.
 export const DESKTOP_CSP = "connect-src 'none'; img-src file: data: blob:; font-src file: data: blob:; media-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
 
-// Oldest browsers that run the bundle and its styles: Array.prototype.findLast (Chrome/Edge 97, Safari 15.4,
-// Firefox 104) and CSS cascade layers (Chrome/Edge 99, Safari 15.4, Firefox 97). An older browser (IE, Chrome
-// on an unpatched Windows 7, Safari on macOS 10.14) would show a blank or unstyled page, so this ES3 loader
-// explains which browser to install instead of loading app.js.
-export const OUTDATED_BROWSER_MESSAGE = "这个浏览器版本太旧，无法运行排版系统。";
-const COMPAT_LOADER = `<script>
-    (function () {
-      var root = document.getElementById("root");
-      var box = '<div style="max-width:560px;margin:48px auto;padding:24px 28px;border:1px solid #d0d5dd;border-radius:12px;background:#fff;color:#1d2939;font:15px/1.75 sans-serif">';
-      if (typeof Array.prototype.findLast === "function" && typeof window.CSSLayerBlockRule !== "undefined") {
-        var script = document.createElement("script");
-        script.src = "app.js";
-        script.onerror = function () {
-          root.innerHTML = box + "<b>程序文件不完整。</b><br>请重新运行安装程序（macOS 请重新把程序拖进「应用程序」）。</div>";
-        };
-        document.body.appendChild(script);
-        return;
-      }
-      root.innerHTML = box + "<b>${OUTDATED_BROWSER_MESSAGE}</b><br>" +
-        "请安装或更新以下任一浏览器，然后重新打开本程序（程序本身不联网，排版仍在本机完成）：<br>" +
-        "· Windows 10 / 11：Microsoft Edge 或 Google Chrome 最新版<br>" +
-        "· Windows 7 / 8.1：Google Chrome 109 或 Firefox ESR 115<br>" +
-        "· macOS 10.15 及以上：系统更新后的 Safari（15.4 或更高）<br>" +
-        "· macOS 10.11–10.14：Google Chrome 或 Firefox</div>";
-    })();
-  </script>`;
+// The loader that starts app.js only in a browser new enough for it (local_web/compat-loader.mjs, shared with the
+// website); here it names the installer when app.js is missing.
+export { OUTDATED_BROWSER_MESSAGE };
 
 export function offlineIndex(html) {
   let out = html
     .replace(/href="\/favicon\.svg"/, 'href="favicon.svg"')
     .replace(/href="\/styles\.css(\?v=[0-9a-f]+)?"/, 'href="styles.css"')
-    .replace(/<script src="\/app\.js(\?v=[0-9a-f]+)?" defer><\/script>/, () => COMPAT_LOADER)
+    .replace(/<script>\n    \(function \(\) \{[\s\S]*?script\.src = "\/app\.js(?:\?v=[0-9a-f]+)?";[\s\S]*?\n  <\/script>/, () => DESKTOP_LOADER)
     .replace("本站与本机版使用同一界面", "本机离线版与网页版使用同一界面")
     .replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  <meta http-equiv="Content-Security-Policy" content="${DESKTOP_CSP}">`);
   // Any root-absolute reference left would point at the disk root under file://.

@@ -2,18 +2,21 @@ name: Source checks
 
 # Every push and pull request: the program's own tests and builds (both engines, the website bundle, the
 # static deployment, typing, lint and the source audit). The installers are checked separately by
-# offline-installers.yml, which also runs whenever the bundled page changes.
+# offline-installers.yml, which also runs whenever the bundled page changes, and which calls this workflow on the
+# same commit before it may publish anything (workflow_call).
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: source-checks-${{ github.ref }}
+  # github.workflow is the caller's name when called, so the copy inside offline-installers never cancels this one.
+  group: source-checks-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

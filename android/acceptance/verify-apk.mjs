@@ -36,6 +36,8 @@ try {
   const pinned = readFileSync(path.join(ROOT, "android", "signing-cert.sha256"), "utf8").trim();
   check("signed by the pinned certificate (android/signing-cert.sha256)", certificate === pinned, certificate);
   report.certificate = certificate;
+  report.versionName = VERSION_NAME;
+  report.versionCode = VERSION_CODE;
 
   const badging = execFileSync(process.env.AAPT || "aapt", ["dump", "badging", published], { encoding: "utf8" });
   check("package, version", badging.includes(`package: name='org.pkunmun.formatter2026' versionCode='${VERSION_CODE}' versionName='${VERSION_NAME}'`));

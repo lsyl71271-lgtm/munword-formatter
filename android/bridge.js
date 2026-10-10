@@ -64,13 +64,27 @@
   // The page resets the chosen file whenever a document type is picked (type first, then file). A file opened from
   // another app arrives before the user has picked its type, so it is kept and handed to the page again after
   // each type change, until the user chooses a different file themselves.
-  var held = null, delivering = false, nativeChange = false;
-  function deliver(file) {
+  // Every newly opened file and every file the user picks starts a new generation; a hand-over still waiting (for the
+  // file input to appear, or for the page to clear its file) belongs to the generation it started in and stops once
+  // that is over, so an older file can never replace a newer one. A reload starts this script afresh.
+  var held = null, delivering = false, nativeChange = false, generation = 0, timer = null;
+  status.generation = 0;
+  function later(step, ms) {
+    clearTimeout(timer);
+    timer = setTimeout(step, ms);
+  }
+  function newGeneration() {
+    clearTimeout(timer);
+    timer = null;
+    status.generation = ++generation;
+  }
+  function deliver(file, owner) {
     var attempts = 0;
     (function attempt() {
+      if (owner !== generation) return;
       var input = document.querySelector('input[type="file"]');
       if (!input) {
-        if (attempts++ < 100) setTimeout(attempt, 100);
+        if (attempts++ < 100) later(attempt, 100);
         return;
       }
       var transfer = new DataTransfer();
@@ -88,22 +102,22 @@
   }
   // After a type change, wait until the page has actually cleared its file (a slow device may render the reset a
   // little later), then give the kept file back.
-  function redeliver(waited) {
-    if (!held) return;
+  function redeliver(owner, waited) {
+    if (!held || owner !== generation) return;
     var cleared = !document.querySelector(".dropzone.hasFile");
-    if (cleared || waited >= 3000) deliver(held);
-    else setTimeout(function () { redeliver(waited + 50); }, 50);
+    if (cleared || waited >= 3000) deliver(held, owner);
+    else later(function () { redeliver(owner, waited + 50); }, 50);
   }
   document.addEventListener("click", function (event) {
     if (!held) return;
     for (var node = event.target; node && node.classList; node = node.parentNode) {
-      if (node.classList.contains("typeCard")) { redeliver(0); return; }
+      if (node.classList.contains("typeCard")) { redeliver(generation, 0); return; }
     }
   }, true);
   document.addEventListener("change", function (event) {
     if (!event.target || event.target.type !== "file") return;
     if (delivering) nativeChange = true;
-    else if (event.isTrusted) held = null; // the user chose another file themselves
+    else if (event.isTrusted) { held = null; newGeneration(); } // the user chose another file themselves
   }, true);
 
   window.__munwordReceive = function () {
@@ -117,7 +131,8 @@
       parts.push(bytes);
     }
     bridge.openedDone();
+    newGeneration();
     held = new File(parts, name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    deliver(held);
+    deliver(held, generation);
   };
 })();

@@ -97,6 +97,12 @@ public final class MainActivity extends Activity {
     private int nextSaving = 1;
     private String openedName;
     private byte[] openedBytes;
+    // The page reads one opened file at a time: openedName() takes it, and the chunks come from that copy even if a
+    // newer file arrives in the meantime (that one is handed over next).
+    private String readingName;
+    private byte[] readingBytes;
+    // Each "open with" / "share" gets the next number on the main thread; a slower read of an older one is dropped.
+    private int openSequence;
 
     // Waiting for the storage permission (Android 6–9).
     private final List<Saving> waitingToStore = new ArrayList<Saving>();
@@ -351,14 +357,16 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public String openedName() {
             synchronized (lock) {
-                return openedName == null ? "" : openedName;
+                readingName = openedName;
+                readingBytes = openedBytes;
+                return readingName == null ? "" : readingName;
             }
         }
 
         @JavascriptInterface
         public int openedSize() {
             synchronized (lock) {
-                return openedBytes == null ? 0 : openedBytes.length;
+                return readingBytes == null ? 0 : readingBytes.length;
             }
         }
 
@@ -366,17 +374,22 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public String openedChunk(int offset, int length) {
             synchronized (lock) {
-                if (openedBytes == null || offset < 0 || offset >= openedBytes.length || length <= 0) return "";
-                int count = Math.min(Math.min(length, OPEN_CHUNK), openedBytes.length - offset);
-                return Base64.encodeToString(openedBytes, offset, count, Base64.NO_WRAP);
+                if (readingBytes == null || offset < 0 || offset >= readingBytes.length || length <= 0) return "";
+                int count = Math.min(Math.min(length, OPEN_CHUNK), readingBytes.length - offset);
+                return Base64.encodeToString(readingBytes, offset, count, Base64.NO_WRAP);
             }
         }
 
         @JavascriptInterface
         public void openedDone() {
             synchronized (lock) {
-                openedName = null;
-                openedBytes = null;
+                // A newer file that arrived while this one was read stays for the next hand-over.
+                if (openedBytes == readingBytes) {
+                    openedName = null;
+                    openedBytes = null;
+                }
+                readingName = null;
+                readingBytes = null;
             }
         }
     }
@@ -605,6 +618,10 @@ public final class MainActivity extends Activity {
     }
 
     private void readOpened(final Uri uri) {
+        final int sequence;
+        synchronized (lock) {
+            sequence = ++openSequence;
+        }
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -639,6 +656,10 @@ public final class MainActivity extends Activity {
                         in.close();
                     }
                     synchronized (lock) {
+                        if (sequence != openSequence) {
+                            Log.i(TAG, "opened " + name + " after a newer file; dropped");
+                            return;
+                        }
                         openedName = safeName(name == null ? "未命名.docx" : name);
                         openedBytes = bytes.toByteArray();
                     }
@@ -650,6 +671,9 @@ public final class MainActivity extends Activity {
                     });
                 } catch (Exception e) {
                     Log.e(TAG, "open failed", e);
+                    synchronized (lock) {
+                        if (sequence != openSequence) return; // a newer file replaced this one anyway
+                    }
                     final String message = e instanceof IOException && e.getMessage() != null && !e.getMessage().startsWith("/") ? e.getMessage() : e.toString();
                     main.post(new Runnable() {
                         @Override
@@ -669,7 +693,7 @@ public final class MainActivity extends Activity {
             waiting = openedBytes != null;
             if (waiting) Log.i(TAG, "opened " + openedName + ", " + openedBytes.length + " bytes; page ready: " + pageReady);
         }
-        if (waiting && pageReady && web != null) web.evaluateJavascript("window.__munwordReceive && window.__munwordReceive()", null);
+        if (waiting && pageReady && web != null && !isDestroyed()) web.evaluateJavascript("window.__munwordReceive && window.__munwordReceive()", null);
     }
 
     // ---- Activity plumbing ----
@@ -719,7 +743,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showMessage(String title, String message) {
-        if (isFinishing()) return;
+        // A read or save can finish after the activity is gone; a dialog on it would crash the app.
+        if (isFinishing() || isDestroyed()) return;
         new AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("好", null).show();
     }
 

@@ -229,3 +229,42 @@ test("the build script's page transform is what the offline smoke test exercises
   assert.match(script, /scripts", "build-static\.mjs"/, "desktop apps reuse the Pages build, not a second UI");
   assert.ok(execFileSync(process.execPath, ["--check", path.join(ROOT, "desktop", "offline-smoke.mjs")]).length === 0);
 });
+
+test("only main publishes, after the full source checks on the same commit, and never replaces a release", () => {
+  const workflow = readFileSync(path.join(ROOT, ".github", "workflows", "offline-installers.yml"), "utf8");
+  const release = workflow.slice(workflow.indexOf("\n  release:"));
+  assert.match(workflow, /\n  source-checks:\n    name: [^\n]+\n    uses: \.\/\.github\/workflows\/source-checks\.yml\n/);
+  assert.match(release, /needs: \[source-checks, /);
+  assert.match(release, /if: github\.ref == 'refs\/heads\/main' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\)/);
+  assert.doesNotMatch(release, /--clobber|release delete|release edit|--cleanup-tag|refs\/heads\/claude/, "a published release is never changed or moved");
+  assert.match(release, /tag=\$\(cat tag\.txt\)/);
+  assert.match(release, /release-manifest\.json/);
+  assert.match(readFileSync(path.join(ROOT, ".github", "workflows", "source-checks.yml"), "utf8"), /\n  workflow_call:\n/);
+});
+
+test("the website checks the browser and a missing program file the same way, with its own wording", async () => {
+  const { WEB_LOADER, DESKTOP_LOADER } = await import("../local_web/compat-loader.mjs");
+  const index = readFileSync(path.join(ROOT, "local_web", "index.html"), "utf8");
+  assert.ok(index.includes(`  ${WEB_LOADER}\n`), "local_web/index.html carries the shared loader (rewrite it from local_web/compat-loader.mjs)");
+  assert.ok(offlineIndex(sampleIndex()).includes(DESKTOP_LOADER), "the desktop page gets the desktop wording instead");
+  const page = (html, modern) => {
+    const dom = new JSDOM(html, {
+      runScripts: "dangerously",
+      beforeParse(window) {
+        if (modern) window.CSSLayerBlockRule = function CSSLayerBlockRule() {};
+        else delete window.Array.prototype.findLast;
+      },
+    });
+    return dom.window.document;
+  };
+  const outdated = page(index, false);
+  assert.equal(outdated.querySelectorAll("script[src]").length, 0, "an outdated browser never runs app.js");
+  assert.match(outdated.getElementById("root").textContent, /浏览器版本太旧[\s\S]*重新打开本网页/);
+  for (const [html, src, wording] of [[index, "/app.js", /程序文件没有加载成功/], [offlineIndex(sampleIndex()), "app.js", /程序文件不完整/]]) {
+    const modern = page(html, true);
+    const script = modern.querySelector("script[src]");
+    assert.equal(script.getAttribute("src"), src);
+    script.dispatchEvent(new modern.defaultView.Event("error"));
+    assert.match(modern.getElementById("root").textContent, wording, "a program file that does not load is explained, not a blank page");
+  }
+});
