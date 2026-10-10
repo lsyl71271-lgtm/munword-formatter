@@ -334,10 +334,10 @@ Intel 芯片和 Apple 芯片（M1、M2、M3、M4……）用的是同一个文�
 
 问：怎么确认下载的文件没有被改过？（可选，一般不用管）
 答：下载页里的 SHA256SUMS.txt 列出了三个安装包的校验值，可以对照核对。
-    1.9.0 版的校验值：
-      macOS  ：f25c7eabdf9d0781dd1c9d20432236a6bf0672a13453848052cdf93da306dc7b
-      Windows：32be397c75703d146a348a8b2a012e85e7cc51fdcc1571003333a0b5523193af
-      Android：b885ad93a660a87d196283b09c7efcba331c6ea1c65bc3512b5b9f5ffa9faeda
+    2.0.0 版的校验值：
+      macOS  ：9ed22563a6fc56a604d82ca5c1c840223026014fa0df10feb94bf0bd61ffa6d1
+      Windows：48d8c645ad22f400d0760c5b6ce7f16b581789c7fb4696bbef83cc161ff64527
+      Android：7dc106c8396092ff1f3bc2ff6821b51b702ae116d67f6607440cd6c8f87780ec
 
 --------------------------------------------------------------
 下载页：https://github.com/lsyl71271-lgtm/munword-formatter/releases/latest
