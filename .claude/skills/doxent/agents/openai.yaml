@@ -1,0 +1,4 @@
+interface:
+  display_name: "讯飞办公本"
+  short_description: "读取和操作办公本/读写笔记中的真实笔记、Office 文档、书籍、日程、提醒、待办与任务，并管理 Doxent CLI。"
+  default_prompt: "Use $doxent to connect or update the local CLI, upload CLI logs only when the user explicitly asks to upload, submit, or send logs, wait for a successful sync when data operations require it, and safely handle the requested Doxent note, Office document, book, schedule, reminder, todo, or task operation."
