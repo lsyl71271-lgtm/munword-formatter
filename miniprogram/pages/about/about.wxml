@@ -1,0 +1,16 @@
+<view class="page">
+  <view class="card">
+    <view class="h2">关于模联助手</view>
+    <view class="para">排版功能与网页版、电脑版和安卓版使用同一套排版引擎（版本 {{version}}），依据 PKUNMUN 2026 学标示例排版，保留正文、图片、引用与可编辑编号。</view>
+    <view class="para">国家名称核对依据 UNTERM（核对日期：{{countryDate}}）。</view>
+  </view>
+  <view class="card">
+    <view class="h2">隐私</view>
+    <view class="para">你选择的文件只在手机上处理：程序读取文件、排版后保存在本小程序的本地目录，不上传到任何服务器，也不调用 AI。</view>
+    <view class="para">生成的文件只在你点「预览」「发送到聊天」或「保存」时离开本小程序。重新生成会覆盖上一次的成稿。</view>
+  </view>
+  <view class="card">
+    <view class="h2">开源组件</view>
+    <view class="para">fflate、@xmldom/xmldom、docxtemplater、pizzip、pako，许可证见程序包内的 lib/munword-engine.js 末尾。</view>
+  </view>
+</view>
