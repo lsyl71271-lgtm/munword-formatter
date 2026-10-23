@@ -37,7 +37,8 @@
 .switch-row { display: flex; justify-content: space-between; align-items: center; margin-top: 20rpx; font-size: 28rpx; }
 .result { background: var(--accent-soft); border-radius: 16rpx; padding: 24rpx; margin-bottom: 16rpx; }
 .result-actions { display: flex; margin: 20rpx 0 12rpx; }
-.result-actions button { flex: 1; margin-left: 16rpx !important; }
+/* White on the tinted result card, and one line each even on a 360-wide phone. */
+.result-actions button { flex: 1; margin-left: 16rpx !important; background: var(--card); padding: 0 12rpx; white-space: nowrap; }
 .result-actions button:first-child { margin-left: 0 !important; }
 .validation { display: flex; padding: 16rpx 0; border-top: 1rpx solid var(--line); font-size: 28rpx; }
 .v-icon { font-weight: 700; width: 32rpx; margin-right: 16rpx; flex-shrink: 0; text-align: center; }

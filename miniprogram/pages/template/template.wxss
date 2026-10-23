@@ -1,4 +1,4 @@
 .result { background: var(--accent-soft); }
 .actions { display: flex; margin-top: 20rpx; }
-.actions button { flex: 1; margin-left: 16rpx !important; }
+.actions button { flex: 1; margin-left: 16rpx !important; background: var(--card); padding: 0 12rpx; white-space: nowrap; }
 .actions button:first-child { margin-left: 0 !important; }
