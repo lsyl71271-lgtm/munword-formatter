@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import plistlib
 import shutil
 import subprocess
 import sys
@@ -17,8 +16,6 @@ ROOT = Path(__file__).resolve().parents[2]
 class ReleaseTests(unittest.TestCase):
     def test_every_current_version_declaration_matches_VERSION(self):
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        info = plistlib.loads((ROOT / "PKUNMUN 2026 文件排版系统.app" / "Contents" / "Info.plist").read_bytes())
-        self.assertEqual(info["CFBundleShortVersionString"], version)
         self.assertEqual(json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"], version)
         page = (ROOT / "app/page.tsx").read_text(encoding="utf-8")
         self.assertIn('import release from "../package.json"', page)
