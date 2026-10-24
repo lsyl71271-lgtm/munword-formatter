@@ -1,4 +1,0 @@
-{
-  "desc": "排版页不需要被微信搜索收录；文件只在用户手机上处理。",
-  "rules": [{ "action": "allow", "page": "pages/index/index" }, { "action": "disallow", "page": "*" }]
-}

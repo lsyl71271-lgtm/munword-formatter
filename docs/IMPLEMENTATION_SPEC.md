@@ -25,7 +25,7 @@
 - [15. 模板新建（`template-generator.ts`、`template-panel.tsx`）](#15-模板新建template-generatortstemplate-paneltsx)
 - [16. 诊断报告](#16-诊断报告)
 - [17. Python 兼容引擎、HTTP API 与 CLI（`backend/`）](#17-python-兼容引擎http-api-与-clibackend)
-- [18. 本机服务版（旧的 Python 本机安装）](#18-本机服务版旧的-python-本机安装)
+- [18. 本机服务版（旧的 Python 本机安装，已停止提供）](#18-本机服务版旧的-python-本机安装已停止提供)
 - [19. 桌面离线安装包（`desktop/`）](#19-桌面离线安装包desktop)
 - [20. 安卓安装包（`android/`）](#20-安卓安装包android)
 - [21. 网页部署](#21-网页部署)
@@ -125,7 +125,7 @@
 | 网页版 | Cloudflare Pages / Workers 静态托管 | 用户浏览器 | https://munword-formatter.pages.dev/ |
 | 桌面离线版（推荐给普通用户） | macOS `.app`（DMG）/ Windows NSIS 安装程序（EXE） | 本机浏览器，从 `file://` 打开 | 双击图标 |
 | 安卓版 | Java 写的 WebView 应用（APK，Android 5.0+） | 手机系统的 WebView，从应用自带的文件打开 | 桌面图标，或对 DOCX 选「其他应用打开」 |
-| 本机服务版（旧） | Python FastAPI 在 127.0.0.1:8000 提供页面资源 | 仍在浏览器（服务只供资源） | `首次安装.command` / `Windows 首次安装.bat` |
+| 本机服务（开发用） | Python FastAPI 在 127.0.0.1:8000 提供页面资源 | 仍在浏览器（服务只供资源） | `backend/run.py`（旧的一键安装入口已删除，见第 18 节） |
 | 开发 / API | vinext（Next.js 兼容）开发服务器；可选 `NEXT_PUBLIC_API_URL` 指向 Python API | 浏览器，或配置了 API 时在 Python | `pnpm dev` |
 | 批处理 | Python CLI `backend/cli.py` | Python | 命令行 |
 
@@ -172,13 +172,13 @@ desktop/                桌面离线安装包的构建脚本、启动器、验�
 android/                安卓应用（Java 外壳、手机版页面与旧 WebView 兼容层）、构建与验收脚本
 downloads/              已发布的 DMG、EXE、APK、SHA256SUMS.txt、安装教程
 scripts/                构建、打包、审计、回归脚本
-windows/                本机服务版的 PowerShell 安装/启动脚本
+windows/                app.ico：桌面安装包（EXE）的图标
 templates/pkunmun2026/  Python 流水线的模板目录参数（目前只有说明文件，版式全部来自 shared/）
 examples/acceptance-inputs/  14 份验收原稿（八种文种、中英文）
 tests/                  Node 测试（*.test.mjs）与引擎一致性夹具
 backend/tests/          Python unittest
 worker/, build/, db/, drizzle/  vinext/Cloudflare 入口与保留的 D1 脚手架（未启用）
-docs/                   架构、ADR、学标对照、版本说明、审计报告
+docs/                   架构、ADR、学标对照、版本说明
 ```
 
 ### 2.3 技术栈（锁定版本见 `package.json`、`pnpm-lock.yaml`、`backend/requirements.txt`）
@@ -2053,41 +2053,15 @@ python backend/cli.py <文件或文件夹> --type <文种> --output-dir <目录>
 - 有 error 校验项时只写诊断报告，不写 DOCX，记为失败。
 - 任一份失败时，退出码为 1。
 
-## 18. 本机服务版（旧的 Python 本机安装）
+## 18. 本机服务版（旧的 Python 本机安装，已停止提供）
 
-这是桌面离线版出现之前的本机形态，仍保留在仓库中。页面和排版仍在浏览器里，Python 服务只负责在 8000 端口提供页面资源和兼容 API。
+这是桌面离线版出现之前的本机形态：一键安装脚本装好 Python 运行环境，在 `127.0.0.1:8000` 常驻一个服务，再用浏览器打开页面。
 
-**macOS**：
-
-- **`首次安装.command`**：用 osascript 弹出确认框（“将把 PKUNMUN 2026 文件排版系统安装到当前用户，并设置为登录后自动启动。DOCX 只在本机处理。”），然后运行 `scripts/setup.sh` → `scripts/install-service.sh`。
-- **`install-service.sh`**：
-  1. 检查发布包完整：有 app、backend、local_web、templates、public、shared 目录，有 `VERSION`，有非空的 `local-app.js` 和 `local-styles.css`。
-  2. 寻找 Python 3.12+。
-  3. 运行 `verify-local-build.py`。
-  4. 在 `~/Library/Application Support/PKUNMUN2026Formatter/venv` 建虚拟环境；`requirements.txt` 的哈希变化时才重装依赖。
-  5. 用 rsync 同步各目录。
-  6. 用 `plutil` 生成 LaunchAgent `org.pkunmun.formatter.2026.local`：开机运行、保持存活、`ThrottleInterval` 60、日志写到 `backend.log`。
-  7. `launchctl bootstrap` 加载，然后 `kickstart -k` 立即启动。
-- **根目录 `PKUNMUN 2026 文件排版系统.app` 的启动脚本**：
-  1. 安装版本与源码版本不同时，先运行 `install-service.sh` 自动更新。
-  2. 用 curl 访问 `/api/health`，核对 service 和 version 都是自己的。
-  3. 没有在运行时用 launchctl 启动或重启服务，最多等待 60 × 0.15 秒。
-  4. 打开 `http://127.0.0.1:8000/?v={版本}`。
-  5. 日志超过 5 MiB 时轮转为 `.old`。
-
-**Windows**（PowerShell 5.1 兼容，`windows/*.ps1`）：
-
-- **`Windows 首次安装.bat`** → `install.ps1`：
-  1. 查找 Python 3.9+：依次尝试 `py -3`、`python`、`python3`，避开 Microsoft Store 的占位程序。
-  2. 停止正在运行的旧引擎。
-  3. 复制运行文件到 `%LOCALAPPDATA%\PKUNMUN2026Formatter`，并解除“来自网络”标记。
-  4. 建 venv；pip 失败时改用清华镜像重试。
-  5. 创建桌面和开始菜单快捷方式：打开、停止排版引擎、卸载。
-- **`start.ps1`**：
-  - 状态判断：ours / stale（版本不同，先停止）/ other（端口被别的程序占用）/ none。
-  - 隐藏窗口启动 `run.py`，写入 PID 文件，最多等待 30 秒，然后打开页面。
-  - 所有错误都用消息框提示，因为快捷方式是隐藏运行的，没有控制台。
-- **`stop.ps1`**、**`uninstall.ps1`**：停止引擎、删除快捷方式和安装目录。
+- 2026-10-24 起，它的入口已从仓库删除：`首次安装.command`、`Windows 首次安装.bat`、根目录的 `PKUNMUN 2026 文件排版系统.app`、`windows/*.ps1`。
+- 已装用户按 `docs/migrate-from-local-service.md` 换到桌面安装包并删除旧版。
+- Python 服务本身仍在：`backend/run.py` 在 8000 端口提供页面资源和兼容 API，供开发和批处理使用（见第 2 节）。
+- `scripts/` 下的 `setup.sh`、`install-service.sh`、`start-local.sh`、`org.pkunmun.formatter.2026.local.plist` 也属于旧版，但 `scripts/` 是离线构建记录的来源目录（`shared/local-build-policy.json`）；删掉它们会改变已发布安装包里的构建记录，所以留到下次发版时一并删除。
+- 它们原来的完整说明见提交 `5b7ca73` 中本节的旧版本。
 
 ## 19. 桌面离线安装包（`desktop/`）
 
@@ -2598,6 +2572,6 @@ subjectLine (zh) [一-鿿·（）()]{0,28}(?:大会|理事会|委员会|议会|�
 - `docs/architecture.md`：边界与执行步骤
 - `docs/adr-0001-shared-daily-interface.md`：一套界面、一个引擎的决策
 - `docs/handbook-alignment.md`：逐条对照学标
-- `docs/release-*.md`：各版本说明；`docs/audit-2026-*.md`：审计报告
+- `docs/release-*.md`：版本说明（下载页上仍有的版本，以及学标规则引用的 1.6.3）
 - `desktop/README.md`：桌面安装包的构建与验证
 - `downloads/PKUNMUN2026-Install-Guide.txt`：给终端用户的安装教程

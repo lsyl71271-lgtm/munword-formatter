@@ -23,12 +23,10 @@
 
 ## 版本说明（新 → 旧）
 
-[2.0.0](release-2.0.0.md) · [1.9.0](release-1.9.0.md) · [1.8.5](release-1.8.5.md) · [1.8.4](release-1.8.4.md) · [1.8.3](release-1.8.3.md) · [1.8.2](release-1.8.2.md) · [1.8.1](release-1.8.1.md) · [1.8.0](release-1.8.0.md) · [1.7.2](release-1.7.2.md) · [1.7.1](release-1.7.1.md) · [1.7.0](release-1.7.0.md) · [1.6.3](release-1.6.3.md)
+[2.0.0](release-2.0.0.md) · [1.9.0](release-1.9.0.md) · [1.8.5](release-1.8.5.md)：下载页（GitHub Releases）上仍有这三个版本。
+
+[1.6.3](release-1.6.3.md) 保留，因为学标版式规则（`shared/document-policy.json`）引用了其中的渲染测量摘要。
 
 ## 历史记录
 
-| 文档 | 内容 |
-|---|---|
-| [audit-2026-10.md](audit-2026-10.md) · [audit-2026-09.md](audit-2026-09.md) | 审计后的修复与验证记录 |
-| [integration-2026-10-05.md](integration-2026-10-05.md) | v1.7.2 合并时的集成检查 |
-| [github-import.md](github-import.md) | 2026-10-01 把 v1.6.3 源码导入 GitHub 的记录 |
+1.7.0–1.8.4 的版本说明、2026 年 9–10 月的审计与集成记录、首次导入 GitHub 的记录，已在 2026-10-24 整理仓库时移出。需要时可在 git 历史中查看：最后包含它们的提交是 `5b7ca73`。

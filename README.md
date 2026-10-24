@@ -87,7 +87,7 @@
 | [网页版承载力与稳定性](docs/website-capacity.md) | 网页版能扛多少人、慢在哪里、什么情况下会出问题 |
 | [架构导航](docs/architecture.md) · [统一界面决策](docs/adr-0001-shared-daily-interface.md) | 模块边界与执行步骤 |
 | [学标对照](docs/handbook-alignment.md) | 每条规则对应手册哪一页 |
-| [版本说明 v2.0.0](docs/release-2.0.0.md) | 当前版本的改动与核查记录（更早的版本见 docs/） |
+| [版本说明 v2.0.0](docs/release-2.0.0.md) | 当前版本的改动与核查记录（1.8.5、1.9.0 见 docs/） |
 | [desktop/README.md](desktop/README.md) | 桌面安装包的构建、验收与签名 |
 | [android/README.md](android/README.md) | 安卓安装包的构建、兼容性、验收与签名 |
 
@@ -147,6 +147,10 @@ MUNWORD_ANDROID_KEYSTORE=… MUNWORD_ANDROID_KEYSTORE_PASSWORD=… MUNWORD_ANDRO
 - 不需要 Gradle 或 Android Studio，Ubuntu / Debian 的软件包就够了。
 - 改动界面、引擎或共享规则后，要用签名密钥重新运行 `--publish` 并提交新的 APK，否则 CI 的内容比对会失败。签名密钥不在仓库里，见 [android/README.md](android/README.md)。
 
+### 微信小程序
+
+微信小程序在单独的私有仓库 `mun-assistant-miniprogram` 里。它把本仓库 `app/` 的排版引擎打包进小程序，并固定用哪一个提交；本仓库的引擎改了以后，在那个仓库按它的 README 更新打包文件。
+
 ### Python 兼容引擎、API 与批处理
 
 ```sh
@@ -167,10 +171,7 @@ python3 -m venv .venv
 - 源码发布包：`pnpm build:local-tools && .venv/bin/python scripts/package-release.py --desktop --output output/Munword-2.0.0-desktop-source.zip`。包内有校验清单和依赖许可证，不含 `.env`、部署配置、缓存或用户文档。
 - 可选视觉验收：`docker compose -f deploy/visual-qa.compose.yaml up -d` 启动只监听本机的 Gotenberg，再运行 `scripts/visual-qa.py`；需要 `backend/requirements-qa.txt` 和 Poppler。它只报告字号、斜体与像素差异，不代表学标要求已全部自动验收。
 
-**旧版本机服务**（桌面安装包出现之前的安装方式，仍然保留）：
-
-- 根目录的 `首次安装.command`（macOS）和 `Windows 首次安装.bat` 会安装 Python 依赖，并配置持续运行的本机服务（127.0.0.1:8000）。
-- 页面和排版同样在浏览器里完成。普通用户请改用上面的桌面安装包；已装旧版的，按 [从旧版本机服务换到桌面安装包](docs/migrate-from-local-service.md) 换装并删除旧版。
+**旧版本机服务**（桌面安装包出现之前的一键安装方式）已停止提供，安装入口已从仓库删除。已装旧版的，按 [从旧版本机服务换到桌面安装包](docs/migrate-from-local-service.md) 换装并删除旧版。
 
 ### 测试与持续集成
 
@@ -216,10 +217,10 @@ desktop/                桌面安装包的构建脚本、启动器、验收脚�
 android/                安卓应用（Java 外壳、旧 WebView 兼容层）、构建与验收脚本
 downloads/              已发布的 DMG、EXE、APK、校验值与安装教程
 tests/                  Node 测试与引擎一致性基线
-examples/               11 份合成验收原稿；D1 示例（平台脚手架）
-scripts/                构建、打包、审计、压力与比对脚本，旧版本机服务安装脚本
-windows/                旧版本机服务的 Windows 脚本
-docs/                   规格、架构、学标对照、版本说明、审计记录
+examples/               14 份合成验收原稿（八种文书，中英文）
+scripts/                构建、打包、审计、压力与比对脚本（另有旧版本机服务留下的安装脚本，下次发版时删除）
+windows/                app.ico：桌面安装包的 Windows 图标
+docs/                   规格、架构、学标对照、版本说明
 worker/ build/ db/ drizzle/   vinext / Cloudflare 入口与保留的数据库脚手架（未启用）
 ```
 
