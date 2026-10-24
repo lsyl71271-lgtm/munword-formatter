@@ -45,6 +45,8 @@ jobs:
       # script would change the published DMG and EXE.
       - name: Android app (page variant, manifest, published APK)
         run: node --test tests/android.test.mjs
+      - name: WeChat mini program (engine bundle and pages against the web engine)
+        run: node miniprogram-engine/build.mjs --check && node --test tests/miniprogram.test.mjs tests/miniprogram-pages.test.mjs
       - name: Python engine, API and CLI
         run: python -m unittest discover -s backend/tests
       - run: pnpm build
